@@ -1,0 +1,89 @@
+name: Weekly test to pro promotion
+
+on:
+  schedule:
+    # Every Monday at 13:30 UTC+8 (05:30 UTC).
+    - cron: '30 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional x.y release override, for example 2.0'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: weekly-test-to-pro-promotion
+  cancel-in-progress: false
+
+jobs:
+  open-promotion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open the next release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          ahead_by="$(gh api "repos/${GITHUB_REPOSITORY}/compare/pro...test" --jq '.ahead_by')"
+          if [ "$ahead_by" -eq 0 ]; then
+            echo "test has no changes to promote."
+            exit 0
+          fi
+
+          existing_pr="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base pro \
+            --head test \
+            --state open \
+            --json url \
+            --jq '.[0].url // ""')"
+          if [ -n "$existing_pr" ]; then
+            echo "A test to pro pull request is already open: $existing_pr"
+            exit 0
+          fi
+
+          if [ -n "${MANUAL_VERSION:-}" ]; then
+            version="$MANUAL_VERSION"
+          else
+            latest_version="$(gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --base pro \
+              --head test \
+              --state merged \
+              --limit 100 \
+              --json title,mergedAt \
+              --jq '[.[] | select(.title | test("^[0-9]+\\.[0-9]+$"))] | sort_by(.mergedAt) | last | .title // "1.0"')"
+            major="${latest_version%%.*}"
+            minor="${latest_version##*.}"
+            version="${major}.$((10#$minor + 1))"
+          fi
+
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must contain exactly two numeric components, such as 1.2 or 2.0."
+            exit 1
+          fi
+
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base pro \
+            --head test \
+            --title "$version" \
+            --body "$(cat <<EOF
+          ## Summary
+          - Promote the current tested changes from \`test\` to \`pro\`
+          - Release version: \`$version\`
+
+          ## Review
+          - Confirm the test environment is healthy
+          - Review the complete branch diff
+          - Merge manually when production is ready
+
+          Created by the weekly release promotion workflow.
+          EOF
+          )"
