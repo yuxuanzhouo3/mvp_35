@@ -255,21 +255,11 @@ backend/
 │   ├── sse/                  # AI chat 与 job progress 流协议
 │   ├── webhooks/             # 验签、解密、去重和快速应答
 │   └── policies/             # timeout、retry、TLS、CORS、VPC 策略
-├── config/                    # 环境配置、功能开关和配置校验
-├── contracts/                 # OpenAPI、webhook 和事件 schema
-├── observability/             # 日志、指标、trace 和告警规则
-├── security/                  # RBAC、CAM、Secret 和安全策略
-├── scripts/                   # DB 初始化、迁移、对账和运维脚本
-├── fixtures/                  # 安全测试数据和 webhook 签名样例
-├── ops/                       # CloudBase 部署配置、runbook 和回滚步骤
-├── docs/                      # 后端接口、架构和运维文档
 ├── tests/
 │   ├── unit/
 │   ├── integration/
 │   └── contract/
-├── .env.example               # 仅变量名和安全示例，不含真实密钥
 ├── Dockerfile
-├── docker-compose.yml         # 本地 API/worker 组合，不承载生产数据库
 ├── pyproject.toml
 └── uv.lock
 ```
@@ -283,13 +273,6 @@ backend/
 - `providers` 隔离混元、SES、位置和商品数据源。
 - `providers` 只做供应商语义转换，底层连接、超时、TLS 和重试统一复用 `net/clients` 与 `net/policies`。
 - `workers` 复用 domain service，不复制业务逻辑。
-- `config` 统一读取环境变量并在启动时 fail-fast；业务代码不得散落读取 `os.getenv`。
-- `contracts` 是 API、SSE、job event 和 webhook payload 的版本化协议源。
-- `observability` 与 `security` 保存跨组件策略，不承载具体业务流程。
-- `scripts` 必须可重复执行并支持 dry-run；涉及金额、权益和迁移的脚本必须输出审计记录。
-- `fixtures` 不得包含真实用户、联系人、token、证书或支付数据。
-- `ops` 保存部署、扩缩容、密钥轮换、故障处理和回滚 runbook。
-- `docker-compose.yml` 只用于本地 API/worker 开发；生产数据库继续使用 CloudBase 内部托管资源。
 - `app/domains` 只能依赖 `db/repositories/protocols.py`，不能直接调用 CloudBase HTTP API。
 - 浏览器只能调用 `net/gateway` 暴露的 API；不能导入 `db`、`net/clients` 或管理凭证。
 - 跨模块引用通过 service/protocol，不直接操作别的模块集合。
