@@ -763,10 +763,10 @@ POST   /privacy-requests/{id}/complete
 
 ## 15. 技术架构
 
-首版不创建独立微服务，继续使用 `back.md` 的模块化 FastAPI 和独立 worker：
+按当前交付要求，管理界面作为仓库根目录下独立的 `admin/` Next.js 应用运行；这只是独立前端部署单元，不拆分后端微服务。后端继续使用 `back.md` 的模块化 FastAPI 和独立 worker：
 
 ```text
-Next.js /admin
+Next.js Admin（admin/，本地 :3001）
   → /api/v1/admin/*
   → FastAPI admin routers
        ├── platform RBAC
@@ -798,13 +798,17 @@ backend/app/domains/platform_admin/
 ├── user_recall/
 └── audit/
 
-front/app/admin/
-├── (dashboard)/
-├── components/
-└── login/
+admin/app/
+├── page.tsx
+├── ads/
+├── users/
+├── analytics/
+├── invitations/
+├── recall/
+└── components.tsx
 ```
 
-平台 repository 与租户 repository 分开，调用方必须显式选择，不能通过缺少 `tenant_id` 意外变成全表查询。
+独立管理前端通过 `/api/v1/admin/*` 调用同一个 FastAPI；生产环境由网关反向代理为同源路径，避免在浏览器开放宽泛 CORS。平台 repository 与租户 repository 分开，调用方必须显式选择，不能通过缺少 `tenant_id` 意外变成全表查询。
 
 ---
 
