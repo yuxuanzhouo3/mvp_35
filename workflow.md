@@ -18,6 +18,12 @@ Each time you merge, commit a version on that branch.
 
 `test` and `pro` use the same `x.y`.
 
+Version numbers always contain exactly two numeric components:
+`1.0`, `1.1`, `1.2`, `2.0`, and so on. Do not use patch versions such as `1.0.0`.
+
+Private npm app manifests omit the npm `version` field because npm requires
+three-component semantic versions; the project release version remains `x.y`.
+
 | `test` | → `pro` |
 | --- | --- |
 | `1.0` | `1.0` |
