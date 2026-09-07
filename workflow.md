@@ -28,3 +28,16 @@ three-component semantic versions; the project release version remains `x.y`.
 | --- | --- |
 | `1.0` | `1.0` |
 | `1.1` | `1.1` |
+
+## Weekly production promotion
+
+`.github/workflows/promote-test-to-pro.yml` runs every Monday at 13:30 UTC+8.
+
+- If `test` has no changes beyond `pro`, it does nothing.
+- If a `test` → `pro` PR is already open, it does not create a duplicate.
+- Otherwise it opens the next two-component release PR for manual approval:
+  `1.1` → `1.2` → `1.3` and so on.
+- Major releases such as `2.0` are selected through the workflow's manual
+  version input; a scheduled run only increments the minor component.
+- The workflow never pushes directly to protected branches and never merges
+  production without review.
