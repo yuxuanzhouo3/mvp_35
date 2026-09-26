@@ -763,10 +763,10 @@ POST   /privacy-requests/{id}/complete
 
 ## 15. 技术架构
 
-按当前交付要求，管理界面作为仓库根目录下独立的 `admin/` Next.js 应用运行；这只是独立前端部署单元，不拆分后端微服务。后端继续使用 `back.md` 的模块化 FastAPI 和独立 worker：
+管理界面合并在现有 `front/` Next.js 应用中，通过同一个 `3000` 端口的 `/admin` 路径访问；不创建第二个前端服务，也不拆分后端微服务。后端继续使用 `back.md` 的模块化 FastAPI 和独立 worker：
 
 ```text
-Next.js Admin（admin/，本地 :3001）
+Next.js（front/，本地 :3000/admin）
   → /api/v1/admin/*
   → FastAPI admin routers
        ├── platform RBAC
@@ -798,17 +798,18 @@ backend/app/domains/platform_admin/
 ├── user_recall/
 └── audit/
 
-admin/app/
+front/app/admin/
 ├── page.tsx
-├── ads/
-├── users/
-├── analytics/
-├── invitations/
-├── recall/
-└── components.tsx
+├── layout.tsx
+├── components.tsx
+├── ads/page.tsx
+├── users/page.tsx
+├── analytics/page.tsx
+├── invitations/page.tsx
+└── recall/page.tsx
 ```
 
-独立管理前端通过 `/api/v1/admin/*` 调用同一个 FastAPI；生产环境由网关反向代理为同源路径，避免在浏览器开放宽泛 CORS。平台 repository 与租户 repository 分开，调用方必须显式选择，不能通过缺少 `tenant_id` 意外变成全表查询。
+官网和管理后台都通过 `/api/v1/admin/*` 调用同一个 FastAPI；生产环境由网关保持同源路径，避免在浏览器开放宽泛 CORS。平台 repository 与租户 repository 分开，调用方必须显式选择，不能通过缺少 `tenant_id` 意外变成全表查询。
 
 ---
 
@@ -962,32 +963,29 @@ admin/app/
 
 ## 21. 已实现的管理后台原型
 
-管理界面已作为独立 Next.js 应用放在仓库根目录的 `admin/`，默认使用 `3001` 端口，避免与 `front/` 的 `3000` 端口冲突。
+管理界面已合并到现有 `front/` Next.js 应用，官网和后台只使用一个 `3000` 端口。官网位于 `/`，管理后台位于 `/admin`。
 
 ```text
-admin/
-├── app/
-│   ├── components.tsx       # 响应式侧栏、顶栏、指标卡、表格和筛选组件
-│   ├── globals.css          # 后台视觉系统与响应式规则
-│   ├── layout.tsx           # Platform Admin 应用壳
-│   ├── page.tsx             # 运营总览
-│   ├── ads/page.tsx         # 广告管理
-│   ├── users/page.tsx       # 用户数据
-│   ├── analytics/page.tsx   # 行为分析
-│   ├── invitations/page.tsx # 用户邀请
-│   └── recall/page.tsx      # 用户召回
-├── next.config.mjs
-├── postcss.config.mjs
-├── package.json
-└── tsconfig.json
+front/app/
+├── globals.css                  # 官网与后台共享设计变量
+├── page.tsx                     # 官网
+└── admin/
+    ├── components.tsx           # 响应式侧栏、顶栏、指标卡、表格和筛选
+    ├── layout.tsx               # Platform Admin 应用壳
+    ├── page.tsx                 # 运营总览
+    ├── ads/page.tsx             # 广告管理
+    ├── users/page.tsx           # 用户数据
+    ├── analytics/page.tsx       # 行为分析
+    ├── invitations/page.tsx     # 用户邀请
+    └── recall/page.tsx          # 用户召回
 ```
 
 本地启动：
 
 ```bash
-cd admin
+cd front
 pnpm install
 pnpm dev
 ```
 
-访问 `http://localhost:3001`。当前页面使用本地演示数据，已经实现响应式导航、搜索/状态筛选、指标卡、图表、漏斗、留存、阶梯奖励、生命周期和活动列表等交互外观。下一步接入时，将页面中的演示数组替换为本文件 §14 定义的 `/api/v1/admin/*` 接口；鉴权、发布、发送、封禁和导出等高风险按钮在服务端能力完成前不得视为生产可用。
+访问官网 `http://localhost:3000`，访问管理后台 `http://localhost:3000/admin`。当前后台使用本地演示数据，已经实现响应式导航、搜索/状态筛选、指标卡、图表、漏斗、留存、阶梯奖励、生命周期和活动列表等交互外观。下一步接入时，将页面中的演示数组替换为本文件 §14 定义的 `/api/v1/admin/*` 接口；鉴权、发布、发送、封禁和导出等高风险按钮在服务端能力完成前不得视为生产可用。

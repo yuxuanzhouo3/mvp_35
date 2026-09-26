@@ -22,9 +22,7 @@ function stageTone(stage: string) {
 export default function UsersPage() {
   const [query, setQuery] = useState('')
   const [stage, setStage] = useState('全部阶段')
-  const filtered = useMemo(() => users.filter((user) =>
-    (stage === '全部阶段' || user.stage === stage) &&
-    `${user.id} ${user.name} ${user.email}`.toLowerCase().includes(query.toLowerCase())), [query, stage])
+  const filtered = useMemo(() => users.filter((user) => (stage === '全部阶段' || user.stage === stage) && `${user.id} ${user.name} ${user.email}`.toLowerCase().includes(query.toLowerCase())), [query, stage])
 
   return (
     <div className="mx-auto max-w-[1500px]">
@@ -36,9 +34,7 @@ export default function UsersPage() {
         <MetricCard label="风险账号" value="73" change="+6" icon={ShieldAlert} tone="red" />
       </div>
       <FilterBar value={query} onChange={setQuery} placeholder="搜索用户 ID、企业或脱敏邮箱">
-        <select className={selectClass} value={stage} onChange={(event) => setStage(event.target.value)} aria-label="生命周期阶段">
-          {['全部阶段', '活跃', '已激活', '沉默', '流失风险'].map((item) => <option key={item}>{item}</option>)}
-        </select>
+        <select className={selectClass} value={stage} onChange={(event) => setStage(event.target.value)} aria-label="生命周期阶段">{['全部阶段', '活跃', '已激活', '沉默', '流失风险'].map((item) => <option key={item}>{item}</option>)}</select>
         <select className={selectClass} aria-label="套餐"><option>全部套餐</option><option>免费版</option><option>专业版</option><option>企业版</option></select>
         <button className={secondaryButton}>保存为分群</button>
       </FilterBar>
@@ -47,17 +43,12 @@ export default function UsersPage() {
           <div className="overflow-x-auto">
             <table className="data-table min-w-[1040px]">
               <thead><tr><th>用户</th><th>套餐</th><th>来源</th><th>生命周期</th><th>最近活跃</th><th>注册日期</th><th>操作</th></tr></thead>
-              <tbody>
-                {filtered.map((user) => (
-                  <tr key={user.id}>
-                    <td><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">{user.name.slice(0, 2)}</div><div><div className="font-medium text-slate-900">{user.name}</div><div className="mt-0.5 text-xs text-slate-400">{user.email} · {user.id}</div></div></div></td>
-                    <td><StatusBadge tone={user.plan === '企业版' ? 'violet' : user.plan === '专业版' ? 'blue' : 'slate'}>{user.plan}</StatusBadge></td>
-                    <td className="text-slate-600">{user.source}</td><td><StatusBadge tone={stageTone(user.stage)}>{user.stage}</StatusBadge></td>
-                    <td className="text-slate-600">{user.lastActive}</td><td className="text-slate-500">{user.created}</td>
-                    <td><div className="flex gap-1"><button className="rounded-lg px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50">查看 360°</button><button className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label={`管理 ${user.name}`}><MoreHorizontal className="size-4" /></button></div></td>
-                  </tr>
-                ))}
-              </tbody>
+              <tbody>{filtered.map((user) => <tr key={user.id}>
+                <td><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-full bg-blue-50 text-xs font-bold text-blue-700">{user.name.slice(0, 2)}</div><div><div className="font-medium text-slate-900">{user.name}</div><div className="mt-0.5 text-xs text-slate-400">{user.email} · {user.id}</div></div></div></td>
+                <td><StatusBadge tone={user.plan === '企业版' ? 'violet' : user.plan === '专业版' ? 'blue' : 'slate'}>{user.plan}</StatusBadge></td>
+                <td className="text-slate-600">{user.source}</td><td><StatusBadge tone={stageTone(user.stage)}>{user.stage}</StatusBadge></td><td className="text-slate-600">{user.lastActive}</td><td className="text-slate-500">{user.created}</td>
+                <td><div className="flex gap-1"><button className="rounded-lg px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50">查看 360°</button><button className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label={`管理 ${user.name}`}><MoreHorizontal className="size-4" /></button></div></td>
+              </tr>)}</tbody>
             </table>
           </div>
         )}
