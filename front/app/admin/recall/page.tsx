@@ -8,7 +8,6 @@ const lifecycle = [
   { name: '活跃', value: 9842, color: '#10b981' }, { name: '沉默', value: 4286, color: '#f59e0b' },
   { name: '流失风险', value: 2146, color: '#f97316' }, { name: '已流失', value: 6380, color: '#ef4444' },
 ]
-
 const campaigns = [
   { name: '30 日沉默用户', audience: 4260, delivered: '96.4%', returned: '12.8%', lift: '+4.6%', status: '发送中' },
   { name: '首份分析未完成', audience: 1880, delivered: '98.1%', returned: '18.2%', lift: '+7.9%', status: '已完成' },
@@ -48,12 +47,7 @@ export default function RecallPage() {
         </Panel>
       </div>
       <Panel title="召回活动" description="总回流与随机对照组自然回流同时展示" className="mt-5" action={<button className={secondaryButton}><Pause className="size-4" /> 紧急暂停全部</button>}>
-        <div className="overflow-x-auto">
-          <table className="data-table min-w-[900px]">
-            <thead><tr><th>活动</th><th>目标用户</th><th>送达率</th><th>总回流率</th><th>增量回流</th><th>状态</th><th>操作</th></tr></thead>
-            <tbody>{campaigns.map((campaign) => <tr key={campaign.name}><td className="font-medium text-slate-900">{campaign.name}</td><td>{campaign.audience.toLocaleString()}</td><td>{campaign.delivered}</td><td className="font-semibold">{campaign.returned}</td><td className="font-semibold text-emerald-700">{campaign.lift}</td><td><StatusBadge tone={campaignTone(campaign.status)}>{campaign.status}</StatusBadge></td><td><button className="rounded-lg px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50">查看活动</button></td></tr>)}</tbody>
-          </table>
-        </div>
+        <div className="overflow-x-auto"><table className="data-table min-w-[900px]"><thead><tr><th>活动</th><th>目标用户</th><th>送达率</th><th>总回流率</th><th>增量回流</th><th>状态</th><th>操作</th></tr></thead><tbody>{campaigns.map((campaign) => <tr key={campaign.name}><td className="font-medium text-slate-900">{campaign.name}</td><td>{campaign.audience.toLocaleString()}</td><td>{campaign.delivered}</td><td className="font-semibold">{campaign.returned}</td><td className="font-semibold text-emerald-700">{campaign.lift}</td><td><StatusBadge tone={campaignTone(campaign.status)}>{campaign.status}</StatusBadge></td><td><button className="rounded-lg px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50">查看活动</button></td></tr>)}</tbody></table></div>
       </Panel>
       <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm leading-6 text-blue-800">发送前会重新计算分群快照，并排除退订、投诉、硬退信、封禁用户、频控命中用户和实验对照组。</div>
     </div>

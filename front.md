@@ -8,8 +8,11 @@ Create a polished, production-quality responsive homepage for “PickGlobal”, 
 Product positioning:
 - Tagline: “选品分析与出海获客全链路闭环”
 - English subtitle: “From Product Discovery to Global Customer Growth”
-- Core workflow: 选品 / 自有商品 → 商品分析 → 跨境获客 → AI 邮件触达 → 流失召回
-- Initial target markets: United States and China
+- Two product paths only:
+  1) 选品与分析报告
+  2) 帮人获客（九路：线索获客 → 成交 → 召回）
+- Path B rule: channels 1–5 acquire customers; 6–8 optimize those channels (and can sell PickGlobal itself); 6–9 can sell PickGlobal
+- Initial target markets: United States and China; cross-border mix ~80% CN-US/HK/AU + 20% domestic
 - Primary users: Chinese manufacturers, exporters, independent sellers, and cross-border e-commerce teams
 - Website domain: pickgrobal.mornscience.top
 
@@ -19,40 +22,39 @@ Page structure:
 
 1. Sticky navigation
 - PickGlobal logo with a simple globe/compass icon
-- Links: 产品能力、工作流程、应用场景、常见问题
+- Links: 选品分析、获客九路、应用场景、常见问题
 - Secondary button: 登录
 - Primary button: 免费体验
 - Responsive mobile navigation
 
 2. Hero section
 - Eyebrow: “Oversea Market Selling”
-- Headline: “从选品分析，到找到客户，再到持续成交”
-- Supporting copy: “PickGlobal 将商品评估、利润与税务分析、海外客户发现、AI 营销触达和流失召回整合到一个工作台。”
+- Headline: “两条路径：先算清货，再帮你把客户找回来”
+- Supporting copy: “PickGlobal 把选品分析报告，与电商、社交、展会、代理、大数据等九路获客成交召回，放进同一个工作台。”
 - Primary CTA: “开始分析商品”
-- Secondary CTA: “查看完整流程”
-- Trust note: “首期支持中国与美国市场”
+- Secondary CTA: “查看获客九路”
+- Trust note: “首期支持中国与美国市场；数智人 DEMO 为占位演示”
 - Add an elegant product dashboard mockup showing:
   - Product opportunity score
   - Estimated profit margin
   - Tax and logistics indicators
   - Risk level
-  - Potential overseas leads
-  - Campaign performance
+  - Multi-channel lead sources
+  - Deal and recall performance
 - The mockup should look realistic but clearly be sample/demo data
 
-3. Full-chain workflow
-Create a visually connected five-step process:
-- 01 导入商品：手动录入、CSV 或国内商品数据接口
-- 02 智能分析：利润空间、税务、时效与市场风险
-- 03 发现客户：按地区和行业筛选潜在客户
-- 04 AI 触达：生成个性化邮件与数字人内容
-- 05 流失召回：追踪互动并自动创建召回任务
+3. Product path A · 选品与分析报告
+Create a connected path:
+- 01 导入商品：手动、CSV 或国内货源接口
+- 02 规则计算：利润、税务、时效、风险（金额可复核）
+- 03 AI 摘要：机会解释与行动建议
+- 04 一键进入获客
 
 Use a horizontal stepper on desktop and stacked cards on mobile.
 
 4. Product analysis showcase
 Use a split layout:
-- Left: persuasive copy and feature checklist
+- Left: persuasive copy and feature checklist for Path A
 - Right: an analysis report UI with tabs for:
   - 市场机会
   - 利润测算
@@ -61,14 +63,13 @@ Use a split layout:
   - 风险提示
 Include charts, score cards, and a concise AI-generated recommendation.
 
-5. Core capabilities
-Create four premium feature cards:
-- 商品与市场分析
-- 海外客户发现
-- AI 营销触达
-- 客户召回自动化
-
-Each card should explain the business outcome, not the underlying technology.
+5. Product path B · 获客九路
+Create nine concise capability cards grouped as:
+- 主获客 1–5：电商平台、社交平台、线上展会、12 代理渠道、智慧大脑大数据
+- 优化 6–8：GEO/SEO、AI 内容工厂+数字人+线下客流、跨境元素特色复现
+- 本品销售 9：RaaS 官网抽成 + APP 账户销售
+Each card must emphasize the shared loop: 线索获客 → 成交 → 召回.
+Do not invent a third product line for cold-start/recall; keep it inside Path B.
 
 6. Use cases
 Cards for:
