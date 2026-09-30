@@ -213,7 +213,6 @@ backend/
 │   ├── api/
 │   │   └── v1/
 │   ├── core/
-│   │   ├── config.py
 │   │   ├── auth.py
 │   │   ├── errors.py
 │   │   ├── logging.py
@@ -255,11 +254,50 @@ backend/
 │   ├── sse/                  # AI chat 与 job progress 流协议
 │   ├── webhooks/             # 验签、解密、去重和快速应答
 │   └── policies/             # timeout、retry、TLS、CORS、VPC 策略
+├── config/
+│   ├── settings.py           # Pydantic Settings 与环境变量校验
+│   ├── feature_flags.py      # 分阶段功能开关
+│   └── environments/         # local/test/production 非敏感配置
+├── contracts/
+│   ├── openapi.yaml          # 对前端公开的 API 契约
+│   ├── events/               # job/domain event schema
+│   └── webhooks/             # 微信支付、SES 回调 schema
+├── observability/
+│   ├── logging/              # JSON 日志字段与脱敏规则
+│   ├── metrics/              # API、任务、AI、支付、SES 指标
+│   ├── tracing/              # request/trace/job 关联
+│   └── alerts/               # 告警规则与级别
+├── security/
+│   ├── rbac/                 # 角色、权限和资源级策略
+│   ├── cam/                  # 腾讯云最小权限 CAM 定义
+│   ├── secrets/              # Secret 名称/挂载说明，不放真实密钥
+│   └── threat-model/         # 登录、支付、AI、webhook 威胁模型
+├── scripts/
+│   ├── init_db.py            # 创建集合和索引
+│   ├── migrate.py            # 执行/校验数据迁移
+│   ├── reconcile_payments.py # 支付与权益对账
+│   ├── reconcile_usage.py    # 用量账本与余额对账
+│   └── export_openapi.py     # 从 FastAPI 导出契约
+├── fixtures/
+│   ├── webhooks/             # 已脱敏且可验签的回调样本
+│   ├── providers/            # 混元、SES、商品 API 模拟响应
+│   └── seed/                 # 本地演示数据
+├── ops/
+│   ├── cloudbase/            # 云托管、云文档、COS、网关部署配置
+│   ├── docker/               # 容器启动和健康检查配置
+│   └── runbooks/             # 回滚、漏单、积压、密钥轮换处置
+├── docs/
+│   ├── architecture.md       # 后端内部架构
+│   ├── local-development.md  # 本地启动与调试
+│   ├── api.md                # API 使用说明
+│   └── operations.md         # 部署和运维说明
 ├── tests/
 │   ├── unit/
 │   ├── integration/
 │   └── contract/
+├── .env.example              # 只列变量名和安全示例
 ├── Dockerfile
+├── docker-compose.yml        # 仅本地 api/worker/mock 组合
 ├── pyproject.toml
 └── uv.lock
 ```
@@ -270,6 +308,13 @@ backend/
 - `domains` 保存业务规则，不依赖 FastAPI 或具体数据库。
 - `db` 是 backend 内部数据层，集中管理 repository、collection、index、migration 和 transaction；隔离云文档与未来 MySQL。
 - `net` 是 backend 内部网络层，集中管理入站网关、中间件、SSE、webhook 和所有出站 HTTP 策略。
+- `config` 只保存环境模型和非敏感配置；真实 Secret 由腾讯云注入，禁止写入仓库。
+- `contracts` 是前后端、worker 和 webhook 的稳定边界；接口变更必须先更新契约和 contract test。
+- `observability` 定义统一日志、指标、trace 和告警，不在每个 domain 自建格式。
+- `security` 保存可审查的 RBAC、CAM 和威胁模型，不能包含私钥、token 或生产账号。
+- `scripts` 必须幂等、支持 `--dry-run`，生产执行前输出目标环境和变更摘要。
+- `fixtures` 只能使用脱敏/合成数据；真实联系人、邮件和支付报文不得提交。
+- `ops` 保存部署声明与故障处置，`docs` 保存开发者说明，两者不承载运行时代码。
 - `providers` 隔离混元、SES、位置和商品数据源。
 - `providers` 只做供应商语义转换，底层连接、超时、TLS 和重试统一复用 `net/clients` 与 `net/policies`。
 - `workers` 复用 domain service，不复制业务逻辑。
@@ -881,7 +926,11 @@ https://pickgrobal.mornscience.top/webhooks/* → pickglobal-api public callback
 ```text
 front/       Next.js :3000
 backend/     FastAPI :8000
+worker       backend 同一镜像、不同启动命令
+mock         本地模拟混元/SES/支付回调（可选）
 ```
+
+`backend/docker-compose.yml` 仅编排本地 `api + worker + mock`，不在本地容器内伪装 CloudBase 生产数据库。默认连接独立的 CloudBase test 环境；离线测试使用 repository fake 和 `fixtures/`。
 
 Next.js 通过 `NEXT_PUBLIC_API_BASE_URL` 指向 API。生产环境优先由同域反向代理暴露 `/api`，减少 CORS 和多端 WebView 的会话问题。
 

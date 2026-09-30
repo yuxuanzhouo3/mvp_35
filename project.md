@@ -1,477 +1,417 @@
-# PickGlobal（MVP 35）
+# PickGlobal 全栈核心能力
 
-**Oversea Market Selling** · 选品分析与出海获客全链路闭环
+本文权威顺序：
 
-跨境卖家从选品（或自有商品）到分析、获客、触达、流失召回的一条技术闭环。  
-分支流程见 [workflow.md](workflow.md)。
+1. **功能拆解**（产品要什么）  
+2. **量化 KPI**（做得好不好）  
+3. **技术架构 · 4S**（怎么设计兑现功能 + KPI，以及流量/功能变多怎么扩）  
 
-对照：`mvp_30` MornClient（多端）/ `mvp_28`·`mvp_24`·`mvp_1`（国内 CloudBase）/ `mvp_9/clients`。
-
----
-
-## 1. 项目概要
-
-| 项 | 说明 |
-| --- | --- |
-| 项目 | MVP 35 |
-| 产品名 | PickGlobal |
-| 域名 | [pickgrobal.mornscience.top](https://pickgrobal.mornscience.top) |
-| 定位 | Oversea Market Selling（海外市场销售） |
-| 一句话 | 选品分析和出海获客全链路闭环 |
-| 技术原则 | **仅国内腾讯云 + 混元**；多端 mvp_30；**云托管 ≤100 万**；套餐预算 **¥29.9 / ¥299 / ¥999** |
-| 全栈语言 | **Next.js（官网）+ Python FastAPI（API/Jobs）**；**可用 Python 长期**；不上 Java 除非团队强制 |
-
----
-
-## 2. 业务闭环
-
-```
-跨境选品 或 自有商品
-        ↓
-商品分析报告（利润空间 / 税务 / 时间 / 风险）
-        ↓
-跨境获客
-        ↓
-数字人邮件触达
-        ↓
-流失召回
-```
-
-### 2.1 已锁定决策
-
-| 项 | 决策 |
-| --- | --- |
-| 深度 | 生产级 |
-| 目标市场 | 美国 + 中国（税务）；基建全部国内 |
-| 商品 / 获客 | 国内 API + 腾讯位置服务（不用 Amazon / Google） |
-| 触达 | 混元 + SES；数智人 **DEMO placeholder**（**不买 10h 包**） |
-| DB / 计算（<10 万） | **云开发 + 云托管 + 只云文档**（**不买 MySQL**）；套餐 **¥29.9** |
-| DB（≥10 万） | **MySQL**（先云开发 MySQL→自有账号；>100 万 CDB） |
-| 计算（≤100 万） | **一直云托管**；>100 万才评估 TKE |
-| 云开发套餐预算 | **<10 万 → ¥29.9**；**10万–100万 → ¥299**；**>100 万 → ¥999** |
-| 多端 | **只做官网**，再套：微信小程序 / Android / iOS / Mac / Win |
-| 后端 | **Python FastAPI** + **Next.js**；Docker 上云托管 |
-
-### 2.2 链路要点
-
-1. 商品 → `products`  
-2. 分析（混元摘要）→ `analysis_reports`  
-3. 获客 → `leads`  
-4. 文案 → 数智人 placeholder → SES → `outreach_messages`  
-5. 召回 → `recall_jobs`
-
----
-
-## 3. 技术栈总览
-
-| 能力 | 产品 | 用途 |
-| --- | --- | --- |
-| 官网 UI | CloudBase **云托管** · **Next.js 15** | SSR / 页面；套壳唯一源 |
-| 业务 API / Jobs | 同环境 **云托管** · **Python FastAPI**（Uvicorn） | 分析、发信、召回、混元调用（对照 mvp_26） |
-| DB <10 万 | **云文档** | 全集合 |
-| DB ≥10 万 | **MySQL** + 云文档辅 | 见 §5 |
-| 存储 | 云存储 / COS | 附件 |
-| AI / 邮件 / 地图 | 混元 · SES · 位置服务 | 国内 |
-| 客户端 | mvp_30 壳 | 五端 → cnwww |
-
-**不用 Java** 作默认栈（重、与兄弟 MVP 不一致）。  
-**可以用 Python 一直用下去**：FastAPI 打成 Docker 镜像上云托管；>100 万迁 TKE 仍是同一镜像，不必换语言。
-
-```
-浏览器 / 五端壳
-    → Next.js（云托管）官网
-    → FastAPI（云托管，同 VPC）← 主业务 API
-         ├─ <10w：云文档
-         └─ ≥10w：MySQL
-```
-
-应用层 UI：`Next.js + TypeScript + Tailwind + shadcn/ui`。  
-API：`Python 3.11+ · FastAPI · Pydantic`（混元/SES SDK 用官方 Python 或 HTTP）。
-
-### 3.1 架构图
-
-```mermaid
-flowchart TB
-  subgraph clients [Clients_cnwww]
-    Web[Web_Next]
-    Mini[WeChat_MiniProgram]
-    And[Android]
-    iOS[iOS]
-    Mac[Mac]
-    Win[Windows]
-  end
-
-  subgraph site [Official_Site]
-    URL["pickgrobal.mornscience.top"]
-  end
-
-  subgraph cloudbase [Tencent_CloudBase]
-    Host[CloudRun_Next_standalone]
-    DocDB[(Cloud_Document_DB)]
-    Store[Cloud_Storage_COS]
-    Fn[Cloud_Functions_Jobs]
-  end
-
-  subgraph chinaAI [China_Services]
-    Hunyuan[Hunyuan_LLM]
-    Avatar[Digital_Human_placeholder]
-    SES[Tencent_SES]
-    Map[Tencent_Location]
-    CustomAPI[Custom_CN_APIs]
-  end
-
-  Mini --> URL
-  And --> URL
-  iOS --> URL
-  Mac --> URL
-  Win --> URL
-  Web --> URL
-  URL --> Host
-  Host --> DocDB
-  Host --> Store
-  Host --> Fn
-  Fn --> Hunyuan
-  Fn --> Avatar
-  Fn --> SES
-  Fn --> Map
-  Fn --> CustomAPI
-```
-
-```
-客户端（WebView 套同一官网）
-  → pickgrobal.mornscience.top
-  → 云托管 Next
-       ├─ 云文档 · 云存储 · 云函数
-       └─ 混元 · SES · 位置服务 · 自定义 API
-```
-
----
-
-## 4. 多端（学 mvp_30 MornClient）
-
-**原则：** 只维护一个官网；各端是壳，不另写业务 UI。
-
-| 端 | 技术 | 分发 |
-| --- | --- | --- |
-| Web | Next.js 云托管 | 官网域名 |
-| 微信小程序 | `web-view` → 官网 | 微信 |
-| Android / iOS | Capacitor → APK / IPA | cnwww / 商店 |
-| Mac / Windows | Electron → DMG / EXE | cnwww |
-
-```
-clients/
-├── miniprogram/
-├── mobile/{android,ios}/
-├── desktop/{macos,windows}/
-└── shared/
-```
-
-| 约定 | 说明 |
-| --- | --- |
-| 单一源 | 业务只改官网；壳只改 URL / 图标 / 包名 |
-| 登录 | CloudBase / 微信；壳内跟 Web 会话 |
-| 构建 | 官网 URL → 出五端包（MornClient 思路） |
-| 不做 | 各端重写 RN 业务页（除非 >100 万强原生需求） |
-
----
-
-## 5. 数据库：云文档 vs MySQL（及 >10 万选谁）
-
-### 5.1 阶段策略
-
-| 用户规模 | 底座 | DB | 说明 |
+| S | 含义 | 核心问题 | 典型内容 |
 | --- | --- | --- | --- |
-| **<10 万（锁定）** | **云开发 + 云托管** | **只云文档**（不买 MySQL） | Next + FastAPI 都跑云托管；数据全在云文档；套餐 ¥29.9 |
-| **≥10 万（S2）** | 仍 **云开发 + 云托管** | **云开发 MySQL**（迁自有账号）+ 云文档辅 | 账户/配额走 SQL |
-| ≈100 万 | 仍云托管 | MySQL 加强 | — |
-| **>100 万** | 才评估 TKE | **CDB / TDSQL-C** | 云文档仅配置 |
-| PostgreSQL / 境外库 | **不用** | — |
+| **1. Scenario** | 场景 / 需求 | 系统要做什么？ | FR / NFR、QPS、DAU、Latency、Availability |
+| **2. Service** | 服务 / 架构 | 由哪些服务组成？ | Client、API Gateway、Service、Cache、DB、MQ、Object Storage |
+| **3. Storage** | 数据 / 存储 | 数据怎么存、怎么访问？ | Schema、SQL/NoSQL、Index、Partition、Replication、Cache |
+| **4. Scale** | 扩展 / 优化 | 流量变大？功能变多？ | LB、Sharding、Caching、CDN、Async、Replication、Failover |
 
-### 5.2 >10 万：云开发 vs 其它（怎么选）
+对齐 [project.md](project.md) / [front.md](front.md) / [back.md](back.md) / [admin.md](admin.md)。
 
-| 方案 | >10 万适合？ | 优劣 |
-| --- | --- | --- |
-| **继续纯云文档** | ❌ 不够当主交易库 | JOIN/对账/配额弱；大集合扫描贵 |
-| **云开发内 MySQL（云开发侧账号）** | △ 可起步 | 开通快、跟云托管同环境；默认偏公网、管控在云开发侧 |
-| **云开发 MySQL → 迁到自有账号（VPC）** | **✅ 推荐（10万～100万）** | 仍算云开发生态；**内网**连云托管/云函数；延迟低、可自管实例；官方支持迁移 |
-| **直接买 CDB MySQL**（不经云开发库） | ○ 可，若团队熟 CDB | 能力强；与云开发套餐资源点分离；要自己管 VPC/安全组；**<10～50万可不必急** |
-| **TDSQL-C Serverless** | ○ 流量波动大时 | 弹性好；接口仍是 MySQL |
-| **CVM 自建 MySQL** | ❌ 不推荐 | 运维重，违背云托管策略 |
-| **Mongo 自建 / 其它云** | ❌ | 偏离国内统一栈 |
+## 硬约束
 
-**结论（对应总结里那两行）：**
-
-- **<10 万（现）**：**云开发 + 云托管 + 只云文档**，不买 MySQL。  
-- **≥10 万**：「云开发 MySQL（自有账号 + VPC）」+ 文档辅。  
-- **>100 万**：CDB / TDSQL-C；云文档留报告/配置。
-
-### 5.3 集合（云文档侧；MySQL 表另建）
-
-| 集合 | 用途 |
+| 项 | 锁定 |
 | --- | --- |
-| `products` / `product_sources` | 商品与来源（可逐步迁 MySQL） |
-| `analysis_reports` | 利润 / 税务 / 时间 / 风险（宜留文档） |
-| `leads` / `campaigns` | 线索与活动 |
-| `outreach_messages` | 邮件 |
-| `digital_human_assets` | 数智人（placeholder） |
-| `recall_jobs` | 召回 |
-| `provider_credentials` / `audit_logs` | 密钥引用 / 审计 |
-
-### 5.4 MySQL 大概多少钱（另计，不含云开发套餐）
-
-刊例会变；内地粗算：
-
-| 形态 | 规格感觉 | 约 ¥/月 |
-| --- | --- | --- |
-| **<10 万** | **不买 MySQL**（用云文档，费用打进套餐/资源点） | **¥0 独立账单** |
-| 云开发 MySQL CU（Serverless 量级） | 低负载 / 可暂停 | **¥50–300** |
-| 云开发 MySQL 1CU 常驻 | ≈1核+2G 量级 | **¥200–500** |
-| TDSQL-C Serverless | ~0.000095 元/CCU·秒 ≈ **¥0.34/CCU·时**；1CCU 常驻满月 | **≈ ¥250** + 存储（约 ¥0.005/GB·时 → 50GB ≈ ¥180） |
-| CDB 包年小规格 | 1核2G / 2核4G 高可用 | 常见 **¥100–400** 起（活动价更低）到 **¥500–1500** |
-| >100 万 主从/分片 | 多节点 | **¥数千～数万+** |
-
-**≥10 万起步建议：** 先开 **云开发 MySQL（迁自有账号）**，预算先按 **¥200–800/月** 加进 S2，而不是一上来大规格 CDB。
+| 全栈 | Next.js 16 + TypeScript + Tailwind + shadcn/ui · Python FastAPI · CloudBase |
+| AI | 腾讯混元主模型；通义仅备份默认关；不上 OpenAI / Claude / Gemini |
+| 基建 | 仅国内腾讯云 |
+| 选品主数据（路径 A） | MVP：手动 / CSV / 国内货源 API |
+| 获客（路径 B） | 九路 provider；DEMO 可 mock；海外正式开通前过合规 |
+| 数智人 | DEMO placeholder；不买 10h 包 |
+| DB | `<10 万` 只云文档；`≥10 万` 才加 MySQL |
 
 ---
 
-## 5b. 分档全栈清单 + 要不要调整 + 怎么迁
+## 0. 总览
 
-### 要不要调整当前锁定？
+对外只有 **两条产品路径**。冷客启动 / 流失召回是路径 B 的生命周期阶段，不是第三条产品线。
 
-**不用改大方向。** `<10万 = 云开发 + 云托管 + 只云文档（¥29.9）` 正确。  
-唯一强调：**到 ~100 万也不必换 Java**——换的是 DB/副本/队列，不是语言。
+```text
+【A】选品与分析报告 →「一键获客」跳进 B
+【B】九路获客 → 触达成交 → 冷客启动 / 流失召回
+      ↑_______________ 反馈回流商品判断与线索分 _______________|
+```
 
-### 全栈对照（推荐路径 = 全程 Python）
+| 产品 | 功能模块（用户可见） | 代码边界（实现） |
+| --- | --- | --- |
+| **A** | 双向入口 · 路线市场 · 分析引擎 · 报告+一键获客 | `app/products` · `app/analysis` |
+| **B** | 九路获客经营（含成交/召回） | `app/leads` · `app/campaigns` · `providers/*` · `app/activation` · `app/recall` |
 
-| 规模 | 前端 | 后端 | 跑在哪 | DB | 套餐 |
+B 在代码上拆「常规触达 / 冷启召回」两套规则与 job（共用 SES / suppression / `leads`），对外仍只说路径 B。
+
+---
+
+## 1. 功能拆解（对外锁定）
+
+### 一、软件选品和生成分析报告 · 路径 + 特色
+
+```text
+双向入口 → 路线与市场设定 → 选品分析引擎 → 选品报告
+                                              ↓
+                                    【一键获客】跳转获客板块（路径 B）
+```
+
+| # | 功能 | 路径 | 特色 |
+| --- | --- | --- | --- |
+| **A1** | **双向选择入口** | **自有导入**（表单/CSV）**或「帮我选品」**（国内货源目录） | 两条入口汇入同一 `products`；不绑死外部电商选品主库 |
+| **A2** | **路线和市场设定** | 货源地 / 目标市场 / 物流路线 / 税务口径 / 售价币种 | MVP 默认：货源 CN、目标 US、中美税、成本 CNY / 售价 USD；可扩展中港/中澳 |
+| **A3** | **选品分析引擎** | 异步 job：规则算利润·税务·时效·风险 → 混元只做解释 | 金额可审计；混元不能改数；`Decimal` + 版本快照 |
+| **A4** | **输出选品报告** | 四维报告 + CTA **「一键获客」** → 跳转路径 B，携带 `seed_analysis_id` | 报告不是终点；抬行动率 ActR |
+
+说明：Amazon 等电商平台优先作 **路径 B 线索源**，不作路径 A 选品主库。若未来做「店内选品」，另开 `ProductCatalogProvider`。
+
+### 二、软件帮人获客 · 路径 + 特色
+
+统一漏斗（九路共用）：
+
+```text
+线索获客 → 触达 → 成交标记 → 冷客启动 或 流失召回
+```
+
+分层：
+
+```text
+1–5 = 主获客
+6–8 = 优化（供 1–5 用；销售本品也能用）
+6–9 = 可用来销售 PickGlobal 本身
+```
+
+| # | 路径 | 闭环 | 分层 | 特色 |
+| --- | --- | --- | --- | --- |
+| **B1** | **电商平台** Amazon · Temu · Walmart · 淘宝 · 拼多多 | 线索获客 + 成交 + 召回 | 主获客 | 访客/询盘/订单买家/沉默买家统一进 `leads` |
+| **B2** | **社交平台** LinkedIn · Facebook · 微信小程序 · 抖音 · 小红书 · 快手 | 线索获客 + 成交 + 召回 | 主获客 | 公域互动沉淀；小程序可同栈登录 |
+| **B3** | **线上展会平台** | 线索获客 + 成交 + 召回 | 主获客 | 会期削峰；会后进冷启/召回 |
+| **B4** | **12 代理渠道** | 批量获客 + 成交 + **分成** | 主获客 | 渠道子账户；账本与分成分离 |
+| **B5** | **智慧大脑大数据** 企查查 + 天眼查 + etc | 线索集合 + 成交 + 召回 | 主获客 | 去重、质量分、合规留痕 |
+| **B6** | **GEO / SEO** | 线索获客 + 成交 + 召回 | 优化；可自销 | 供 1–5；落地页归因 |
+| **B7** | **AI 内容工厂 + 数字人 + 线下客流** | 线索获客 + 成交 + 召回 | 优化；可自销 | 供 1–5；数智人 placeholder |
+| **B8** | **跨境元素复现** | 线索获客 + 成交 + 召回 | 优化；可自销 | 约 **80%** 中美/中港/中澳 + **20%** 内陆 |
+| **B9** | **RaaS** | 官网成功抽成 + APP 账户销售（类比 elink） | 本品销售 | 卖结果抽成；ledger 与套餐可并存 |
+
+硬规则：
+
+- 统一 `leads` + `source_channel`。  
+- 触达默认：**AI 生成 → 人工批准 → 发送**。  
+- 冷启/召回：**规则入队**，混元只写文案。  
+- 海外平台正式开通前过合规；DEMO 用 mock。  
+- B4 / B9 金额：整数分、幂等账本、验签后才发佣/记抽成。
+
+---
+
+## 2. 量化 KPI · 做得好不好
+
+### 2.1 口径原则
+
+- 金额只用规则引擎，不用混元估算。  
+- 默认滚动 **30 天**。分母为 0 → `—`。  
+- 对外用租户**中位数**。
+
+### 2.2 八率 + 五时效（唯一清单）
+
+**八率**
+
+| # | 指标 | 代号 | 主要服务功能 | 公式 | S2 目标 | 角色 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 利润率 | `N%` | A3 / A4 | `N/R`；看板 `median(net_margin)` | 可复算；推荐 ≥15%；偏差 ≤5pt | 四率 |
+| 2 | 行动率 | `ActR` | A4→B | 点「一键获客」或采纳的报告 ÷ 完成报告 | ≥50% | 四率 |
+| 3 | 触达率 | `TR` | B 触达 | delivered 人数 D ÷ 计划受众 A | ≥95% | 四率 |
+| 4 | 打开率 | `OR` | B 触达 | unique 打开 ÷ D | ≥40%（辅助） | 四率 |
+| 5 | **获客率** | `AR` | B 成交 | 有效获客 W ÷ 触达 S（≈D） | **≥8%（北星）** | 效果 |
+| 6 | 线索合格率 | `QR` | B1–B5 发现 | `score≥θ` ÷ 入库 | ≥60% | 质量 |
+| 7 | 冷客激活率 | `ActR_cold` | B 冷启 | 序列内 open∨reply ÷ 入队 | ≥25% | 生命周期 |
+| 8 | 召回成功率 | `RecR` | B 召回 | 回暖 ÷ 召回触达 | ≥10% | 生命周期 |
+
+红线：送达率（按封）≥95%；bounce&lt;1.5%；complaint&lt;0.1%。
+
+**五时效（P50；超时记失败）**
+
+| # | 指标 | 代号 | 主要服务功能 | 公式 | S2 |
 | --- | --- | --- | --- | --- | --- |
-| **<10 万** | Next.js | **Python FastAPI** | **云托管** ×2（web + api） | **只云文档** | ¥29.9 |
-| **~10 万** | 同左 | **仍 FastAPI**（加 worker 副本） | **仍云托管** | **+ MySQL**（云开发→自有账号）；文档留报告 | ¥299 |
-| **~100 万** | 同左 | **仍 FastAPI**（更多 api/worker） | **仍云托管**打满 | MySQL 加强 / 只读 | ¥299→999 |
-| **>100 万** | 同左 | **仍 FastAPI**（可拆服务） | 才评估 **TKE** | **CDB** 主从/分片 | ¥999 |
+| 1 | 分析时效 | `AnaT` | A3 | 完成 − 请求 | ≤2 min |
+| 2 | 线索时效 | `LeadT` | B 发现 | discovery 成功 − 发起 | ≤3 min |
+| 3 | 获客时效 | `AcqT` | B 成交 | first_W − first_delivered（仅 W） | ≤3 天 |
+| 4 | 激活时效 | `ActT` | B 冷启 | 首封 delivered − 入队 | ≤24 h |
+| 5 | 召回时效 | `RecT` | B 召回 | 首封 delivered − 触发 | ≤24 h |
 
-公共不变：混元 · SES · 位置服务 · COS · 五端壳（mvp_30）。
-
-### Java？
-
-| | |
-| --- | --- |
-| ~100 万要上 Java 吗？ | **不需要** |
-| 何时才考虑 Java | 团队已是 Java 主力、或强监管要求指定栈——**本项目默认不做** |
-| 误区 | 「用户多 = 必须 Java」→ 错；瓶颈在数据与架构，不是 Python |
-
-### 迁移怎么做（transfer）
-
-```
-阶段 A  <10万
-  Next + FastAPI → 云托管
-  全部读写 → 云文档 collection
-       │
-       │ 触发：对账/配额/会员算不清，或文档扫描明显慢
-       ▼
-阶段 B  ≥10万（~10万起）
-  ① 开通云开发 MySQL → 迁自有账号（VPC，与云托管同网）
-  ② 新建表：users / quotas / jobs / payments …
-  ③ 双写过渡（可选）：先写 MySQL，读仍可文档；或脚本批量导出文档→MySQL
-  ④ FastAPI 改连接串（SQLAlchemy/异步驱动）；**不改语言、不换前端**
-  ⑤ 报告 JSON 可留云文档
-  ⑥ 套餐升 ¥299；加 Redis / 队列（发信削峰）
-       │
-       │ 触发：≈100万，托管副本/限额吃紧，或要多 AZ SLA
-       ▼
-阶段 C  >100万
-  ① FastAPI/Next 同一镜像迁 TKE（或继续打满云托管若仍够）
-  ② MySQL → CDB/TDSQL-C（DTS 迁移）；再考虑分片
-  ③ 网关 / WAF；worker 独立部署
-  ④ **仍不用为迁 Java 重写**
+```text
+A = approve 受众 − suppressed/bounced/无邮箱
+D = A 中至少 1 封 delivered
+W = 触达后 14 天内 replied 或赢单/约见
 ```
 
-**迁移检查表**
+看板：**首屏四率 + 北星 AR**；时效条可折叠；红线限流；ActT/RecT 的 P95&gt;72h 告警。
 
-| 从 → 到 | 做什么 | 不做什么 |
+### 2.3 利润公式
+
+```text
+R = target_price_usd
+C = 采购折USD + 包装 + 国内段 + 国际段
+F = R × (platform_fee_rate + payment_fee_rate)
+T = 关税等
+N = R − C − F − T     → 利润率 N/R
+```
+
+落库：`net_margin`、`net_profit_usd`、`fx_usd_cny`、`rules_version`。
+
+### 2.4 功能 → KPI 验收对照
+
+| 功能 | 必看 KPI | 过线信号（S2） |
 | --- | --- | --- |
-| A→B | 加 MySQL、改 FastAPI 数据访问层、双写/导数据 | 不重写 Next；不上 Java；不换云托管 |
-| B→C | 镜像迁 TKE、DTS 迁 CDB、加副本/分片 | 不重写业务语言 |
-
-代码预留（现在就该有）：`repository` 接口（文档实现 / SQL 实现可切换）；任务进队；`user_id` 索引字段。
+| A1 双向入口 | 导入成功率；目录搜索可用性 | 手动+CSV+mock 目录均可入库 |
+| A2 路线市场 | 报告含正确 market/route 快照 | 改市场后必须重算才出新报告 |
+| A3 分析引擎 | `N%` · `AnaT` | 关混元仍有 metrics；P50≤2min |
+| A4 报告+一键获客 | `ActR` | ≥50%；携带 `seed_analysis_id` |
+| B1–B5 主获客 | `QR` · `LeadT` · `AR` | QR≥60%；LeadT≤3min；AR≥8% |
+| B 触达 | `TR` · `OR` · 送达红线 | TR≥95%；OR 辅助；bounce/complaint 红线 |
+| B 冷启/召回 | `ActR_cold` · `RecR` · `ActT` · `RecT` | 激活/召回率达标；P50≤24h |
+| B4 / B9 分成抽成 | 账本对账成功率 | 仅验签后入账；幂等不双发 |
 
 ---
 
-## 5c. 名词：TKE / CDB；Python 扛得住 >100 万吗？
+## 3. 技术架构 · 4S（兑现功能 + KPI）
 
-### TKE 是什么？
+4S 回答两件事：**现在怎么做成 A/B**，以及 **用户变多 / 九路变多时怎么扩**。  
+功能清单见 §1，验收数字见 §2。
 
-**TKE** = 腾讯云 **Tencent Kubernetes Engine**（容器服务）。  
-用 Kubernetes 跑你的 Docker 镜像（Next / FastAPI），自己管副本数、滚动发布、多可用区。
+### 3.1 Scenario · 系统要做什么
 
-| | 云托管（现在用到 ≤100 万） | TKE（>100 万才评估） |
+#### 功能需求（FR）
+
+| 路径 | 用户场景 | 系统必须完成 | 成功跳转 |
+| --- | --- | --- | --- |
+| **A1** | 自有导入 / 帮我选品 | 两条入口写入同一 `products` | 可进入 A2 |
+| **A2** | 设货源、市场、路线、税务 | 冻结分析上下文（CN→US 默认） | 可进入 A3 |
+| **A3** | 点「开始分析」 | 规则算 N/税/时效/风险；混元只解释 | `AnaT`≤2min；关混元仍有 metrics |
+| **A4** | 看报告并点「一键获客」 | 只读报告 + 携带 `seed_analysis_id` 进 B | 抬 `ActR` |
+| **B1–B5** | 从电商/社交/展会/代理/大数据找人 | provider 归一化进统一 `leads` | `QR`≥60%；`LeadT`≤3min |
+| **B 触达** | 生成并批准后发送 | AI→人工批准→SES/渠道；禁未审群发 | `TR`≥95%；送达红线 |
+| **B 成交** | 标记回复/赢单 | `W` 定义固定；账本幂等 | `AR`≥8%；`AcqT`≤3天 |
+| **B 冷启/召回** | 未互动激活 / 互动后沉默 | 规则入队，混元只写文案 | `ActR_cold`/`RecR`；P50≤24h |
+| **B6–B8** | 给 1–5 加权，或卖本品 | 归因/内容包/跨境模板挂在同一漏斗 | 不新开产品线 |
+| **B9** | 官网/APP 成功抽成 | 验签后入 raas ledger | 与套餐并存；不污染普通 AR |
+
+#### 非功能需求（NFR）
+
+| 项 | MVP / S1（&lt;1 万卖家） | S2（~10 万） | S3a（~100 万，仍云托管） |
+| --- | --- | --- | --- |
+| **用户** | 注册卖家账号；MAU ≈ 15–25% | 同左 | 同左 |
+| **可用性** | 单环境云托管；可短维护窗 | 多副本；同地域多实例 | 打满副本 + 网关/WAF |
+| **同步 API Latency** | P95 ≤ 500ms（CRUD/查询） | P95 ≤ 400ms | P95 ≤ 300ms + 缓存 |
+| **长任务 SLA** | 分析 P50≤5min；发现≤5min | **AnaT≤2min；LeadT≤3min** | 同 S2；P95 告警 |
+| **分析 QPS** | 低：人点按钮；异步削峰 | 配额 + worker 副本 | 队列分 Topic |
+| **发信吞吐** | SES sandbox / 小流量 | 限速 + 独立 IP 视投诉 | 资源包 + 多 IP |
+| **安全** | HTTPS；密钥不出浏览器；租户隔离 | 同左 + 对账 | WAF、审计、密钥轮转 |
+| **合规** | 海外平台 mock；国内 enrichment 可真接 | 分批过 ToS / 出境评估 | 按通道独立配额 |
+
+工作台 IA（Scenario 对应页面）：
+
+```text
+工作台
+├── 选品分析（A1–A4）自有导入 | 帮我选品 | 路线市场 | 报告→一键获客
+└── 获客经营（B）通道 B1–B9 | 线索池/触达 | 成交分成/RaaS | 冷启动/召回
+```
+
+共性规则：长任务 `202 + jobs`；金额/评分/是否流失只由规则引擎算；`tenant_id` 强制；provider 可 mock 替换。
+
+---
+
+### 3.2 Service · 由哪些服务组成
+
+```text
+Client（Web / 五端 WebView 套同一官网）
+  → API Gateway（同域 /api、/webhooks；CloudBase 网关鉴权）
+  → FastAPI 模块化单体（非九个微服务）
+       ├─ identity / tenant
+       ├─ products / analysis          A1–A4
+       ├─ leads / campaigns / providers B 发现+触达
+       ├─ activation / recall          B 生命周期
+       ├─ billing / raas               B4 / B9
+       └─ metrics                      八率五时效快照
+  → Worker（同镜像不同命令）
+  → Cache（S2+ Redis）· MQ（MVP=jobs 集合；S2=TDMQ）
+  → DB（云文档 → +MySQL）· COS
+  → 混元 / SES / 位置服务 / 国内与海外 provider
+```
+
+| 组件 | 职责 | 兑现的功能 / KPI |
 | --- | --- | --- |
-| 是什么 | 云开发里的「托管容器」，少运维 | 完整 K8s 集群，更可控也更重 |
-| 谁管机器 | 腾讯云开发帮你 | 你管集群规格 / 节点池 |
-| 适合 | MVP～百万级前 | 要细拆服务、自定义扩缩、强 SLA |
+| **Client** | Next.js 工作台 + mvp_30 壳 | A/B 全部 UI；SSE/轮询看时效 |
+| **API Gateway** | 同域路由、用户鉴权、限流 | 浏览器不直连 DB/密钥 |
+| **products/analysis** | 双向入口、市场设定、规则+混元 | A1–A4；`N%` `AnaT` `ActR` |
+| **leads + providers** | 九路发现、去重、质量分 | B1–B8；`QR` `LeadT` |
+| **campaigns + SES worker** | 草稿/批准/发送/webhook | `TR` `OR` 送达红线 |
+| **activation/recall** | 规则扫描 + 独立 job | `ActR_cold` `RecR` `ActT` `RecT` |
+| **billing** | 套餐、分成、RaaS 抽成 | B4/B9 对账 |
+| **Cache** | 会话、配额、热点报告/计划受众 | 降同步 Latency |
+| **MQ / jobs** | 分析、发现、发信、召回削峰 | 保 AnaT/LeadT；展会峰值 |
+| **Object Storage** | 报告 PDF、导入文件、数智人占位素材 | A4 导出 |
 
-**一句话：** TKE 不是新语言，是 **更大一号的集装箱停车场**；镜像还是现在的 FastAPI。
+路径 A 服务链：
 
-### CDB 是什么？
+```text
+A1 POST /products | /imports | /catalog/search
+A2 写入 origin/target/incoterm/tax 上下文
+A3 POST .../analyses → 202 → worker：规则 metrics → 混元摘要
+A4 GET /analyses/{id}；CTA → /gtm?seed_analysis_id=
+```
 
-**CDB** = 腾讯云 **Cloud DataBase**，这里指 **云数据库 MySQL**（托管 MySQL 实例）。  
-同类还有 **TDSQL-C**（云原生 MySQL，可 Serverless）。
+路径 B 服务链：
 
-| | 云开发 MySQL（10万～100万） | CDB / TDSQL-C（>100 万） |
+```text
+LeadProvider.search → normalize/dedupe/score → leads
+  → campaign 草稿 → approve → send jobs → SES
+  → webhook → 成交标记
+  → 日扫规则 → activation_jobs / recall_jobs
+```
+
+```python
+class LeadProvider(Protocol):
+    channel: str  # ecommerce|social|expo|agency|enrichment|geo_seo|content_dh|cross_border|raas
+    async def search(self, query: LeadSearchQuery) -> LeadSearchResult: ...
+```
+
+| 功能 | Service / Provider | MVP |
 | --- | --- | --- |
-| 定位 | 跟云开发/云托管一体，开通快 | 独立数据库产品，规格/主从/备份更强 |
-| 连接 | 迁自有账号后可 VPC 内网 | VPC 内网，可只读副本、分片策略 |
-| 何时上 | ≥10 万加 MySQL 时 | >100 万或要强高可用/分库时 |
+| B1 电商 | `providers/ecommerce/*` | mock → 分批合规 |
+| B2 社交 | `providers/social/*` | mock → 分批 |
+| B3 展会 | `providers/expo` | mock；峰值进 MQ |
+| B4 代理 | 渠道导入 + billing 分成 | 子账户；验签后分佣 |
+| B5 大数据 | 企查查/天眼查 + 位置服务 | 国内可先真接 |
+| B6 GEO/SEO | 归因事件 → leads | 与 1–5 共用池 |
+| B7 内容/数字人/线下 | 内容 job + DH placeholder + 扫码 | 数字人不阻塞发信 |
+| B8 跨境元素 | 市场包（话术/时区/合规）挂 campaign | 80/20 模板 |
+| B9 RaaS | 官网/APP 成功回调 → raas ledger | 单列看板，不混进普通 AR |
 
-**一句话：** CDB = **专业版托管 MySQL**；不是「另一种 SQL 方言」。
-
-### Python / FastAPI 当前线程模型，>100 万扛得住吗？
-
-**能扛，但不是靠「一个进程里多线程硬抗 100 万在线」。**
-
-本项目是 **I/O 密集**（等 DB、混元、SES），不是纯 CPU 算力竞赛：
-
-| 点 | 说明 |
-| --- | --- |
-| FastAPI 默认 | **async**（asyncio）+ Uvicorn；并发是 **事件循环等 I/O**，不是每请求一条 OS 线程打满 |
-| GIL | 主要卡 **CPU 密集**；等网络时影响小。重 CPU（若有）丢 **别的进程/队列 worker** |
-| 真正扩容 | **多副本**：Uvicorn `workers=N` 或多 Pod；前面 CDN/网关；慢活进 **队列** |
-| 「100 万用户」 | = 注册用户，不是 100 万同时 QPS。MAU～15–25%，同时在线远更小 |
-| 先爆的通常是 | **DB / 连接数 / 发信 / 混元限额**，不是 Python 语法本身 |
-
-**结论：** >100 万 **继续用 Python FastAPI 即可**；要做的是 **水平扩展（多容器）+ MySQL/CDB + 队列**，不是换成 Java。单进程单线程「硬扛 100 万并发」任何语言都不现实。
-
-```
-用户请求 → 多副本 FastAPI（async）
-              ├─ 快路径：读 Redis / MySQL
-              └─ 慢路径：进队列 → worker（仍是 Python）→ 混元 / SES
-```
+横切：CloudBase Auth v2；微信 API v3 验签；混元 SSE；`/webhooks/ses` 5s 验签应答。
 
 ---
 
-## 6. 云托管 / 存储 / Jobs / AI
+### 3.3 Storage · 数据怎么存、怎么访问
 
-| 项 | 约定 |
-| --- | --- |
-| 云托管 | Docker → Next `standalone`；env 只挂服务端 |
-| 云存储 | 报告 PDF；视频正式后再写 |
-| Jobs | 导入分析、混元、SES 发送/回调、召回（数智人正式后接渲染） |
-| AI | **混元**主模型；通义仅备份默认关 |
-| 数智人 | DEMO placeholder，**不买 10h 包** |
-| SES | 国内发信；不走境外 SaaS |
-| 商品/线索 | 国内 API + 位置服务；不用 Amazon / Google Places |
+选型（与 [project.md](project.md) 一致）：
 
-密钥：CloudBase、混元、SES、位置服务、自定义 API；（Phase B）小程序 AppID；数智人密钥正式再开。
+| 规模 | 主库 | 辅 | Cache / MQ |
+| --- | --- | --- | --- |
+| **&lt;10 万** | **只云文档**（文档型，非 MySQL） | COS | 可无 Redis；jobs 集合轮询 |
+| **≥10 万** | **MySQL**（账户/配额/任务）+ 云文档（报告 JSON） | COS | Redis + TDMQ |
+| **&gt;100 万** | CDB/TDSQL-C 主从/分片 | 云文档仅配置 | Redis 集群 + 多 Topic |
 
-### 明确不用
+原则：报告/线索/活动是文档+状态机 → 云文档合适；对账/分成/配额要 JOIN 与强一致 → 才上 MySQL。  
+访问：`repository` 协议；业务禁止直连 CloudBase HTTP；查询强制注入 `tenant_id`；列表用游标，不用深 offset。
 
-Vercel · Supabase / Firebase · PostgreSQL 主库 · OpenAI/Claude/Gemini · Amazon/Google 主数据源 · 境外邮件 SaaS
+#### Schema（MVP 集合）
 
----
-
-## 7. 套餐预算 + DEMO 成本
-
-### 7.1 云开发套餐档（按用户，你方锁定）
-
-| 用户 | 套餐预算 | 用途 |
+| 集合 | 服务功能 | 关键字段 / 访问 |
 | --- | --- | --- |
-| **<10 万** | **¥29.9/月** | 个人/入门档；云文档 + 小流量托管 |
-| **10万–100万** | **¥299/月** | 标准偏上；覆盖更多资源点 |
-| **>100 万** | **¥999/月** | 企业档；仍可能超限加购资源点 |
+| `products` / `product_sources` | A1 | `normalized_sku` 唯一；来源快照 COS key |
+| `analysis_reports` | A3/A4 | `metrics` JSON；`rules_version`；只读历史 |
+| `leads` | B 发现 | `source_channel`；`dedupe_key`；`quality_score` |
+| `campaigns` / `outreach_messages` | B 触达 | `audience_snapshot`；`ses_message_id`；`purpose` |
+| `activation_jobs` / `recall_jobs` | B 生命周期 | `enqueued_at`；`reason`；与 campaign 互斥 |
+| `jobs` | 全异步 | `status+progress+steps`；算五时效 |
+| `payment_orders` / `usage_ledger` / raas | B4/B9、配额 | 整数分；`idempotency_key` 唯一 |
+| `metric_snapshots` | 看板 | 定时聚合八率五时效 |
+| `webhook_events` | SES/支付 | `provider+event_id` 去重 |
 
-说明：控制台实际商品名可能是「个人/标准/企业」，价位以官网为准；上表为 **本项目预算锚点**。套餐 **不含** 混元、SES、独立 MySQL/CDB、数智人视频包。
+A2 存在商品/报告上下文，不散落全局配置：`origin_country`、`target_market`、`incoterm`、`hs_code_hint`。改市场必须重算新报告。
 
-### 7.2 DEMO 月估（<10 万起步、无数智人包）
+#### Index / 分区 / 副本 / Cache
 
-| 部分 | 约 |
+| 手段 | 用法 |
 | --- | --- |
-| 云开发套餐 | **¥29.9**（预算档） |
-| 云托管（Next + FastAPI 各一） | ¥80–300 |
-| 云文档 / 存储 / 函数 | ¥40–140 |
-| 混元 | ¥50–150 |
-| SES / 位置 | ¥0–70 |
-| MySQL | **¥0**（<10 万不用） |
-| **合计** | **约 ¥200–800** |
+| **Index** | 全表 `tenant_id+created_at`；SKU/dedupe/ses_message_id/job status 唯一或组合索引 |
+| **Partition** | S2+ 按 `tenant_id` 或时间窗拆热点集合；MySQL 按租户分库分表是 S3 信号 |
+| **Replication** | 云文档由平台副本；MySQL S2 起只读副本服务看板 |
+| **Cache** | S2：配额、计划、热点报告；看板读 `metric_snapshots` 不现场扫全表 |
+| **对象** | 大文件只进 COS；DB 存 key + hash + MIME |
 
----
+最小事件序（Storage 写入顺序，供 KPI）：
 
-## 8. 规模方案（1万 / 10万 / 100万）
-
-「用户」= 注册卖家；MAU ≈ 15–25% 注册。
-
-### 硬规则
-
-| 规则 | 说明 |
-| --- | --- |
-| **≤100 万** | 计算 **只用云托管** |
-| **>100 万** | 才评估 TKE |
-| 多端 | 任意档可用官网 URL 出壳 |
-
-| 档 | 用户 | 套餐锚点 | 计算 | DB | 月成本量级（无视频） |
-| --- | --- | --- | --- | --- | --- |
-| DEMO/S1 | **<10 万** | **¥29.9** | **云开发 + 云托管**（Next+FastAPI） | **只云文档**（无 MySQL） | **¥0.2万–1.2万** |
-| S2 | **10万–100万** | **¥299** | 仍云托管 | **MySQL（云开发）** + 文档 | **¥1.5万–5万**（含 MySQL ~¥0.02万–0.08万） |
-| S3a | **≈100 万** | **¥299→999** | 仍云托管打满 | MySQL 加强 | **¥8万–25万** |
-| S3b | **>100 万** | **¥999** | 才 TKE | **CDB** | **¥15万–50万+** |
-
-**S1：** 2–4 副本；五端壳；无 MySQL / TKE / 视频包。  
-**S2：** 多副本 + CDN + Redis + TDMQ；MySQL 管账户配额；**不算换计算底座**。  
-**S3a：** 打满云托管规格。  
-**S3b：** `web`/`api`/`worker` 拆分 + 分片。
-
-升级信号：延迟 → 加副本；对账/发信堵 → MySQL+队列；>100 万 SLA 不够 → TKE。
-
----
-
-## 9. 交付与仓库
-
-| 阶段 | 交付 |
-| --- | --- |
-| A | 官网上云托管，闭环 DEMO |
-| B | 官网 URL → 小程序 + Android + iOS + Mac + Win |
-| C | cnwww / 商店、SES 硬化；数智人正式包另议 |
-
-```
-mvp_35/
-├── app/                      # Next.js 官网
-├── api/                      # FastAPI（或 backend/）
-├── lib/cloudbase/
-├── clients/
-│   ├── miniprogram/
-│   ├── mobile/{android,ios}/
-│   ├── desktop/{macos,windows}/
-│   └── shared/
-├── cloudbase/
-│   ├── Dockerfile.web
-│   └── Dockerfile.api
-├── project.md
-└── workflow.md
+```text
+product_analysis_* → lead_discovery_* / lead_upserted
+→ campaign_approved(audience_snapshot)
+→ outreach_delivered/opened/bounced/complained
+→ lead_replied / lead_marked_won
+→ activation_* / recall_*
+→ metric_snapshots
 ```
 
-| 交付 | 用途 |
+---
+
+### 3.4 Scale · 流量变大 / 功能变多怎么办
+
+两条扩容轴：**流量（卖家变多）** 与 **功能（九路/市场变多）**。语言与仓库边界不变。
+
+#### 流量变大
+
+| 信号 | 动作 | 4S 手段 |
+| --- | --- | --- |
+| 官网静态/SSR 变慢 | CDN + 云托管加副本 | LB / CDN / Replication |
+| 分析/发现 P95 升高 | worker 副本；先出 metrics 再等混元 | Async |
+| 发信排队、投诉抬头 | TDMQ 分 Topic；限速；独立 IP | MQ / Failover |
+| 云文档扫描贵、对账不清 | **S2 加 MySQL**；报告留文档 | Sharding 预备 + 职责拆分 |
+| 看板打主库 | 只读副本 + `metric_snapshots` | Cache / Replication |
+| ≈100 万托管吃紧 | 打满云托管（S3a） | LB |
+| **&gt;100 万或 SLA 不够** | 同镜像迁 TKE；CDB 分片 | Sharding / Failover / WAF |
+
+硬规则：≤100 万只用云托管；不上 Java；不上为拆而拆的微服务。
+
+#### 功能变多（九路 / 市场 / 本品销售）
+
+| 变化 | 怎么扩（不要新开产品线） |
 | --- | --- |
-| DEMO | 全链路（国内栈） |
-| B / Y | B 站 / YouTube |
+| 多一个电商/社交平台 | 新 `LeadProvider` 实现；`source_channel` 加枚举；DEMO 先 mock |
+| 展会峰值 | 只加 worker/队列容量，不改同步 API |
+| 代理分成 / RaaS | 复用 billing ledger，加科目与验签回调 |
+| GEO/SEO、内容工厂、跨境包 | **挂在 B 漏斗上的策略/归因模块**，不新建线索主表 |
+| 新目标市场（港/澳） | A2 市场模板 + B8 话术/时区包；税务表版本化 |
+| Admin / 多端 | 官网唯一 UI；壳只改 URL；Admin 另套权限，不复制业务库 |
+
+#### 功能 × Service × Storage × KPI
+
+| 功能 | 主 Service | 主 Storage | 必看 KPI |
+| --- | --- | --- | --- |
+| A1 双向入口 | products / catalog | `products` `product_sources` | 导入成功率 |
+| A2 路线市场 | products 上下文 | 报告快照字段 | 改市场必须重算 |
+| A3 分析引擎 | analysis worker | `analysis_reports` `jobs` | `N%` `AnaT` |
+| A4 一键获客 | analysis → GTM | `seed_analysis_id` | `ActR` |
+| B1–B5 发现 | LeadProvider | `leads` | `QR` `LeadT` |
+| B 触达 | campaigns + SES | `outreach_messages` | `TR` `OR` 红线 |
+| B 成交 | leads + billing | `won_at` / ledger | `AR` `AcqT` |
+| B 冷启/召回 | lifecycle worker | `activation_jobs` `recall_jobs` | `ActR_cold` `RecR` `ActT` `RecT` |
+| B4/B9 | billing | 幂等 ledger | 对账成功率 |
+
+竞争力：A 分钟级可审计报告；B 统一线索池 + 可对账抽成。  
+壁垒：规则版本回放、去重/发信信誉、渠道 ledger。
 
 ---
 
-## 10. 兄弟项目对照
+## 4. 交付顺序
 
-| MVP | 用途 |
-| --- | --- |
-| **30** | 多端主对照（URL→壳） |
-| 9 | `clients/` 结构 |
-| 28 | 云文档 + 微信登录 connector |
-| 24 / 1 | 国内 CloudBase 业务写入 |
+1. 骨架：FastAPI + Auth + `db/` + `net/` + Docker + metrics 骨架  
+2. **A1–A4**：双向入口 → 市场设定 → 分析引擎 → 报告+一键获客（先打通 ActR / AnaT / N%）  
+3. **B 内核**：leads + campaign + SES sandbox（TR / OR / AR）  
+4. **B5** 真接 enrichment；B1–B4 mock  
+5. **冷启 + 召回**（ActR_cold / RecR / ActT / RecT）  
+6. B6–B8 优化层；B4/B9 ledger  
+7. 九路分批合规上线；硬化与 Admin  
+8. 规模化：TDMQ / MySQL / 多副本；必要时 TKE  
+
+验收节奏：S1 指标能算全；S2 中位数达标 + 红线限流。
 
 ---
 
-## 11. 总结
+## 5. 一句话标准
 
-- **<10 万**：**云开发 + 云托管 + 只云文档**（¥29.9）— **不用调整**。  
-- **~10 万**：Next + **FastAPI** + 云托管 + **MySQL**（¥299）；不上 Java。  
-- **~100 万**：仍 FastAPI + 云托管打满 + MySQL 加强 — **不必换 Java**。  
-- **>100 万**：同一 Python 镜像→**TKE**（K8s）；DB→**CDB**（托管 MySQL）；**async + 多副本可扛**，不必换 Java。  
-- **迁移**：换 DB/部署，不换语言；预留 repository + 队列。  
-- **多端 / 数智人**：官网套壳；placeholder。  
-- 名词：**§5c**（TKE / CDB / Python 并发）。
+> PickGlobal 只做两件事：**A 选品分析报告（双向入口→市场设定→引擎→报告→一键获客）**，  
+> **B 九路获客成交召回（1–5 主获客，6–8 优化可自销，9 RaaS）**；  
+> 用八率五时效衡量好坏；用 4S（Scenario / Service / Storage / Scale）在国内云上把功能做成可审计、可对账、可随流量与通道扩容的系统。
+
+细节接口以 [back.md](back.md) 为准；功能与 KPI 以本文 §1–§2 为准；架构以本文 §3 为准。
