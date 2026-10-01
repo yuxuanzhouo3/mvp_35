@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { type ComponentType, type ReactNode, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { type ComponentType, type ReactNode, useEffect, useState } from 'react'
+import { AdminSession, adminApi, adminToken, clearAdminToken } from '@/lib/admin-session'
 import {
   BarChart3,
   Bell,
@@ -31,8 +32,30 @@ const nav = [
   { href: '/admin/recall', label: '用户召回', icon: MailCheck },
 ]
 
-function Sidebar({ close }: { close?: () => void }) {
+const governance = [
+  { href: '/admin/audit', label: '审计日志', icon: ShieldCheck },
+  { href: '/admin/settings', label: '平台设置', icon: Settings },
+]
+
+function NavLinks({ items, close, pathname }: { items: typeof nav; close?: () => void; pathname: string }) {
+  return (
+    <>
+      {items.map(({ href, label, icon: NavIcon }) => {
+        const active = href === '/admin' ? pathname === href : pathname.startsWith(href)
+        return (
+          <Link key={href} href={href} onClick={close} className={`admin-focus flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${active ? 'bg-blue-500 text-white shadow-md shadow-blue-950/25' : 'text-slate-300 hover:bg-white/8 hover:text-white'}`}>
+            <NavIcon className="size-[18px]" />{label}
+          </Link>
+        )
+      })}
+    </>
+  )
+}
+
+function Sidebar({ close, session, onLogout }: { close?: () => void; session: AdminSession | null; onLogout: () => void }) {
   const pathname = usePathname()
+  const [accountOpen, setAccountOpen] = useState(false)
+  const name = session?.user.display_name || '平台管理员'
   return (
     <div className="flex h-full flex-col bg-[#10203f] text-white">
       <Link href="/" className="flex h-20 items-center gap-3 border-b border-white/10 px-6" onClick={close}>
@@ -41,45 +64,127 @@ function Sidebar({ close }: { close?: () => void }) {
       </Link>
       <nav className="admin-scrollbar flex-1 space-y-1 overflow-y-auto p-4" aria-label="管理后台导航">
         <div className="px-3 pb-2 pt-2 text-[10px] font-bold uppercase tracking-[.18em] text-slate-400">Growth operations</div>
-        {nav.map(({ href, label, icon: NavIcon }) => {
-          const active = href === '/admin' ? pathname === href : pathname.startsWith(href)
-          return (
-            <Link key={href} href={href} onClick={close} className={`admin-focus flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${active ? 'bg-blue-500 text-white shadow-md shadow-blue-950/25' : 'text-slate-300 hover:bg-white/8 hover:text-white'}`}>
-              <NavIcon className="size-[18px]" />{label}
-            </Link>
-          )
-        })}
+        <NavLinks items={nav} close={close} pathname={pathname} />
         <div className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[.18em] text-slate-400">Governance</div>
-        <span className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-400"><ShieldCheck className="size-[18px]" /> 审计日志</span>
-        <span className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-400"><Settings className="size-[18px]" /> 平台设置</span>
+        <NavLinks items={governance} close={close} pathname={pathname} />
       </nav>
-      <div className="border-t border-white/10 p-4">
-        <div className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
-          <div className="grid size-9 place-items-center rounded-full bg-emerald-400/15 text-xs font-bold text-emerald-300">YZ</div>
-          <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">平台管理员</div><div className="text-[11px] text-slate-400">Super Admin</div></div>
+      <div className="relative border-t border-white/10 p-4">
+        {accountOpen && (
+          <div className="absolute bottom-20 left-4 right-4 rounded-xl border border-white/10 bg-[#1b315c] p-2 shadow-xl">
+            <Link href="/admin/settings" onClick={close} className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-white/10">平台设置</Link>
+            <button type="button" onClick={onLogout} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/10">退出登录</button>
+          </div>
+        )}
+        <button type="button" onClick={() => setAccountOpen((open) => !open)} className="admin-focus flex w-full items-center gap-3 rounded-xl bg-white/5 p-3 text-left" aria-expanded={accountOpen} aria-label="账号菜单">
+          <div className="grid size-9 place-items-center rounded-full bg-emerald-400/15 text-xs font-bold text-emerald-300">{name.slice(0, 1)}</div>
+          <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{name}</div><div className="text-[11px] text-slate-400">{session?.user.username || session?.role || 'admin'}</div></div>
           <ChevronDown className="size-4 text-slate-400" />
-        </div>
+        </button>
       </div>
     </div>
   )
 }
 
 export function AdminShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
+  const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [ready, setReady] = useState(pathname === '/admin/login')
+  const [session, setSession] = useState<AdminSession | null>(null)
+  const [label, setLabel] = useState('TEST')
+  const [query, setQuery] = useState('')
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [notes, setNotes] = useState<Array<{ id: string; action: string; created_at?: string }>>([])
+
+  useEffect(() => {
+    if (pathname === '/admin/login') return
+    if (!adminToken()) {
+      router.replace('/admin/login')
+      return
+    }
+    adminApi<AdminSession>('/me')
+      .then((next) => {
+        setSession(next)
+        setReady(true)
+      })
+      .catch(() => router.replace('/admin/login'))
+    adminApi<{ environment_label?: string }>('/admin/settings')
+      .then((row) => setLabel(row.environment_label || 'TEST'))
+      .catch(() => undefined)
+  }, [pathname, router])
+
+  async function logout() {
+    try {
+      await adminApi('/auth/logout', { method: 'POST' })
+    } catch {
+      /* token may already be gone */
+    }
+    clearAdminToken()
+    router.replace('/admin/login')
+  }
+
+  async function openNotes() {
+    setNotesOpen((current) => !current)
+    if (notesOpen) return
+    const page = await adminApi<{ items: Array<{ id: string; action: string; created_at?: string }> }>('/admin/audit')
+    setNotes(page.items.slice(0, 6))
+  }
+
+  if (pathname === '/admin/login') return <>{children}</>
+  if (!ready) return <div className="grid min-h-screen place-items-center text-sm text-slate-500">正在确认登录状态</div>
+
   return (
     <div className="min-h-screen bg-[#f5f7fb]">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block"><Sidebar /></aside>
-      {open && <div className="fixed inset-0 z-50 lg:hidden"><button aria-label="关闭菜单" className="absolute inset-0 bg-slate-950/50" onClick={() => setOpen(false)} /><aside className="relative h-full w-72 shadow-2xl"><Sidebar close={() => setOpen(false)} /></aside></div>}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block"><Sidebar session={session} onLogout={logout} /></aside>
+      {open && <div className="fixed inset-0 z-50 lg:hidden"><button aria-label="关闭菜单" className="absolute inset-0 bg-slate-950/50" onClick={() => setOpen(false)} /><aside className="relative h-full w-72 shadow-2xl"><Sidebar close={() => setOpen(false)} session={session} onLogout={logout} /></aside></div>}
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 flex h-20 items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <button className="admin-focus rounded-xl border border-slate-200 p-2.5 text-slate-600 lg:hidden" onClick={() => setOpen(true)} aria-label="打开菜单"><Menu className="size-5" /></button>
-          <div className="relative hidden max-w-xl flex-1 sm:block"><Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className="admin-focus w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm" placeholder="搜索用户、活动、广告或邀请码" /></div>
-          <div className="ml-auto flex items-center gap-2"><span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-amber-700">TEST</span><button className="admin-focus relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600" aria-label="通知"><Bell className="size-5" /><span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 ring-2 ring-white" /></button></div>
+          <form className="relative hidden max-w-xl flex-1 sm:block" onSubmit={(event) => { event.preventDefault(); router.push(`/admin/search?q=${encodeURIComponent(query.trim())}`) }}>
+            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} className="admin-focus w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-20 text-sm" placeholder="搜索用户、活动、广告或邀请码" />
+            <button className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white" type="submit">搜索</button>
+          </form>
+          <div className="relative ml-auto flex items-center gap-2">
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-amber-700">{label}</span>
+            <button className="admin-focus relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600" aria-label="通知" aria-expanded={notesOpen} onClick={() => void openNotes()}><Bell className="size-5" /><span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 ring-2 ring-white" /></button>
+            {notesOpen && (
+              <div className="absolute right-0 top-14 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                <div className="mb-2 text-sm font-semibold text-slate-900">最近操作</div>
+                {notes.length === 0 ? <p className="text-sm text-slate-400">暂无通知</p> : notes.map((item) => (
+                  <Link key={item.id} href="/admin/audit" onClick={() => setNotesOpen(false)} className="block rounded-lg px-2 py-2 text-sm hover:bg-slate-50">
+                    <div className="font-medium text-slate-800">{item.action}</div>
+                    <div className="text-xs text-slate-400">{item.created_at}</div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </header>
         <main className="p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   )
+}
+
+export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+      <div role="dialog" aria-modal="true" aria-label={title} className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100" aria-label="关闭">关闭</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+export function Notice({ message, tone = 'green' }: { message: string; tone?: 'green' | 'red' }) {
+  if (!message) return null
+  const color = tone === 'red' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+  return <p className={`mb-4 rounded-xl border px-4 py-3 text-sm ${color}`}>{message}</p>
 }
 
 export function PageHeader({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {

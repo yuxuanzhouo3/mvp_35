@@ -15,7 +15,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { MetricCard, PageHeader, StatusBadge } from './components'
-import { Metrics, Rate, api, duration, percent } from '@/lib/api'
+import { Metrics, Rate, duration, percent } from '@/lib/api'
+import { adminApi } from '@/lib/admin-session'
 
 const headline: Array<[string, string, LucideIcon, string]> = [
   ['net_margin', '利润率', CircleDollarSign, 'N/R · 四率'],
@@ -64,7 +65,7 @@ export default function AdminOverviewPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api<Metrics>('/metrics')
+    adminApi<Metrics>('/metrics')
       .then(setMetrics)
       .catch((reason: Error) => setError(reason.message))
   }, [])
