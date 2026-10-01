@@ -4,8 +4,13 @@ from fastapi import APIRouter, BackgroundTasks, Header, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.api.deps import bind
 from app.core.errors import AppError
 from app.core.timeutil import iso
+from app.modules.acquisition import record_win, touch_delivery
+from app.modules.auth import revoke_bearer
+from app.modules.events import emit
+from app.modules.selection import mark_acquired, present_report
 from app.services.common import (
     CHANNELS,
     PLANS,
@@ -21,7 +26,7 @@ from app.services.common import (
     search_catalog,
     sign_ledger,
 )
-from app.services.identity import bootstrap, parse_principal, profile, require_write
+from app.services.identity import bootstrap, parse_principal, profile
 from app.services.metrics import snapshot
 from app.workers.execute import _audience, enqueue, execute_job
 
@@ -134,14 +139,7 @@ def create_router() -> APIRouter:
     router = APIRouter(prefix="/api/v1")
 
     def ctx(request: Request, authorization: str | None, *, write: bool = False):
-        settings = request.app.state.settings
-        store = request.app.state.store
-        principal = parse_principal(authorization, settings)
-        user = store.find_global("users", cloudbase_user_id=principal)
-        prof = profile(store, user) if user else bootstrap(store, principal, None)
-        if write:
-            require_write(prof["role"])
-        return settings, store, prof
+        return bind(request, authorization, write=write)
 
     def respond(request: Request, data):
         return envelope(data, request.state.request_id)
@@ -197,6 +195,7 @@ def create_router() -> APIRouter:
     @router.post("/auth/logout")
     def logout(request: Request, authorization: str | None = Header(default=None)):
         settings, store, prof = ctx(request, authorization)
+        revoke_bearer(store, authorization, settings)
         store.insert(
             "audit_logs",
             base_doc(prof["tenant"]["id"], prof["user"]["id"], id=new_id("audit"), action="logout", resource="session"),
@@ -324,12 +323,7 @@ def create_router() -> APIRouter:
     def get_analysis(analysis_id: str, request: Request, authorization: str | None = Header(default=None)):
         _settings, store, prof = ctx(request, authorization)
         report = require_doc(store, "analysis_reports", analysis_id, prof["tenant"]["id"], "ANALYSIS_NOT_FOUND", "报告不存在")
-        product = store.get("products", report["product_id"], prof["tenant"]["id"])
-        view = dict(report)
-        view["stale"] = bool(product and product.get("context_version") != report.get("context_version"))
-        view["seed_analysis_id"] = report["id"] if report.get("acquired_at") else None
-        view["numbers_locked"] = True
-        return respond(request, view)
+        return respond(request, present_report(store, prof["tenant"]["id"], report))
 
     @router.get("/analyses/{analysis_id}/export")
     def export_analysis(analysis_id: str, request: Request, authorization: str | None = Header(default=None)):
@@ -351,16 +345,7 @@ def create_router() -> APIRouter:
     @router.post("/analyses/{analysis_id}/acquire")
     def acquire(analysis_id: str, request: Request, authorization: str | None = Header(default=None)):
         _settings, store, prof = ctx(request, authorization, write=True)
-        report = require_doc(store, "analysis_reports", analysis_id, prof["tenant"]["id"], "ANALYSIS_NOT_FOUND", "报告不存在")
-        product = store.get("products", report["product_id"], prof["tenant"]["id"])
-        if product and product.get("context_version") != report.get("context_version"):
-            raise AppError("ANALYSIS_STALE", "市场或成本已变更，请重新分析后再获客", 409)
-        if not report.get("acquired_at"):
-            store.touch("analysis_reports", analysis_id, {"acquired_at": iso(), "seed_analysis_id": analysis_id})
-        return respond(
-            request,
-            {"seed_analysis_id": analysis_id, "href": f"/workspace/acquire?seed_analysis_id={analysis_id}"},
-        )
+        return respond(request, mark_acquired(store, prof["tenant"]["id"], prof["user"]["id"], analysis_id))
 
     @router.post("/lead-searches", status_code=202)
     def lead_search(
@@ -866,15 +851,16 @@ def _apply_signal(store, tenant_id: str, lead: dict, kind: str) -> None:
     latest = next((item for item in messages if item.get("status") == "delivered"), None)
     patch: dict = {}
     message_patch: dict = {}
+    opened = lead.get("opened_at") or (latest or {}).get("opened_at") or now
     if kind == "open":
-        patch["opened_at"] = lead.get("opened_at") or now
-        message_patch["opened_at"] = now
+        patch["opened_at"] = opened
+        message_patch["opened_at"] = opened
     elif kind in {"reply", "replied"}:
-        patch.update({"replied_at": now, "status": "replied", "opened_at": lead.get("opened_at") or now})
-        message_patch.update({"opened_at": latest.get("opened_at") if latest else now, "replied_at": now})
+        patch.update({"replied_at": now, "status": "replied", "opened_at": opened})
+        message_patch.update({"opened_at": opened, "replied_at": now})
     elif kind == "won":
-        patch.update({"won_at": now, "status": "won", "replied_at": lead.get("replied_at") or now})
-        message_patch["replied_at"] = now
+        patch.update({"won_at": now, "status": "won", "replied_at": lead.get("replied_at") or now, "opened_at": opened})
+        message_patch.update({"opened_at": opened, "replied_at": now})
     elif kind == "lost":
         patch["status"] = "lost"
     elif kind == "silent":
@@ -883,8 +869,16 @@ def _apply_signal(store, tenant_id: str, lead: dict, kind: str) -> None:
         raise AppError("INVALID_SIGNAL", "无法识别的线索动作")
     if patch:
         store.touch("leads", lead["id"], patch)
+    if message_patch:
+        touch_delivery(store, tenant_id, lead["id"], message_patch)
     if latest and message_patch:
         store.touch("outreach_messages", latest["id"], message_patch)
+    if kind == "open":
+        emit(store, tenant_id, "campaign.opened", {"lead_id": lead["id"]}, lead.get("created_by") or "system")
+    elif kind in {"reply", "replied"}:
+        emit(store, tenant_id, "campaign.replied", {"lead_id": lead["id"]}, lead.get("created_by") or "system")
+    elif kind == "won":
+        record_win(store, tenant_id, lead.get("created_by") or "system", lead)
     if kind in {"reply", "replied", "won"}:
         recalls = store.query("recall_jobs", tenant_id=tenant_id, filters={"lead_id": lead["id"]}, limit=20)["items"]
         for row in recalls:

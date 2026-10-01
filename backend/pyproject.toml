@@ -13,10 +13,20 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+postgres = ["psycopg[binary]>=3.2"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+pythonpath = [".", ".."]
+testpaths = ["../test"]
+markers = [
+  "mvp: MVP gate",
+  "svp: SVP gate",
+  "business: Business gate",
+  "speedup1: Speed up 1",
+  "speedup2: Speed up 2",
+  "speedup3: Speed up 3",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -24,3 +34,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["app*", "config*", "db*"]
+
+[tool.setuptools.package-data]
+db = ["sql/*/*.sql"]

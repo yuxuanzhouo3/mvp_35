@@ -4,5 +4,7 @@ __pycache__/
 backend/.venv/
 backend/data/
 backend/*.egg-info/
+rollback/state/
+rollback/snapshots/
 *.pyc
 .DS_Store

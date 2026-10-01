@@ -5,6 +5,7 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY config ./config
 COPY db ./db
+COPY sql ./sql
 RUN pip install --no-cache-dir .
 
 ENV PORT=8000 \

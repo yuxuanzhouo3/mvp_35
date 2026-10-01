@@ -32,8 +32,14 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .cta-panel:before { content: ''; position: absolute; inset: -50%; background: radial-gradient(circle at 70% 25%, rgba(71, 151, 255, .28), transparent 28%), radial-gradient(circle at 20% 80%, rgba(35, 205, 177, .16), transparent 24%); }
 .animate-float { animation: float 7s ease-in-out infinite; }
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
-@media (min-width: 768px) { .platform-panel { flex-direction: row; align-items: center; padding: 3rem; } }
-@media (max-width: 767px) { .section-padding { padding-block: 4.5rem; } .container { width: min(100% - 2rem, 1180px); } .step-arrow { display: none; } .report-tab { padding-inline: .45rem; font-size: .68rem; } }
+html[data-finger-scale] { touch-action: pan-x pan-y pinch-zoom; }
+.watch-zoom { position: fixed; z-index: 60; top: calc(.4rem + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: .25rem; }
+.watch-zoom button { min-width: 2.4rem; min-height: 2.4rem; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--foreground); font-size: .85rem; font-weight: 650; }
+.site-header { padding-top: env(safe-area-inset-top); }
+.phone-dock { position: fixed; z-index: 50; inset-inline: 0; bottom: 0; display: flex; gap: .75rem; border-top: 1px solid var(--border); background: color-mix(in oklab, var(--background) 94%, white); padding: .75rem 1rem calc(.75rem + env(safe-area-inset-bottom)); backdrop-filter: blur(16px); }
+.phone-dock a { min-height: 3rem; }
+@media (min-width: 768px) { .platform-panel { flex-direction: row; align-items: center; padding: 3rem; } .phone-dock { display: none; } }
+@media (max-width: 767px) { .section-padding { padding-block: 3.25rem; } .container { width: min(100% - 2rem, 1180px); } .step-arrow { display: none; } .report-tab { padding-inline: .75rem; font-size: .8rem; } .animate-float { animation: none; } .hero-grid:after { display: none; } }
 @media (prefers-reduced-motion: reduce) { *, *:before, *:after { scroll-behavior: auto !important; animation: none !important; transition-duration: .01ms !important; } }
 
 /* Platform admin */

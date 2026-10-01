@@ -1,0 +1,34 @@
+{
+  "id": "s4-v1.0.0",
+  "stage": "mvp",
+  "users": "<1000",
+  "replicas": {"api": 1, "worker": 1, "postgres": 1},
+  "rate_limit_per_minute": {"tenant": 120, "ip": 240, "send": 30},
+  "rollback": {
+    "error_rate": 0.01,
+    "p95_ratio": 2,
+    "payment_failure_rate": 0.005,
+    "delivery_rate": 0.95,
+    "bounce_rate": 0.015,
+    "complaint_rate": 0.001
+  },
+  "flags": {
+    "auth.sso": false,
+    "auth.mfa": false,
+    "auth.oauth": false,
+    "auth.miniprogram": false,
+    "auth.tenant_switch": false,
+    "payment.raas": false,
+    "selection.auto_deal": false,
+    "acquisition.social": false,
+    "acquisition.ecommerce": false,
+    "acquisition.expo": false,
+    "acquisition.agency": false,
+    "ai.agent": false,
+    "ai.finetune": false,
+    "digital_human": false,
+    "geo_seo": false,
+    "raas": false,
+    "global_multi_active": false
+  }
+}

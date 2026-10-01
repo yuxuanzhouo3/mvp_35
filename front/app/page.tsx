@@ -6,9 +6,10 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import {
   ArrowRight, BarChart3, Check, ChevronDown, ChevronRight, Globe2, Laptop, Menu, MapPin,
   Monitor, PackageSearch, Radar, RefreshCw, ShieldCheck, Smartphone, Sparkles, Store,
-  Target, Users, X,
+  Tablet, Target, Terminal, Users, X,
 } from 'lucide-react'
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { readClient, type ClientInfo } from '@/lib/client-adapter'
 
 const marketData = [
   { name: '利润', value: 50 }, { name: '税费', value: 18 }, { name: '物流', value: 32 }, { name: '风险', value: 24 },
@@ -19,7 +20,7 @@ const faqs = [
   ['首期支持哪些市场？', '默认货源中国、目标美国，税务按中美口径。路线可以扩展到香港、澳大利亚和一部分内陆市场。'],
   ['如何获取潜在客户？', '电商、社交、展会、代理和大数据是主获客；GEO/SEO、内容与跨境元素用于优化；RaaS 用来销售 PickGlobal 本身。冷启和召回属于获客路径，不是第三条产品线。'],
   ['AI 会自动发送邮件吗？', '不会。文案生成后必须人工批准才发送。利润、税费和评分由规则引擎计算，模型不能改这些数字。'],
-  ['是否支持多端使用？', 'Web、微信小程序、Android、iOS、macOS 和 Windows 使用同一个工作台。'],
+  ['是否支持多端使用？', '手机、iPad、微信小程序、Web、Mac、Windows 和 Linux 共用同一套选品与获客。手机上直接开始分析，不必先装客户端。'],
 ]
 const pathA = [
   ['01', '双向入口', '手动、CSV，或从国内货源目录选入同一商品库', PackageSearch],
@@ -69,16 +70,20 @@ export default function Page() {
   const [activeTab, setActiveTab] = useState('市场机会')
   const [openFaq, setOpenFaq] = useState<number | null>(0)
   const [chartReady, setChartReady] = useState(false)
-  useEffect(() => { setChartReady(true) }, [])
+  const [client, setClient] = useState<ClientInfo | null>(null)
+  useEffect(() => {
+    setChartReady(true)
+    setClient(readClient())
+  }, [])
   const scrollTo = (id: string) => {
     setMenuOpen(false)
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
 
   return (
-    <main className="min-h-screen overflow-hidden">
-      <header className="sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-md">
-        <div className="container flex h-16 items-center justify-between">
+    <main className="min-h-screen overflow-hidden pb-24 md:pb-0">
+      <header className="site-header sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-md">
+        <div className="container flex h-14 items-center justify-between md:h-16">
           <a href="#top" className="flex items-center gap-2" aria-label="PickGlobal 首页">
             <span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Globe2 className="size-[18px]" /></span>
             <span className="text-lg font-semibold tracking-tight">Pick<span className="text-primary">Global</span></span>
@@ -93,34 +98,42 @@ export default function Page() {
             <Link href="/workspace" className={buttonVariants({ variant: 'ghost' })}>登录</Link>
             <Link href="/workspace/products" className={buttonVariants()}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
           </div>
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? '关闭菜单' : '打开菜单'}>{menuOpen ? <X /> : <Menu />}</Button>
+          <Button variant="ghost" size="icon" className="size-11 md:hidden" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? '关闭菜单' : '打开菜单'}>{menuOpen ? <X /> : <Menu />}</Button>
         </div>
         {menuOpen && (
           <div className="border-t border-border bg-background px-5 py-5 md:hidden">
-            <nav className="flex flex-col gap-4 text-sm">
-              <button className="text-left" onClick={() => scrollTo('path-a')}>选品分析</button>
-              <button className="text-left" onClick={() => scrollTo('path-b')}>获客九路</button>
-              <button className="text-left" onClick={() => scrollTo('scenes')}>应用场景</button>
-              <button className="text-left" onClick={() => scrollTo('faq')}>常见问题</button>
-              <Link href="/workspace/products" className={buttonVariants()}>免费体验</Link>
+            <nav className="flex flex-col gap-1 text-base">
+              <button className="min-h-11 text-left" onClick={() => scrollTo('path-a')}>选品分析</button>
+              <button className="min-h-11 text-left" onClick={() => scrollTo('path-b')}>获客九路</button>
+              <button className="min-h-11 text-left" onClick={() => scrollTo('scenes')}>应用场景</button>
+              <button className="min-h-11 text-left" onClick={() => scrollTo('faq')}>常见问题</button>
+              <Link href="/workspace/products" className={buttonVariants({ className: 'mt-2 min-h-12' })}>免费体验</Link>
             </nav>
           </div>
         )}
       </header>
 
       <section id="top" className="hero-grid relative">
-        <div className="container grid items-center gap-12 py-20 md:grid-cols-[.95fr_1.05fr] md:py-28">
-          <div className="relative z-10 flex flex-col items-start gap-6">
+        <div className="container grid items-center gap-6 py-8 md:grid-cols-[.95fr_1.05fr] md:gap-12 md:py-28">
+          <div className="relative z-10 flex flex-col items-start gap-4 md:gap-6">
             <span className="eyebrow"><Sparkles className="size-3.5" /> Oversea Market Selling</span>
-            <h1 className="max-w-xl text-balance text-4xl font-semibold leading-[1.1] tracking-[-.04em] md:text-6xl">两条路径：先算清货，再帮你把客户找回来</h1>
-            <p className="max-w-lg text-pretty text-base leading-7 text-muted-foreground md:text-lg">PickGlobal 把选品分析报告，与电商、社交、展会、代理、大数据等九路获客成交召回，放进同一个工作台。</p>
-            <div className="flex flex-wrap gap-3">
-              <Link href="/workspace/products" className={buttonVariants({ size: 'lg' })}>开始分析商品 <ArrowRight data-icon="inline-end" /></Link>
-              <Button size="lg" variant="outline" onClick={() => scrollTo('path-b')}>查看获客九路</Button>
+            <h1 className="max-w-xl text-balance text-[1.7rem] font-semibold leading-[1.15] tracking-[-.03em] md:text-6xl md:leading-[1.1] md:tracking-[-.04em]">两条路径：先算清货，再帮你把客户找回来</h1>
+            <p className="max-w-lg text-pretty text-[15px] leading-6 text-muted-foreground md:text-lg md:leading-7">
+              <span className="md:hidden">先看清利润和风险，再把客户找回来。</span>
+              <span className="hidden md:inline">PickGlobal 把选品分析报告，与电商、社交、展会、代理、大数据等九路获客成交召回，放进同一个工作台。</span>
+            </p>
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+              <Link href="/workspace/products" className={buttonVariants({ size: 'lg', className: 'min-h-12 w-full text-base sm:w-auto' })}>开始分析商品 <ArrowRight data-icon="inline-end" /></Link>
+              <Button size="lg" variant="outline" className="min-h-12 w-full text-base sm:w-auto" onClick={() => scrollTo('path-b')}>查看获客九路</Button>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="size-3.5 text-emerald-600" /> 首期支持中国与美国市场；数智人 DEMO 为占位演示</div>
+            <div className="grid w-full grid-cols-2 gap-2 md:hidden" aria-label="样例指标">
+              {[['机会分', '80'], ['利润率', '49.9%'], ['税费', '可复核'], ['风险', '低']].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-border bg-card px-2 py-2.5"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="size-3.5 shrink-0 text-emerald-600" /> 首期支持中国与美国市场</div>
           </div>
-          <div className="dashboard-shell animate-float" aria-label="PickGlobal 工作台演示">
+          <div className="dashboard-shell animate-float hidden md:block" aria-label="PickGlobal 工作台演示">
             <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 md:px-5">
               <div className="flex items-center gap-2"><div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Globe2 className="size-4" /></div><span className="text-xs font-semibold">选品与获客工作台</span></div>
               <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">演示数据</span>
@@ -167,7 +180,7 @@ export default function Page() {
             <Link href="/workspace/products" className={`${buttonVariants()} mt-7`}>打开选品分析</Link>
           </div>
           <div className="report-card">
-            <div className="flex flex-wrap gap-1 border-b border-border px-3 pt-3 md:px-5">
+            <div className="flex gap-1 overflow-x-auto border-b border-border px-3 pt-3 md:px-5">
               {['市场机会', '利润测算', '税务', '物流时效', '风险提示'].map((tab) => (
                 <button key={tab} onClick={() => setActiveTab(tab)} className={`report-tab ${activeTab === tab ? 'report-tab-active' : ''}`}>{tab}</button>
               ))}
@@ -233,11 +246,12 @@ export default function Page() {
             <div className="max-w-xl">
               <span className="eyebrow">One workspace, everywhere</span>
               <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">一个工作台，多端同步</h2>
-              <p className="mt-5 leading-7 text-muted-foreground">办公室、路上或客户现场，查看同一份报告、同一条线索和同一次批准。</p>
+              <p className="mt-5 leading-7 text-muted-foreground">手机看任务，iPad 读报告，小程序做分享。Web、Mac、Windows 和 Linux 打开同一份工作台。</p>
+              {client && <p className="mt-3 text-sm font-medium text-foreground">{client.surface === 'phone' || client.surface === 'miniprogram' ? `已按${client.label}排版，从底部开始分析。` : client.surface === 'ipad' ? '已按 iPad 排版，报告和列表可以并排看。' : '安装包稍后开放，现在直接用网页。'}</p>}
             </div>
-            <div className="mt-10 grid grid-cols-3 gap-5 text-center md:mt-0 md:grid-cols-6">
-              {[['Web', Monitor], ['微信小程序', Globe2], ['Android', Smartphone], ['iOS', Smartphone], ['macOS', Laptop], ['Windows', Monitor]].map(([name, Icon]) => (
-                <div key={name as string} className="flex flex-col items-center gap-3 text-xs text-muted-foreground"><span className="flex size-12 items-center justify-center rounded-2xl border border-border bg-background text-primary"><Icon className="size-5" /></span>{name as string}</div>
+            <div className="mt-8 grid grid-cols-3 gap-4 text-center sm:grid-cols-4 lg:mt-0 lg:grid-cols-7">
+              {[['Web', Monitor], ['手机', Smartphone], ['iPad', Tablet], ['微信小程序', Globe2], ['Mac', Laptop], ['Windows', Monitor], ['Linux', Terminal]].map(([name, Icon]) => (
+                <div key={name as string} className={`flex flex-col items-center gap-2 text-xs ${client?.label === name ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}><span className={`flex size-12 items-center justify-center rounded-2xl border bg-background text-primary ${client?.label === name ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}><Icon className="size-5" /></span>{name as string}</div>
               ))}
             </div>
           </div>
@@ -301,6 +315,10 @@ export default function Page() {
         </div>
         <div className="container flex flex-col gap-2 border-t border-border py-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between"><span>© 2026 PickGlobal. 保留所有权利。</span><span>首页展示数据均为样例数据</span></div>
       </footer>
+      <div className="phone-dock md:hidden">
+        <Link href="/workspace/products" className={buttonVariants({ className: 'min-h-12 flex-1 text-base' })}>开始分析</Link>
+        <Link href="/workspace/acquire" className={buttonVariants({ variant: 'outline', className: 'min-h-12 px-4 text-base' })}>获客</Link>
+      </div>
     </main>
   )
 }

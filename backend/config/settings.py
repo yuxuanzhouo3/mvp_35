@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     worker_token: str = "demo-worker"
     quality_threshold: int = 60
     rules_version: str = "pg-rules-1.0"
+    prompt_version: str = "prompt-v1"
+    session_secret: str = "demo-session-secret"
+    access_ttl_seconds: int = 3600
+    refresh_ttl_seconds: int = 1_209_600
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     @property
