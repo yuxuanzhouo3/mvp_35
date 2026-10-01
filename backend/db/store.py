@@ -6,12 +6,24 @@ from typing import Any, Callable
 from app.core.timeutil import iso
 
 
+def open_store(settings):
+    """JSON file by default. STORAGE_ENGINE=cloudbase uses the remote PostgreSQL documents table."""
+    if getattr(settings, "storage_engine", "json") == "cloudbase":
+        from db.cloudbase_store import CloudBaseStore
+
+        env_id = getattr(settings, "cloudbase_env_id", "") or ""
+        if not env_id:
+            raise RuntimeError("CLOUDBASE_ENV_ID is required when STORAGE_ENGINE=cloudbase")
+        return CloudBaseStore(env_id, region=getattr(settings, "cloudbase_region", "ap-shanghai") or "ap-shanghai")
+    return DocumentStore(settings.data_path)
+
+
 class DocumentStore:
     """Tenant-scoped document repository.
 
-    MVP persistence is a JSON document file with an exclusive lock, standing in
-    for CloudBase documents. Domain code uses this repository and does not call
-    CloudBase HTTP. Queries that pass tenant_id always filter on it.
+    The default engine is a JSON file with an exclusive lock. STORAGE_ENGINE=cloudbase
+    stores the same documents in remote CloudBase PostgreSQL. Queries that pass
+    tenant_id always filter on it.
     """
 
     def __init__(self, path: str | Path):

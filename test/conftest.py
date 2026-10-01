@@ -15,6 +15,7 @@ for entry in (str(ROOT), str(BACKEND)):
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_ENGINE", "json")
     monkeypatch.setenv("DATA_PATH", str(tmp_path / "store.json"))
     monkeypatch.setenv("AUTH_MODE", "demo")
     monkeypatch.setenv("LEDGER_HMAC_SECRET", "test-secret")

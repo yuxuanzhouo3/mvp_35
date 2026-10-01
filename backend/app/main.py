@@ -9,14 +9,14 @@ from app.api.v1.contract import create_contract_router
 from app.api.v1.router import create_router
 from app.core.errors import AppError
 from config.settings import Settings
-from db.store import DocumentStore
+from db.store import open_store
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = Settings()
     app.state.settings = settings
-    app.state.store = DocumentStore(settings.data_path)
+    app.state.store = open_store(settings)
     yield
 
 

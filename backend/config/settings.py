@@ -1,10 +1,17 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(_ENV_FILE), extra="ignore")
 
     auth_mode: str = "demo"
+    storage_engine: str = "json"
+    cloudbase_env_id: str = ""
+    cloudbase_region: str = "ap-shanghai"
     data_path: str = "data/store.json"
     hunyuan_enabled: bool = False
     tongyi_enabled: bool = False

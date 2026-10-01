@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 backend/.venv/
 backend/data/
+backend/.env
 backend/*.egg-info/
 rollback/state/
 rollback/snapshots/
