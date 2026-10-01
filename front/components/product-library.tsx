@@ -20,6 +20,7 @@ export function ProductLibrary() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
 
   async function load(next = q) {
     const data = await api<{ items: Product[] }>(`/products?q=${encodeURIComponent(next)}`)
@@ -95,15 +96,19 @@ export function ProductLibrary() {
                 disabled={busy}
                 className="min-h-12 rounded-xl border border-border px-4 text-base disabled:opacity-50"
                 onClick={() => {
-                  if (!window.confirm(`删除「${product.name}」？删除后搜索不到这条商品。`)) return
+                  if (pendingDelete !== product.id) {
+                    setPendingDelete(product.id)
+                    return
+                  }
                   void run(async () => {
                     await api(`/products/${product.id}`, { method: 'DELETE' })
+                    setPendingDelete(null)
                     setMessage(`已删除 ${product.name}`)
                     await load(q)
                   })
                 }}
               >
-                删除
+                {pendingDelete === product.id ? '确认删除' : '删除'}
               </button>
             </div>
           </article>

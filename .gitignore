@@ -4,6 +4,7 @@ __pycache__/
 backend/.venv/
 backend/data/
 backend/.env
+backend/cloudbase-auth.json
 backend/*.egg-info/
 rollback/state/
 rollback/snapshots/

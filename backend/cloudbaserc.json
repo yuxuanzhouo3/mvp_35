@@ -5,6 +5,8 @@
     "name": "pickglobal-api"
   },
   "database": {
-    "migrations": ["db/cloudbase/migrations"]
+    "migrations": [
+      "db/cloudbase/migrations"
+    ]
   }
 }

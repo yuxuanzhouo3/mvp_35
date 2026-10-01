@@ -5,7 +5,7 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY config ./config
 COPY db ./db
-COPY sql ./sql
+COPY cloudbase-auth.json /root/.config/.cloudbase/auth.json
 RUN pip install --no-cache-dir .
 
 ENV PORT=8000 \

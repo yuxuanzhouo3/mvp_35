@@ -89,7 +89,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [ready, setReady] = useState(pathname === '/admin/login')
+  const [mounted, setMounted] = useState(false)
+  const [ready, setReady] = useState(false)
   const [session, setSession] = useState<AdminSession | null>(null)
   const [label, setLabel] = useState('TEST')
   const [query, setQuery] = useState('')
@@ -97,7 +98,11 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState<Array<{ id: string; action: string; created_at?: string }>>([])
 
   useEffect(() => {
-    if (pathname === '/admin/login') return
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted || pathname === '/admin/login') return
     if (!adminToken()) {
       router.replace('/admin/login')
       return
@@ -111,7 +116,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
     adminApi<{ environment_label?: string }>('/admin/settings')
       .then((row) => setLabel(row.environment_label || 'TEST'))
       .catch(() => undefined)
-  }, [pathname, router])
+  }, [mounted, pathname, router])
+
+  if (!mounted || pathname === '/admin/login') return <>{children}</>
 
   async function logout() {
     try {
@@ -130,7 +137,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
     setNotes(page.items.slice(0, 6))
   }
 
-  if (pathname === '/admin/login') return <>{children}</>
   if (!ready) return <div className="grid min-h-screen place-items-center text-sm text-slate-500">正在确认登录状态</div>
 
   return (
