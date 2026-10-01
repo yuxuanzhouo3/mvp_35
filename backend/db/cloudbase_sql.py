@@ -6,6 +6,7 @@ Credentials stay in the CloudBase CLI login file. This module never prints them.
 import hashlib
 import hmac
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -49,6 +50,14 @@ def execute_pg_sql(env_id: str, sql: str, *, region: str = "ap-shanghai") -> dic
 
 
 def _credential() -> tuple[str, str, str]:
+    secret_id = os.environ.get("CLOUDBASE_SECRET_ID", "").strip()
+    secret_key = os.environ.get("CLOUDBASE_SECRET_KEY", "").strip()
+    key_hex = os.environ.get("CLOUDBASE_SECRET_KEY_HEX", "").strip()
+    token = os.environ.get("CLOUDBASE_TOKEN", "").strip()
+    if key_hex and not secret_key:
+        secret_key = bytes.fromhex(key_hex).decode()
+    if secret_id and secret_key and token:
+        return secret_id, secret_key, token
     if not _AUTH.exists():
         raise CloudBaseSqlError("CloudBase CLI is not logged in. Run tcb login.")
     data = json.loads(_AUTH.read_text())

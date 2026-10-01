@@ -1,185 +1,189 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
-  Activity,
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
+  BadgeCheck,
   CircleDollarSign,
+  Clock3,
   MailCheck,
-  Megaphone,
-  UserPlus,
-  Users,
+  MailOpen,
+  MousePointerClick,
+  Send,
+  ShieldAlert,
+  Target,
+  Timer,
+  type LucideIcon,
 } from 'lucide-react'
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
-import { MetricCard, PageHeader, Panel, StatusBadge, secondaryButton } from './components'
+import { MetricCard, PageHeader, StatusBadge } from './components'
+import { Metrics, Rate, api, duration, percent } from '@/lib/api'
 
-const trend = [
-  { date: '08/09', newUsers: 92, activeUsers: 412 },
-  { date: '08/14', newUsers: 118, activeUsers: 468 },
-  { date: '08/19', newUsers: 104, activeUsers: 501 },
-  { date: '08/24', newUsers: 146, activeUsers: 558 },
-  { date: '08/29', newUsers: 163, activeUsers: 604 },
-  { date: '09/03', newUsers: 181, activeUsers: 671 },
-  { date: '09/07', newUsers: 198, activeUsers: 724 },
+const headline: Array<[string, string, LucideIcon, string]> = [
+  ['net_margin', '利润率', CircleDollarSign, 'N/R · 四率'],
+  ['act_r', '行动率', MousePointerClick, '一键获客或采纳 ÷ 完成报告 · 四率'],
+  ['tr', '触达率', Send, 'D ÷ A · 四率'],
+  ['open_r', '打开率', MailOpen, 'unique 打开 ÷ D · 四率'],
+  ['ar', '获客率', Target, 'W ÷ D · 北星'],
 ]
 
-const funnel = [
-  { label: '访问官网', value: 12480, rate: 100 },
-  { label: '完成注册', value: 3420, rate: 27 },
-  { label: '首次分析', value: 2156, rate: 17 },
-  { label: '发现客户', value: 1384, rate: 11 },
-  { label: '首次触达', value: 742, rate: 6 },
-  { label: '购买套餐', value: 286, rate: 2.3 },
+const secondary: Array<[string, string, LucideIcon, string]> = [
+  ['qr', '线索合格率', BadgeCheck, 'score≥θ ÷ 入库 · 质量'],
+  ['act_r_cold', '冷客激活率', Timer, 'open 或 reply ÷ 入队 · 生命周期'],
+  ['rec_r', '召回成功率', MailCheck, '回暖 ÷ 召回触达 · 生命周期'],
 ]
 
-const alerts = [
-  { title: '召回活动「30 日沉默用户」投诉率接近阈值', meta: '12 分钟前', tone: 'red' as const },
-  { title: '广告 dashboard_top 有 2 个排期冲突', meta: '35 分钟前', tone: 'amber' as const },
-  { title: '邀请奖励复核队列有 18 条待处理', meta: '1 小时前', tone: 'violet' as const },
+const timings: Array<[string, string, string, string, string]> = [
+  ['ana_t', '分析时效', 'AnaT', '完成 − 请求', '≤2 分钟'],
+  ['lead_t', '线索时效', 'LeadT', 'discovery 成功 − 发起', '≤3 分钟'],
+  ['acq_t', '获客时效', 'AcqT', 'first_W − first_delivered', '≤3 天'],
+  ['act_t', '激活时效', 'ActT', '首封 delivered − 入队', '≤24 小时'],
+  ['rec_t', '召回时效', 'RecT', '首封 delivered − 触发', '≤24 小时'],
 ]
+
+function passed(value: string | number | null | undefined, target: string | number | undefined, mode: 'gte' | 'lte' | 'lt') {
+  if (value == null || value === '' || target == null || target === '') return null
+  const current = Number(value)
+  const goal = Number(target)
+  if (Number.isNaN(current) || Number.isNaN(goal)) return null
+  if (mode === 'gte') return current >= goal
+  if (mode === 'lte') return current <= goal
+  return current < goal
+}
+
+function statusNote(ok: boolean | null, detail: string) {
+  if (ok == null) return detail
+  return `${detail} · ${ok ? '达标' : '未达标'}`
+}
+
+function toneFor(ok: boolean | null) {
+  if (ok == null) return 'slate' as const
+  return ok ? ('green' as const) : ('red' as const)
+}
 
 export default function AdminOverviewPage() {
+  const [metrics, setMetrics] = useState<Metrics | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<Metrics>('/metrics')
+      .then(setMetrics)
+      .catch((reason: Error) => setError(reason.message))
+  }, [])
+
+  const deliveryOk = passed(metrics?.redlines.delivery_rate, 0.95, 'gte')
+  const bounceOk = passed(metrics?.redlines.bounce_rate, 0.015, 'lt')
+  const complaintOk = passed(metrics?.redlines.complaint_rate, 0.001, 'lt')
+
   return (
     <div className="mx-auto max-w-[1500px]">
       <PageHeader
-        eyebrow="Operations overview"
+        eyebrow="30 天 · 租户口径"
         title="运营总览"
-        description="从获客、激活到召回，统一查看 PickGlobal 平台增长与风险。"
-        action={
-          <button className={secondaryButton}>
-            最近 30 天
-          </button>
-        }
+        description="八率、五时效和送达红线。分母为 0 显示「—」。金额来自规则引擎。A 是可发受众，D 是至少一封送达的人，W 是 14 天内回复、赢单或约见。"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="总用户" value="38,426" change="12.8%" icon={Users} />
+      {error && (
+        <p className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      )}
+      {metrics?.redlines.tripped && (
+        <p className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          送达红线已触发，应限流。按封送达率 {percent(metrics.redlines.delivery_rate)}，退信 {percent(metrics.redlines.bounce_rate)}，投诉 {percent(metrics.redlines.complaint_rate)}。
+        </p>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {headline.map(([key, label, icon, formula]) => {
+          const rate = metrics?.rates[key] as Rate | undefined
+          const ok = passed(rate?.value, rate?.target, 'gte')
+          return (
+            <MetricCard
+              key={key}
+              label={`${label} ${rate?.code ?? ''}`.trim()}
+              value={percent(rate?.value)}
+              icon={icon}
+              tone={toneFor(ok)}
+              highlight={key === 'ar'}
+              note={statusNote(ok, `目标 ${percent(rate?.target)} · ${formula}`)}
+            />
+          )
+        })}
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        {secondary.map(([key, label, icon, formula]) => {
+          const rate = metrics?.rates[key] as Rate | undefined
+          const ok = passed(rate?.value, rate?.target, 'gte')
+          return (
+            <MetricCard
+              key={key}
+              label={`${label} ${rate?.code ?? ''}`.trim()}
+              value={percent(rate?.value)}
+              icon={icon}
+              tone={toneFor(ok)}
+              note={statusNote(ok, `目标 ${percent(rate?.target)} · ${formula}`)}
+            />
+          )
+        })}
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
         <MetricCard
-          label="月活用户"
-          value="9,842"
-          change="9.4%"
-          icon={Activity}
-          tone="emerald"
+          label="送达率"
+          value={percent(metrics?.redlines.delivery_rate)}
+          icon={Send}
+          tone={toneFor(deliveryOk)}
+          note={statusNote(deliveryOk, '按封 · 红线 ≥95%')}
         />
         <MetricCard
-          label="7 日激活率"
-          value="63.1%"
-          change="3.2%"
-          icon={CheckCircle2}
-          tone="violet"
+          label="退信率"
+          value={percent(metrics?.redlines.bounce_rate)}
+          icon={ShieldAlert}
+          tone={toneFor(bounceOk)}
+          note={statusNote(bounceOk, '按封 · 红线 <1.5%')}
         />
         <MetricCard
-          label="付费转化"
-          value="8.36%"
-          change="0.7%"
-          icon={CircleDollarSign}
-          tone="amber"
+          label="投诉率"
+          value={percent(metrics?.redlines.complaint_rate)}
+          icon={ShieldAlert}
+          tone={toneFor(complaintOk)}
+          note={statusNote(complaintOk, '按封 · 红线 <0.1%')}
         />
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1.55fr_1fr]">
-        <Panel title="新增与活跃趋势" description="小时汇总 · 更新于 12:00">
-          <div className="h-80 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trend} margin={{ left: -16, right: 10, top: 10 }}>
-                <defs>
-                  <linearGradient id="activeGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.24} />
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={12} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} />
-                <Tooltip contentStyle={{ borderRadius: 12, borderColor: '#e2e8f0' }} />
-                <Area
-                  type="monotone"
-                  dataKey="activeUsers"
-                  name="活跃用户"
-                  stroke="#2563eb"
-                  strokeWidth={2}
-                  fill="url(#activeGradient)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="newUsers"
-                  name="新增用户"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  fill="transparent"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+      <details open className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
+          <div>
+            <h2 className="font-semibold text-slate-900">五时效</h2>
+            <p className="mt-1 text-xs text-slate-400">P50，超时记未达标</p>
           </div>
-        </Panel>
-
-        <Panel title="核心转化漏斗" description="访问官网 → 购买套餐">
-          <div className="space-y-3 p-5">
-            {funnel.map((step) => (
-              <div key={step.label}>
-                <div className="mb-1.5 flex items-center justify-between text-sm">
-                  <span className="font-medium text-slate-700">{step.label}</span>
-                  <span className="text-slate-500">
-                    {step.value.toLocaleString()} · {step.rate}%
-                  </span>
+          <Clock3 className="size-5 text-blue-600" />
+        </summary>
+        <div className="grid gap-4 border-t border-slate-100 p-5 sm:grid-cols-2 xl:grid-cols-5">
+          {timings.map(([key, label, code, formula, goal]) => {
+            const value = metrics?.timings_p50_seconds[key]
+            const target = metrics?.timing_targets_seconds[key]
+            const ok = passed(value, target, 'lte')
+            return (
+              <div key={key} className="rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium text-slate-700">{label}</div>
+                  <StatusBadge tone={toneFor(ok)}>{ok == null ? '—' : ok ? '达标' : '未达标'}</StatusBadge>
                 </div>
-                <div className="h-2 rounded-full bg-slate-100">
-                  <div
-                    className="h-2 rounded-full bg-gradient-to-r from-blue-600 to-cyan-400"
-                    style={{ width: `${Math.max(step.rate, 5)}%` }}
-                  />
+                <div className="mt-3 text-2xl font-bold tracking-tight text-slate-950">{duration(value)}</div>
+                <div className="mt-1 text-xs text-slate-400">
+                  {code} · 目标 {goal} · {formula}
                 </div>
               </div>
-            ))}
-          </div>
-        </Panel>
-      </div>
-
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
-        {[
-          { title: '广告贡献注册', value: '684', change: '+18.2%', icon: Megaphone, color: 'text-blue-600' },
-          { title: '有效邀请', value: '326', change: '+11.6%', icon: UserPlus, color: 'text-violet-600' },
-          { title: '召回激活', value: '418', change: '+7.4%', icon: MailCheck, color: 'text-emerald-600' },
-        ].map((item) => (
-          <div key={item.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <item.icon className={`size-5 ${item.color}`} />
-              <span className="text-xs font-medium text-emerald-600">{item.change}</span>
-            </div>
-            <div className="mt-4 text-2xl font-bold text-slate-950">{item.value}</div>
-            <div className="mt-1 text-sm text-slate-500">{item.title}</div>
-          </div>
-        ))}
-      </div>
-
-      <Panel
-        title="待处理与风险"
-        description="优先显示可能影响发送、转化和数据安全的事项"
-        className="mt-5"
-        action={<AlertTriangle className="size-5 text-amber-500" />}
-      >
-        <div className="divide-y divide-slate-100">
-          {alerts.map((alert) => (
-            <div key={alert.title} className="flex items-center gap-3 px-5 py-4">
-              <StatusBadge tone={alert.tone}>需处理</StatusBadge>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-slate-800">{alert.title}</div>
-                <div className="mt-0.5 text-xs text-slate-400">{alert.meta}</div>
-              </div>
-              <ArrowRight className="size-4 text-slate-400" />
-            </div>
-          ))}
+            )
+          })}
         </div>
-      </Panel>
+        {metrics?.alerts.act_or_rec_p95_over_72h && (
+          <p className="border-t border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">激活时效或召回时效的 P95 超过 72 小时。</p>
+        )}
+      </details>
+
+      <p className="mt-4 text-xs leading-5 text-slate-400">
+        导入成功率 {percent(metrics?.import_success_rate)} · 账本对账成功率 — · 完成报告 {metrics?.counts.analyses ?? 0} · 一键获客 {metrics?.counts.acquired ?? 0} · 线索 {metrics?.counts.leads ?? 0} · 受众 {metrics?.counts.audience ?? 0} · 送达人数 {metrics?.counts.delivered_people ?? 0}
+      </p>
     </div>
   )
 }

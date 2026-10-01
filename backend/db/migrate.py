@@ -10,12 +10,17 @@ from db.errors import DbError
 
 SQL_ROOT = Path(__file__).resolve().parent / "sql"
 
+# Kept next to the live catalog for the older shape check. Not applied.
+HELD = frozenset({"0001_postgres_shape"})
+
 
 def versions() -> list[str]:
     found = []
     if not SQL_ROOT.is_dir():
         return found
     for path in sorted(SQL_ROOT.iterdir()):
+        if path.name in HELD:
+            continue
         if (path / "up.sql").is_file() and (path / "down.sql").is_file():
             found.append(path.name)
     return found

@@ -27,6 +27,7 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     email: str | None = None
     phone: str | None = None
+    username: str | None = None
     password: str
 
 
@@ -75,7 +76,10 @@ def auth_register(request: Request, body: RegisterIn):
 @router.post("/auth/login")
 def auth_login(request: Request, body: LoginIn):
     settings, store = request.app.state.settings, request.app.state.store
-    return respond(request, login(store, settings, email=body.email, phone=body.phone, password=body.password))
+    return respond(
+        request,
+        login(store, settings, email=body.email, phone=body.phone, password=body.password, username=body.username),
+    )
 
 
 @router.post("/auth/refresh")
@@ -103,23 +107,23 @@ def users_me(request: Request, authorization: str | None = Header(default=None))
 
 @router.post("/auth/oauth/{provider}")
 def auth_oauth(provider: str, request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     assert_oauth_provider(provider)
     require_flag("auth.oauth")
+    bind(request, authorization, write=True)
     return respond(request, {"provider": provider})
 
 
 @router.post("/auth/mfa/verify")
 def auth_mfa(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("auth.mfa")
+    bind(request, authorization, write=True)
     return respond(request, {"verified": True})
 
 
 @router.post("/auth/sso")
 def auth_sso(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("auth.sso")
+    bind(request, authorization, write=True)
     return respond(request, {"ok": True})
 
 
@@ -146,13 +150,13 @@ def auth_code_login(request: Request, body: CodeLoginIn):
 
 @router.post("/auth/miniprogram")
 def auth_miniprogram(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("auth.miniprogram")
+    bind(request, authorization, write=True)
     return respond(request, {"logged_in": False})
 
 
 @router.post("/auth/switch-tenant")
 def auth_switch_tenant(request: Request, body: SwitchIn, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("auth.tenant_switch")
+    bind(request, authorization, write=True)
     return respond(request, {"tenant_id": body.tenant_id, "switched": False})

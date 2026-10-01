@@ -3,7 +3,7 @@
   "engine": "postgresql",
   "mvp": "single_instance",
   "cache": "redis",
-  "migrations": ["sql/0001_postgres_shape"],
+  "migrations": ["db/sql/0001_postgres_shape"],
   "partition": "business_monthly_on_created_at",
   "rls": "tenant_id",
   "backup": ["daily_dump", "wal", "pitr"]

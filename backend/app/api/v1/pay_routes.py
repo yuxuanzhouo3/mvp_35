@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.api.deps import bind, respond
 from app.modules.payment import apply_webhook, cancel_subscription, checkout, query_payment, reconcile_payments, refund
+from app.services.common import PLANS
 from config.flags import require_flag
 
 router = APIRouter(prefix="/api/v1")
@@ -109,8 +110,24 @@ def list_invoices(request: Request, authorization: str | None = Header(default=N
     return respond(request, store.query("invoices", tenant_id=prof["tenant"]["id"], limit=50))
 
 
+@router.get("/billing/summary")
+def billing_summary(request: Request, authorization: str | None = Header(default=None)):
+    """One read for the payment screen: plans, subscription, payments, invoices."""
+    _settings, store, prof = bind(request, authorization, permission="billing.write")
+    tenant_id = prof["tenant"]["id"]
+    return respond(
+        request,
+        {
+            "plans": PLANS,
+            "subscription": store.query("subscriptions", tenant_id=tenant_id, limit=5),
+            "payments": store.query("payments", tenant_id=tenant_id, limit=20),
+            "invoices": store.query("invoices", tenant_id=tenant_id, limit=20),
+        },
+    )
+
+
 @router.post("/payments/raas")
 def payments_raas(request: Request, body: RaasIn, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True, permission="billing.write")
     require_flag("payment.raas")
+    bind(request, authorization, write=True, permission="billing.write")
     return respond(request, {"posted": False, "amount_fen": body.amount_fen})

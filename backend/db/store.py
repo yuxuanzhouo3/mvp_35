@@ -98,6 +98,7 @@ class DocumentStore:
         filters: dict | None = None,
         limit: int = 50,
         cursor: str | None = None,
+        q: str | None = None,
     ) -> dict:
         filters = filters or {}
 
@@ -109,6 +110,8 @@ class DocumentStore:
                 if tenant_id is not None and doc.get("tenant_id") != tenant_id:
                     continue
                 if not all(doc.get(key) == value for key, value in filters.items()):
+                    continue
+                if not matches_text(doc, q):
                     continue
                 rows.append(doc)
             rows.sort(key=lambda item: (item.get("created_at", ""), item["id"]), reverse=True)
@@ -131,6 +134,15 @@ class DocumentStore:
             return doc
 
         return self.transaction(op)
+
+
+def matches_text(doc: dict, q: str | None) -> bool:
+    needle = (q or "").strip().lower()
+    if not needle:
+        return True
+    fields = ("id", "name", "sku", "normalized_sku", "email", "company", "title", "category", "target_market")
+    haystack = " ".join(str(doc.get(key) or "") for key in fields).lower()
+    return needle in haystack
 
 
 def _cursor_key(rows: list[dict], cursor: str) -> tuple[str, str]:

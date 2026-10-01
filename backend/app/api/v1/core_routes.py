@@ -8,7 +8,7 @@ from app.modules.kpi_view import build_dashboard
 from app.modules.selection import mark_acquired, present_report
 from app.services.common import require_doc, search_catalog
 from app.workers.execute import execute_job
-from config.flags import require_flag
+from config.flags import load_flags, require_flag
 
 router = APIRouter(prefix="/api/v1")
 
@@ -44,6 +44,12 @@ class RecallIn(BaseModel):
 def _schedule(background: BackgroundTasks, store, settings, job: dict) -> None:
     if job["status"] == "queued":
         background.add_task(execute_job, store, settings, job["id"])
+
+
+@router.get("/flags")
+def feature_flags(request: Request):
+    """Public on/off map so the client can hide entries that return 501."""
+    return respond(request, load_flags())
 
 
 @router.post("/catalog/search")
@@ -162,43 +168,43 @@ def list_events(request: Request, authorization: str | None = Header(default=Non
 
 @router.post("/selection/auto-deal")
 def auto_deal(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("selection.auto_deal")
+    bind(request, authorization, write=True)
     return respond(request, {"posted": False})
 
 
 @router.post("/acquisition/social")
 def acquisition_social(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("acquisition.social")
+    bind(request, authorization, write=True)
     return respond(request, {"sent": False})
 
 
 @router.post("/acquisition/ecommerce")
 def acquisition_ecommerce(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("acquisition.ecommerce")
+    bind(request, authorization, write=True)
     return respond(request, {"sent": False})
 
 
 @router.post("/acquisition/expo")
 def acquisition_expo(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("acquisition.expo")
+    bind(request, authorization, write=True)
     return respond(request, {"sent": False})
 
 
 @router.post("/acquisition/agency")
 def acquisition_agency(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("acquisition.agency")
+    bind(request, authorization, write=True)
     return respond(request, {"sent": False})
 
 
 @router.post("/geo/seo")
 def geo_seo(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("geo_seo")
+    bind(request, authorization, write=True)
     return respond(request, {"published": False})
 
 
@@ -210,8 +216,8 @@ def content_generate(request: Request, authorization: str | None = Header(defaul
 
 @router.post("/raas/settle")
 def raas_settle(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("raas")
+    bind(request, authorization, write=True)
     return respond(request, {"posted": False})
 
 

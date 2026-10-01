@@ -68,6 +68,7 @@ def register(
         phone=phone_n,
         password_hash=hash_password(password),
         status="active",
+        username=email_n or phone_n,
     )
     _audit(store, prof["tenant"]["id"], prof["user"]["id"], "user.registered", "user")
     emit(store, prof["tenant"]["id"], "user.registered", {"user_id": prof["user"]["id"]}, prof["user"]["id"])
@@ -110,14 +111,25 @@ def _issue(store: DocumentStore, settings: Settings, user: dict) -> dict:
     }
 
 
-def login(store: DocumentStore, settings: Settings, *, email: str | None, phone: str | None, password: str) -> dict:
-    email_n = _email(email)
-    phone_n = _phone(phone)
-    if not email_n and not phone_n:
-        raise AppError("INVALID_ACCOUNT", "请填写邮箱或手机号")
-    user = _find_login(store, email_n, phone_n)
+def login(
+    store: DocumentStore,
+    settings: Settings,
+    *,
+    email: str | None,
+    phone: str | None,
+    password: str,
+    username: str | None = None,
+) -> dict:
+    if username and username.strip():
+        user = store.find_global("users", username=username.strip())
+    else:
+        email_n = _email(email)
+        phone_n = _phone(phone)
+        if not email_n and not phone_n:
+            raise AppError("INVALID_ACCOUNT", "请填写邮箱或手机号")
+        user = _find_login(store, email_n, phone_n)
     if not user or not verify_password(password, user.get("password_hash")):
-        raise AppError("UNAUTHENTICATED", "邮箱、手机或密码不正确", 401)
+        raise AppError("UNAUTHENTICATED", "用户名、邮箱、手机或密码不正确", 401)
     if user.get("status") not in {None, "active"}:
         raise AppError("ACCOUNT_INACTIVE", "账号未激活或已停用", 403)
     tokens = _issue(store, settings, user)

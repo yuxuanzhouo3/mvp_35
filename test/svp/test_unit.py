@@ -135,8 +135,8 @@ def test_nine_channels_and_cross_border_mix():
 
 
 def test_sql_up_and_down_cover_the_same_tables():
-    up = (ROOT / "sql" / "0001_postgres_shape" / "up.sql").read_text()
-    down = (ROOT / "sql" / "0001_postgres_shape" / "down.sql").read_text()
+    up = (ROOT / "db" / "sql" / "0001_postgres_shape" / "up.sql").read_text()
+    down = (ROOT / "db" / "sql" / "0001_postgres_shape" / "down.sql").read_text()
     created = set(re.findall(r"CREATE TABLE ([a-z_]+)", up))
     dropped = set(re.findall(r"DROP TABLE IF EXISTS ([a-z_]+)", down))
     assert created

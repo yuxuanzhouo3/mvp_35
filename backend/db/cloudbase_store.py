@@ -9,6 +9,7 @@ from typing import Any, Callable
 from app.core.timeutil import iso
 
 from db.cloudbase_sql import execute_pg_sql
+from db.store import matches_text
 
 
 class CloudBaseStore:
@@ -78,6 +79,7 @@ class CloudBaseStore:
         filters: dict | None = None,
         limit: int = 50,
         cursor: str | None = None,
+        q: str | None = None,
     ) -> dict:
         filters = filters or {}
 
@@ -89,6 +91,8 @@ class CloudBaseStore:
                 if tenant_id is not None and doc.get("tenant_id") != tenant_id:
                     continue
                 if not all(doc.get(key) == value for key, value in filters.items()):
+                    continue
+                if not matches_text(doc, q):
                     continue
                 rows.append(doc)
             rows.sort(key=lambda item: (item.get("created_at", ""), item["id"]), reverse=True)

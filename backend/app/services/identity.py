@@ -2,8 +2,12 @@ from config.settings import Settings
 from db.store import DocumentStore
 
 from app.core.errors import AppError
+from app.modules.passwords import hash_password
 from app.modules.tokens import read_access
 from app.services.common import PLANS, base_doc, new_id
+
+PLATFORM_ADMIN_USERNAME = "admin"
+PLATFORM_ADMIN_PASSWORD = "admin"
 
 PERMISSIONS = [
     "analysis.read",
@@ -55,6 +59,7 @@ def bootstrap(
     phone: str | None = None,
     password_hash: str | None = None,
     status: str = "active",
+    username: str | None = None,
 ) -> dict:
     user = store.find_global("users", cloudbase_user_id=cloudbase_user_id)
     if user:
@@ -78,6 +83,7 @@ def bootstrap(
             email=email,
             phone=phone,
             password_hash=password_hash,
+            username=username,
             role="owner",
             status=status,
         ),
@@ -148,6 +154,8 @@ def profile(store: DocumentStore, user: dict) -> dict:
             "cloudbase_user_id": user["cloudbase_user_id"],
             "email": user.get("email"),
             "phone": user.get("phone"),
+            "username": user.get("username"),
+            "username": user.get("username"),
             "status": user.get("status") or "active",
             "role": user.get("role") or (member["role"] if member else "viewer"),
         },
@@ -172,6 +180,26 @@ def require_write(role: str) -> None:
 
 def permissions_for(role: str) -> list[str]:
     return list(ROLE_PERMISSIONS.get(role, ()))
+
+
+def ensure_platform_admin(store: DocumentStore) -> None:
+    """Seed the starter platform login. Does not reset the password after the first create."""
+    named = store.find_global("users", username=PLATFORM_ADMIN_USERNAME)
+    if named:
+        return
+    existing = store.find_global("users", cloudbase_user_id="local:admin")
+    if existing:
+        if not existing.get("username"):
+            store.touch("users", existing["id"], {"username": PLATFORM_ADMIN_USERNAME})
+        return
+    bootstrap(
+        store,
+        "local:admin",
+        "平台管理员",
+        password_hash=hash_password(PLATFORM_ADMIN_PASSWORD, min_length=1),
+        status="active",
+        username=PLATFORM_ADMIN_USERNAME,
+    )
 
 
 def require_permission(role: str, permission: str) -> None:

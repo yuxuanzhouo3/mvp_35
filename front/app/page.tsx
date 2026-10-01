@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import { readClient, type ClientInfo } from '@/lib/client-adapter'
+import { ProductLibrary } from '@/components/product-library'
 
 const marketData = [
   { name: '利润', value: 50 }, { name: '税费', value: 18 }, { name: '物流', value: 32 }, { name: '风险', value: 24 },
@@ -147,6 +148,15 @@ export default function Page() {
                 <p className="mt-2 text-[11px] leading-5 text-muted-foreground">电商 · 社交 · 展会 · 代理 · 大数据 · GEO · 内容 · 跨境 · RaaS。成交和召回都回到同一条获客路径。</p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="library" className="section-padding border-t border-border bg-muted/30">
+        <div className="container max-w-3xl">
+          <SectionTitle eyebrow="Product library" title="商品库" copy="搜索已入库的商品，使用它生成分析报告，或删除这条记录。" />
+          <div className="mt-8">
+            <ProductLibrary />
           </div>
         </div>
       </section>

@@ -258,9 +258,17 @@ def create_router() -> APIRouter:
         return respond(request, store.insert("products", doc))
 
     @router.get("/products")
-    def list_products(request: Request, cursor: str | None = None, authorization: str | None = Header(default=None)):
+    def list_products(
+        request: Request,
+        cursor: str | None = None,
+        q: str | None = None,
+        authorization: str | None = Header(default=None),
+    ):
         _settings, store, prof = ctx(request, authorization)
-        return respond(request, store.query("products", tenant_id=prof["tenant"]["id"], cursor=cursor, limit=50))
+        return respond(
+            request,
+            store.query("products", tenant_id=prof["tenant"]["id"], cursor=cursor, limit=50, q=q),
+        )
 
     @router.get("/products/{product_id}")
     def get_product(product_id: str, request: Request, authorization: str | None = Header(default=None)):

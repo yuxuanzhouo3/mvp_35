@@ -65,20 +65,20 @@ def ai_ocr(request: Request, body: TextIn, authorization: str | None = Header(de
 
 @router.post("/digital-human/generate")
 def digital_human(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("digital_human")
+    bind(request, authorization, write=True)
     return respond(request, {"generated": False})
 
 
 @router.post("/ai/agent")
 def ai_agent(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("ai.agent")
+    bind(request, authorization, write=True)
     return respond(request, {"ran": False})
 
 
 @router.post("/ai/finetune")
 def ai_finetune(request: Request, authorization: str | None = Header(default=None)):
-    bind(request, authorization, write=True)
     require_flag("ai.finetune")
+    bind(request, authorization, write=True)
     return respond(request, {"started": False})

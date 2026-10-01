@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.contract import create_contract_router
 from app.api.v1.router import create_router
 from app.core.errors import AppError
+from app.services.identity import ensure_platform_admin
 from config.settings import Settings
 from db.store import open_store
 
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
     settings = Settings()
     app.state.settings = settings
     app.state.store = open_store(settings)
+    ensure_platform_admin(app.state.store)
     yield
 
 
