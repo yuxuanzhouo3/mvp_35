@@ -15,6 +15,8 @@ class CheckoutIn(BaseModel):
     kind: str = "subscription"
     amount_fen: int | None = None
     provider: str | None = None
+    scene: str = "web"
+    openid: str | None = None
 
 
 class WebhookIn(BaseModel):
@@ -51,7 +53,10 @@ def payments_checkout(request: Request, body: CheckoutIn, authorization: str | N
         amount_fen=body.amount_fen,
     )
     if body.provider:
-        payment = {**payment, **open_channel(store, settings, payment, body.provider)}
+        payment = {
+            **payment,
+            **open_channel(store, settings, payment, body.provider, scene=body.scene, openid=body.openid),
+        }
     return respond(request, payment)
 
 

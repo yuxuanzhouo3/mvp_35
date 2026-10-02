@@ -123,30 +123,76 @@ def _public_from_cert(cert_pem: str) -> str:
     return cert.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo).decode()
 
 
+def pay_appid(settings: Settings, scene: str) -> str:
+    if scene == "miniprogram" and settings.wechat_miniprogram_app_id:
+        return settings.wechat_miniprogram_app_id
+    return settings.wechat_pay_appid
+
+
 def create_native_order(settings: Settings, *, out_trade_no: str, amount_fen: int, description: str) -> str:
+    body = _place_order(
+        settings,
+        url_path="/v3/pay/transactions/native",
+        order={
+            "mchid": settings.wechat_pay_mchid,
+            "out_trade_no": out_trade_no,
+            "appid": pay_appid(settings, "web"),
+            "description": description,
+            "notify_url": _notify_url(settings),
+            "amount": {"total": amount_fen, "currency": "CNY"},
+        },
+    )
+    code_url = body.get("code_url")
+    if not code_url:
+        raise AppError("WECHAT_PAY_FAILED", "微信支付下单没有完成", 502, {"wechat_code": body.get("code")})
+    return code_url
+
+
+def create_jsapi_order(
+    settings: Settings,
+    *,
+    out_trade_no: str,
+    amount_fen: int,
+    description: str,
+    openid: str,
+    scene: str = "miniprogram",
+) -> dict:
+    appid = pay_appid(settings, scene)
+    body = _place_order(
+        settings,
+        url_path="/v3/pay/transactions/jsapi",
+        order={
+            "mchid": settings.wechat_pay_mchid,
+            "out_trade_no": out_trade_no,
+            "appid": appid,
+            "description": description,
+            "notify_url": _notify_url(settings),
+            "amount": {"total": amount_fen, "currency": "CNY"},
+            "payer": {"openid": openid},
+        },
+    )
+    prepay_id = body.get("prepay_id")
+    if not prepay_id:
+        raise AppError("WECHAT_PAY_FAILED", "微信支付下单没有完成", 502, {"wechat_code": body.get("code")})
+    return _jsapi_params(settings, appid, prepay_id)
+
+
+def _notify_url(settings: Settings) -> str:
+    notify = settings.wechat_pay_notify_url or "https://pickglobal.mornscience.top/api/v1/webhooks/wechat-pay"
+    if not notify.startswith("https://"):
+        raise AppError("NOT_ENABLED", "微信支付回调地址未配置", 501, {"flag": "payment.wechat", "placeholder": True})
+    return notify
+
+
+def _place_order(settings: Settings, *, url_path: str, order: dict) -> dict:
     if not (
-        settings.wechat_pay_appid
+        order.get("appid")
         and settings.wechat_pay_mchid
         and settings.wechat_pay_private_key
         and settings.wechat_pay_serial_no
     ):
         raise AppError("NOT_ENABLED", "微信支付未开通", 501, {"flag": "payment.wechat", "placeholder": True})
-    notify = settings.wechat_pay_notify_url or "https://pickglobal.mornscience.top/api/v1/webhooks/wechat-pay"
-    if not notify.startswith("https://"):
-        raise AppError("NOT_ENABLED", "微信支付回调地址未配置", 501, {"flag": "payment.wechat", "placeholder": True})
-    url_path = "/v3/pay/transactions/native"
-    payload = json.dumps(
-        {
-            "mchid": settings.wechat_pay_mchid,
-            "out_trade_no": out_trade_no,
-            "appid": settings.wechat_pay_appid,
-            "description": description,
-            "notify_url": notify,
-            "amount": {"total": amount_fen, "currency": "CNY"},
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
+    payload = json.dumps(order, ensure_ascii=False, separators=(",", ":"))
     authorization = _authorization(settings, "POST", url_path, payload)
     try:
         response = httpx.post(
@@ -158,10 +204,25 @@ def create_native_order(settings: Settings, *, out_trade_no: str, amount_fen: in
         body = response.json()
     except (httpx.HTTPError, json.JSONDecodeError) as exc:
         raise AppError("WECHAT_PAY_FAILED", "微信支付下单没有完成", 502) from exc
-    code_url = body.get("code_url")
-    if not code_url:
-        raise AppError("WECHAT_PAY_FAILED", "微信支付下单没有完成", 502)
-    return code_url
+    return body
+
+
+def _jsapi_params(settings: Settings, appid: str, prepay_id: str) -> dict:
+    timestamp = str(int(time.time()))
+    nonce = uuid.uuid4().hex
+    package = f"prepay_id={prepay_id}"
+    message = f"{appid}\n{timestamp}\n{nonce}\n{package}\n".encode()
+    private_pem = (settings.wechat_pay_private_key or "").replace("\\n", "\n").strip()
+    private_key = serialization.load_pem_private_key(private_pem.encode(), password=None)
+    pay_sign = base64.b64encode(private_key.sign(message, padding.PKCS1v15(), hashes.SHA256())).decode()
+    return {
+        "appId": appid,
+        "timeStamp": timestamp,
+        "nonceStr": nonce,
+        "package": package,
+        "signType": "RSA",
+        "paySign": pay_sign,
+    }
 
 
 def _authorization(settings: Settings, method: str, url_path: str, body: str) -> str:

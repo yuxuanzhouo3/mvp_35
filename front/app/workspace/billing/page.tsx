@@ -2,8 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { readClient } from '@/lib/client-adapter'
 
 type Plan = { id: string; name: string; amount_fen: number; period: string }
+type JsapiPay = {
+  appId: string
+  timeStamp: string
+  nonceStr: string
+  package: string
+  signType: string
+  paySign: string
+}
 type Payment = {
   id: string
   amount: number
@@ -13,6 +22,7 @@ type Payment = {
   currency?: string
   code_url?: string | null
   pay_url?: string | null
+  jsapi?: JsapiPay | null
   message?: string
 }
 type Invoice = { id: string; amount: number; status: string; payment_id?: string }
@@ -26,6 +36,27 @@ type Summary = {
 
 function yuan(fen: number) {
   return `¥${(fen / 100).toFixed(2)}`
+}
+
+function invokeMiniProgramPay(params: JsapiPay) {
+  const host = window as Window & {
+    wx?: { miniProgram?: { navigateTo?: (options: { url: string }) => void } }
+    WeixinJSBridge?: { invoke: (name: string, payload: JsapiPay, callback: (result: { err_msg?: string }) => void) => void }
+  }
+  const query = new URLSearchParams({
+    timeStamp: params.timeStamp,
+    nonceStr: params.nonceStr,
+    package: params.package,
+    signType: params.signType,
+    paySign: params.paySign,
+  })
+  if (host.wx?.miniProgram?.navigateTo) {
+    host.wx.miniProgram.navigateTo({ url: `/pages/pay/index?${query.toString()}` })
+    return
+  }
+  if (host.WeixinJSBridge) {
+    host.WeixinJSBridge.invoke('getBrandWCPayRequest', params, () => undefined)
+  }
 }
 
 const statusLabel: Record<string, string> = {
@@ -43,6 +74,8 @@ export default function BillingPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [qr, setQr] = useState('')
+  const [qrImage, setQrImage] = useState('')
 
   async function load() {
     const data = await api<Summary>('/billing/summary')
@@ -53,10 +86,29 @@ export default function BillingPage() {
     load().catch((reason: Error) => setError(reason.message))
   }, [])
 
+  useEffect(() => {
+    if (!qr) return
+    let cancelled = false
+    import('qrcode')
+      .then((mod) => (mod.default ?? mod).toDataURL(qr, { margin: 1, width: 220 }))
+      .then((url) => {
+        if (!cancelled) setQrImage(url)
+      })
+      .catch(() => {
+        if (!cancelled) setQrImage('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [qr])
+
   async function checkout(planId: string, provider: 'wechat' | 'alipay') {
     setBusy(true)
     setError('')
     setNotice('')
+    setQr('')
+    setQrImage('')
+    const miniprogram = readClient()?.shell === 'miniprogram'
     try {
       const payment = await api<Payment>('/payments/checkout', {
         method: 'POST',
@@ -64,17 +116,22 @@ export default function BillingPage() {
           plan_id: planId,
           kind: 'subscription',
           provider,
+          scene: provider === 'wechat' && miniprogram ? 'miniprogram' : 'web',
           idempotency_key: `plan-${planId}-${provider}-${Date.now()}`,
         }),
       })
-      const link = payment.pay_url || payment.code_url
-      const channel = provider === 'wechat' ? '微信' : '支付宝'
-      setNotice(
-        link
-          ? `${channel}订单 ${payment.id} 已创建。请完成付款，入账以后台签名回调为准。`
-          : payment.message || `${channel}订单 ${payment.id} 保持待支付，尚未入账。`,
-      )
-      if (link) window.open(link, '_blank', 'noopener,noreferrer')
+      if (payment.jsapi) {
+        invokeMiniProgramPay(payment.jsapi)
+        setNotice(`订单 ${payment.id} 已创建。请在微信小程序里确认支付，入账以后台签名回调为准。`)
+      } else if (provider === 'wechat' && payment.code_url) {
+        setQr(payment.code_url)
+        setNotice(`订单 ${payment.id} 已创建。请用微信扫码支付，付完后点查询。入账以后台签名回调为准。`)
+      } else if (provider === 'alipay' && payment.pay_url) {
+        setNotice(`订单 ${payment.id} 已创建。请前往支付宝完成付款，入账以后台签名回调为准。`)
+        window.open(payment.pay_url, '_blank', 'noopener,noreferrer')
+      } else {
+        setNotice(payment.message || `订单 ${payment.id} 保持待支付，尚未入账。`)
+      }
       await load()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '下单失败')
@@ -108,6 +165,13 @@ export default function BillingPage() {
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {notice && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
+      {qr && (
+        <section className="flex max-w-sm flex-col items-start gap-3 rounded-2xl border border-border bg-card p-5">
+          <h2 className="font-semibold">微信扫码支付</h2>
+          {qrImage ? <img src={qrImage} alt="微信支付二维码" width={220} height={220} /> : <p className="text-sm text-muted-foreground">正在生成二维码…</p>}
+          <p className="text-sm text-muted-foreground">用微信扫一扫。支付结果以签名回调为准，完成后点下方查询。</p>
+        </section>
+      )}
       <section className="grid gap-4 md:grid-cols-3">
         {(summary?.plans || []).map((plan) => (
           <article key={plan.id} className="rounded-2xl border border-border bg-card p-5">

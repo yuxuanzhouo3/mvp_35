@@ -42,9 +42,19 @@ def channel_ready(settings: Settings, provider: str) -> bool:
     return False
 
 
-def open_channel(store: DocumentStore, settings: Settings, payment: dict, provider: str) -> dict:
+def open_channel(
+    store: DocumentStore,
+    settings: Settings,
+    payment: dict,
+    provider: str,
+    *,
+    scene: str = "web",
+    openid: str | None = None,
+) -> dict:
     if provider not in {"wechat", "alipay"}:
         raise AppError("INVALID_PROVIDER", "支付渠道无效")
+    if scene not in {"web", "miniprogram"}:
+        raise AppError("INVALID_SCENE", "支付场景无效")
     amount = int(payment["amount"])
     subject = next((item["name"] for item in PLANS if item["id"] == payment.get("plan_id")), "PickGlobal")
     if not channel_ready(settings, provider):
@@ -53,23 +63,61 @@ def open_channel(store: DocumentStore, settings: Settings, payment: dict, provid
             "channel": provider,
             "code_url": None,
             "pay_url": None,
+            "jsapi": None,
             "message": f"{label}支付未开通，订单保持待支付，不会发放权益",
+        }
+    if provider == "wechat" and scene == "miniprogram":
+        from app.modules.wechat_pay import create_jsapi_order
+
+        payer = (openid or "").strip() or _user_openid(store, payment)
+        if not payer:
+            raise AppError("WECHAT_OPENID_REQUIRED", "小程序支付需要先用微信登录", 400)
+        jsapi = create_jsapi_order(
+            settings,
+            out_trade_no=payment["id"],
+            amount_fen=amount,
+            description=subject,
+            openid=payer,
+            scene="miniprogram",
+        )
+        store.touch("payments", payment["id"], {"provider": provider})
+        return {
+            "channel": provider,
+            "code_url": None,
+            "pay_url": None,
+            "jsapi": jsapi,
+            "message": "请在微信小程序内确认支付",
         }
     if provider == "wechat":
         from app.modules.wechat_pay import create_native_order
 
         url = create_native_order(settings, out_trade_no=payment["id"], amount_fen=amount, description=subject)
-    else:
-        from app.modules.alipay_pay import page_pay_url
+        store.touch("payments", payment["id"], {"provider": provider})
+        return {
+            "channel": provider,
+            "code_url": url,
+            "pay_url": url,
+            "jsapi": None,
+            "message": "请使用微信扫码支付",
+        }
+    from app.modules.alipay_pay import page_pay_url
 
-        url = page_pay_url(settings, out_trade_no=payment["id"], amount_fen=amount, subject=subject)
+    url = page_pay_url(settings, out_trade_no=payment["id"], amount_fen=amount, subject=subject)
     store.touch("payments", payment["id"], {"provider": provider})
     return {
         "channel": provider,
-        "code_url": url if provider == "wechat" else None,
+        "code_url": None,
         "pay_url": url,
-        "message": "请使用微信扫码支付" if provider == "wechat" else "请前往支付宝完成支付",
+        "jsapi": None,
+        "message": "请前往支付宝完成支付",
     }
+
+
+def _user_openid(store: DocumentStore, payment: dict) -> str:
+    user = store.get("users", payment.get("user_id") or "")
+    if not user:
+        return ""
+    return str(user.get("wechat_openid") or "")
 
 
 def checkout(

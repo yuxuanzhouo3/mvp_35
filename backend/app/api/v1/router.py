@@ -107,6 +107,8 @@ class CampaignIn(BaseModel):
 class OrderIn(BaseModel):
     plan_id: str
     provider: str | None = None
+    scene: str = "web"
+    openid: str | None = None
 
 
 class LedgerIn(BaseModel):
@@ -136,7 +138,7 @@ class SuppressionIn(BaseModel):
     email: str
 
 
-def _channel_order(settings, store, prof, plan: dict, provider: str) -> dict:
+def _channel_order(settings, store, prof, plan: dict, provider: str, *, scene: str = "web", openid: str | None = None) -> dict:
     from app.modules.payment import channel_ready, checkout, open_channel
 
     label = "微信" if provider == "wechat" else "支付宝"
@@ -154,12 +156,13 @@ def _channel_order(settings, store, prof, plan: dict, provider: str) -> dict:
                 status="pending",
                 code_url=None,
                 pay_url=None,
+                jsapi=None,
                 payment_id=None,
                 message=f"{label}支付未开通，订单保持待支付，不会发放权益",
             ),
         )
     payment = checkout(store, prof, plan["id"], new_id("idem"))
-    charge = open_channel(store, settings, payment, provider)
+    charge = open_channel(store, settings, payment, provider, scene=scene, openid=openid)
     return store.insert(
         "payment_orders",
         base_doc(
@@ -173,6 +176,7 @@ def _channel_order(settings, store, prof, plan: dict, provider: str) -> dict:
             status="pending",
             code_url=charge["code_url"],
             pay_url=charge["pay_url"],
+            jsapi=charge.get("jsapi"),
             payment_id=payment["id"],
             message=charge["message"],
         ),
@@ -698,7 +702,10 @@ def create_router() -> APIRouter:
         if not plan or plan["amount_fen"] <= 0:
             raise AppError("PLAN_NOT_PURCHASABLE", "这个套餐不能下单")
         if body.provider in {"wechat", "alipay"}:
-            return respond(request, _channel_order(settings, store, prof, plan, body.provider))
+            return respond(
+                request,
+                _channel_order(settings, store, prof, plan, body.provider, scene=body.scene, openid=body.openid),
+            )
         if settings.wechat_pay_mode != "live":
             code_url = None
             pay_message = "微信支付未开通，订单保持待支付，不会发放权益"

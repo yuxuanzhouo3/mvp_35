@@ -83,3 +83,81 @@ def test_wechat_notify_books_subscription_invoice_only_after_rsa(client: TestCli
     )
     assert replay.status_code == 200
     assert len(client.get("/api/v1/invoices", headers=headers).json()["data"]["items"]) == 1
+
+
+def _enable_wechat(client: TestClient):
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    settings = client.app.state.settings
+    settings.wechat_pay_mode = "live"
+    settings.wechat_pay_appid = "wx-web-app"
+    settings.wechat_pay_mchid = "1900000001"
+    settings.wechat_pay_serial_no = "SERIAL"
+    settings.wechat_pay_private_key = private_pem
+    settings.wechat_pay_notify_url = "https://pickglobal.mornscience.top/api/v1/webhooks/wechat-pay"
+    settings.wechat_miniprogram_app_id = ""
+    return private_key
+
+
+def test_web_checkout_returns_native_code_url(client: TestClient, monkeypatch):
+    _enable_wechat(client)
+
+    class Response:
+        def json(self):
+            return {"code_url": "weixin://wxpay/bizpayurl?pr=web"}
+
+    monkeypatch.setattr("app.modules.wechat_pay.httpx.post", lambda *args, **kwargs: Response())
+    headers = register(client, "wechat-web@example.com")
+    payment = client.post(
+        "/api/v1/payments/checkout",
+        headers=headers,
+        json={"plan_id": "growth", "provider": "wechat", "scene": "web", "idempotency_key": "wx-web"},
+    )
+    assert payment.status_code == 200, payment.text
+    data = payment.json()["data"]
+    assert data["code_url"] == "weixin://wxpay/bizpayurl?pr=web"
+    assert data["jsapi"] is None
+    assert data["status"] == "pending"
+    assert client.get("/api/v1/subscriptions", headers=headers).json()["data"]["items"] == []
+
+
+def test_miniprogram_checkout_returns_signed_jsapi_params(client: TestClient, monkeypatch):
+    private_key = _enable_wechat(client)
+
+    class Response:
+        def json(self):
+            return {"prepay_id": "wx-prepay-1"}
+
+    monkeypatch.setattr("app.modules.wechat_pay.httpx.post", lambda *args, **kwargs: Response())
+    headers = register(client, "wechat-mini@example.com")
+    missing = client.post(
+        "/api/v1/payments/checkout",
+        headers=headers,
+        json={"plan_id": "growth", "provider": "wechat", "scene": "miniprogram", "idempotency_key": "wx-mini-missing"},
+    )
+    assert missing.status_code == 400
+    assert missing.json()["error"]["code"] == "WECHAT_OPENID_REQUIRED"
+
+    paid = client.post(
+        "/api/v1/payments/checkout",
+        headers=headers,
+        json={
+            "plan_id": "growth",
+            "provider": "wechat",
+            "scene": "miniprogram",
+            "openid": "openid-mini",
+            "idempotency_key": "wx-mini",
+        },
+    )
+    assert paid.status_code == 200, paid.text
+    jsapi = paid.json()["data"]["jsapi"]
+    assert jsapi["appId"] == "wx-web-app"
+    assert jsapi["package"] == "prepay_id=wx-prepay-1"
+    assert jsapi["signType"] == "RSA"
+    message = f"{jsapi['appId']}\n{jsapi['timeStamp']}\n{jsapi['nonceStr']}\n{jsapi['package']}\n".encode()
+    private_key.public_key().verify(base64.b64decode(jsapi["paySign"]), message, padding.PKCS1v15(), hashes.SHA256())
+    assert client.get("/api/v1/subscriptions", headers=headers).json()["data"]["items"] == []

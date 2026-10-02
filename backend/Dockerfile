@@ -18,7 +18,6 @@ ENV PORT=8000 \
     HUNYUAN_ENABLED=false \
     TONGYI_ENABLED=false \
     SES_MODE=mock \
-    WECHAT_PAY_MODE=disabled \
     DEMO_SIGNING_HELPER=false \
     CORS_ORIGINS=https://pickglobal.mornscience.top
 EXPOSE 8000
