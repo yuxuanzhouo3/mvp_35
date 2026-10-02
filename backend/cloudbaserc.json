@@ -3,5 +3,10 @@
   "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
   "cloudrun": {
     "name": "pickglobal-api"
+  },
+  "database": {
+    "migrations": [
+      "db/cloudbase/migrations"
+    ]
   }
 }

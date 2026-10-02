@@ -1,21 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { api, waitJob } from '@/lib/api'
-
-type Product = {
-  id: string
-  name: string
-  sku: string
-  target_market: string
-  origin_country: string
-  tax_regime: string
-  target_price_usd: string
-  cost_cny: string
-  context_version: number
-  source: string
-}
+import { ProductLibrary } from '@/components/product-library'
 
 type CatalogItem = {
   id: string
@@ -47,25 +34,15 @@ const emptyForm = {
 }
 
 export default function ProductsPage() {
-  const router = useRouter()
   const [tab, setTab] = useState<'own' | 'catalog'>('own')
   const [form, setForm] = useState(emptyForm)
   const [csv, setCsv] = useState('sku,name,cost_cny,target_price_usd,international_freight_usd\nCUP-1,样品杯,72,40,2\n')
   const [query, setQuery] = useState('杯')
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
-  const [products, setProducts] = useState<Product[]>([])
+  const [libraryKey, setLibraryKey] = useState(0)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-
-  async function reload() {
-    const data = await api<{ items: Product[] }>('/products')
-    setProducts(data.items)
-  }
-
-  useEffect(() => {
-    reload().catch((reason: Error) => setError(reason.message))
-  }, [])
 
   function setField(key: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -77,7 +54,7 @@ export default function ProductsPage() {
     setMessage('')
     try {
       await action()
-      await reload()
+      setLibraryKey((current) => current + 1)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '操作失败')
     } finally {
@@ -178,33 +155,12 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <table className="data-table">
-          <thead>
-            <tr><th>商品</th><th>路线</th><th>售价</th><th>来源</th><th></th></tr>
-          </thead>
-          <tbody>
-            {products.map((product) => (
-              <tr key={product.id}>
-                <td>{product.name}<div className="text-xs text-muted-foreground">{product.sku}</div></td>
-                <td>{product.origin_country} → {product.target_market}<div className="text-xs text-muted-foreground">{product.tax_regime}</div></td>
-                <td>${product.target_price_usd}</td>
-                <td>{product.source}</td>
-                <td>
-                  <button disabled={busy} className="text-sm font-medium text-primary" onClick={() => {
-                    void run(async () => {
-                      const created = await api<{ job_id: string }>(`/products/${product.id}/analyses`, { method: 'POST' })
-                      const job = await waitJob(created.job_id)
-                      if (job.status === 'failed' || !job.result?.analysis_id) throw new Error(job.error?.message || '分析失败')
-                      router.push(`/workspace/reports/${job.result.analysis_id}`)
-                    })
-                  }}>开始分析</button>
-                </td>
-              </tr>
-            ))}
-            {products.length === 0 && <tr><td colSpan={5} className="text-muted-foreground">还没有商品。</td></tr>}
-          </tbody>
-        </table>
+      <div>
+        <h2 className="text-lg font-semibold">已入库商品</h2>
+        <p className="mt-1 text-sm text-muted-foreground">搜索名称或 SKU，使用会生成分析报告，删除后这条记录不再出现。</p>
+        <div className="mt-4">
+          <ProductLibrary key={libraryKey} />
+        </div>
       </div>
     </div>
   )

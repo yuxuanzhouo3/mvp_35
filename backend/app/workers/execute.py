@@ -7,6 +7,7 @@ from db.store import DocumentStore
 
 from app.core.errors import AppError
 from app.core.timeutil import iso, parse_iso, utcnow
+from app.modules.events import emit
 from app.services.common import (
     base_doc,
     mock_leads,
@@ -56,6 +57,9 @@ def execute_job(store: DocumentStore, settings: Settings, job_id: str) -> dict |
     except Exception as exc:
         message = exc.message if isinstance(exc, AppError) else "任务执行失败"
         _fail(store, claimed, message)
+        task_id = (claimed.get("payload") or {}).get("task_id")
+        if task_id:
+            store.touch("acquisition_tasks", task_id, {"status": "failed", "finished_at": iso()})
         if claimed["job_type"] in {"product_analysis", "lead_discovery", "campaign_send", "lifecycle_send"}:
             module = {
                 "product_analysis": "analysis",
@@ -141,6 +145,7 @@ def _import(store: DocumentStore, job: dict) -> dict:
             failed += 1
             errors.append({"line": index, "message": exc.message})
     total = imported + failed
+    emit(store, job["tenant_id"], "product.imported", {"imported": imported, "failed": failed}, job["created_by"])
     return {
         "imported": imported,
         "failed": failed,
@@ -187,6 +192,36 @@ def _analysis(store: DocumentStore, settings: Settings, job: dict) -> dict:
         finished_at=iso(),
     )
     store.insert("analysis_reports", report)
+    store.insert(
+        "selection_reports",
+        base_doc(
+            job["tenant_id"],
+            job["created_by"],
+            id=report["id"],
+            product_id=product["id"],
+            route=metrics["route"],
+            market=metrics["target_market"],
+            profit_margin=metrics["net_margin"],
+            tax=metrics["tax_usd"],
+            time_cost={"transit_days_min": metrics["transit_days_min"], "transit_days_max": metrics["transit_days_max"]},
+            risk=metrics["risk_level"],
+            score=metrics["opportunity_score"],
+            status="completed",
+            rules_version=metrics["rules_version"],
+            seed_ready=False,
+            net_margin=metrics["net_margin"],
+            net_profit_usd=metrics["net_profit_usd"],
+            fx_usd_cny=metrics["fx_usd_cny"],
+            metrics=metrics,
+            market_snapshot=report["market_snapshot"],
+            context_version=metrics["context_version"],
+            shard_key=None,
+            region=None,
+            ai_model_version=None,
+        ),
+    )
+    emit(store, job["tenant_id"], "selection.completed", {"report_id": report["id"]}, job["created_by"])
+    emit(store, job["tenant_id"], "report.generated", {"report_id": report["id"]}, job["created_by"])
     quota_finish(store, job["tenant_id"], "analysis", job["id"], True)
     return {
         "analysis_id": report["id"],
@@ -238,6 +273,19 @@ def _discovery(store: DocumentStore, settings: Settings, job: dict) -> dict:
         store.insert("leads", lead)
         inserted += 1
         ids.append(lead["id"])
+    if payload.get("task_id"):
+        store.touch(
+            "acquisition_tasks",
+            payload["task_id"],
+            {"status": "completed", "finished_at": iso()},
+        )
+    emit(
+        store,
+        job["tenant_id"],
+        "lead.discovered",
+        {"lead_ids": ids, "inserted": inserted},
+        job["created_by"],
+    )
     quota_finish(store, job["tenant_id"], "discovery", job["id"], True)
     return {
         "inserted": inserted,
@@ -292,6 +340,7 @@ def _send_campaign(store: DocumentStore, job: dict) -> dict:
         copy=campaign.get("draft") or "",
     )
     store.touch("campaigns", campaign["id"], {"status": "sent", "sent_at": iso()})
+    emit(store, job["tenant_id"], "campaign.delivered", {"campaign_id": campaign["id"], "sent": sent}, job["created_by"])
     quota_finish(store, job["tenant_id"], "send", job["id"], True)
     return {"sent": sent, "steps": [{"key": "ses_mock", "status": "succeeded"}]}
 
@@ -327,6 +376,21 @@ def _deliver(store, job, lead_ids, *, purpose, campaign_id, lifecycle_job_id, co
             opened_at=None,
         )
         store.insert("outreach_messages", message)
+        store.insert(
+            "deliveries",
+            base_doc(
+                job["tenant_id"],
+                job["created_by"],
+                id=new_id("dlv"),
+                campaign_id=campaign_id,
+                lead_id=lead_id,
+                channel=lead.get("source_channel") or "email",
+                status=status,
+                delivered_at=delivered_at,
+                opened_at=None,
+                replied_at=None,
+            ),
+        )
         if status == "delivered":
             store.touch("leads", lead_id, {"status": "contacted" if lead.get("status") == "new" else lead.get("status")})
         count += 1

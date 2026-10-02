@@ -1,0 +1,22 @@
+{
+  "id": "flags-v1",
+  "flags": {
+    "auth.sso": false,
+    "auth.mfa": false,
+    "auth.oauth": false,
+    "auth.miniprogram": false,
+    "auth.tenant_switch": false,
+    "payment.raas": false,
+    "selection.auto_deal": false,
+    "acquisition.social": false,
+    "acquisition.ecommerce": false,
+    "acquisition.expo": false,
+    "acquisition.agency": false,
+    "ai.agent": false,
+    "ai.finetune": false,
+    "digital_human": false,
+    "geo_seo": false,
+    "raas": false,
+    "global_multi_active": false
+  }
+}

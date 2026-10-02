@@ -5,10 +5,14 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY config ./config
 COPY db ./db
+COPY cloudbase-auth.json /root/.config/.cloudbase/auth.json
 RUN pip install --no-cache-dir .
 
 ENV PORT=8000 \
     AUTH_MODE=demo \
+    STORAGE_ENGINE=cloudbase \
+    CLOUDBASE_ENV_ID=mvp35-d6g2zp4539a542ebc \
+    CLOUDBASE_REGION=ap-shanghai \
     DATA_PATH=/tmp/store.json \
     HUNYUAN_ENABLED=false \
     TONGYI_ENABLED=false \

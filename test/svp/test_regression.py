@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.services.common import sign_ledger
@@ -28,21 +27,6 @@ def test_profit_is_deterministic_without_a_model():
     assert metrics["rules_version"] == "pg-rules-1.0"
     assert "19.94" in metrics["explanation"]
     assert Decimal(metrics["net_margin"]) >= Decimal("0.15")
-
-
-@pytest.fixture()
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATA_PATH", str(tmp_path / "store.json"))
-    monkeypatch.setenv("AUTH_MODE", "demo")
-    monkeypatch.setenv("LEDGER_HMAC_SECRET", "test-secret")
-    monkeypatch.setenv("HUNYUAN_ENABLED", "false")
-    monkeypatch.setenv("TONGYI_ENABLED", "false")
-    monkeypatch.setenv("WECHAT_PAY_MODE", "disabled")
-    monkeypatch.setenv("DEMO_SIGNING_HELPER", "false")
-    from app.main import app
-
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 def auth():

@@ -1,14 +1,14 @@
 import time
 
 from config.settings import Settings
-from db.store import DocumentStore
+from db.store import open_store
 
 from app.workers.execute import execute_job, reclaim_stale
 
 
 def main() -> None:
     settings = Settings()
-    store = DocumentStore(settings.data_path)
+    store = open_store(settings)
     while True:
         reclaim_stale(store)
         queued = store.query("jobs", filters={"status": "queued"}, limit=20)["items"]

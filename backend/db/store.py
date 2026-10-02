@@ -6,12 +6,24 @@ from typing import Any, Callable
 from app.core.timeutil import iso
 
 
+def open_store(settings):
+    """JSON file by default. STORAGE_ENGINE=cloudbase uses the remote PostgreSQL documents table."""
+    if getattr(settings, "storage_engine", "json") == "cloudbase":
+        from db.cloudbase_store import CloudBaseStore
+
+        env_id = getattr(settings, "cloudbase_env_id", "") or ""
+        if not env_id:
+            raise RuntimeError("CLOUDBASE_ENV_ID is required when STORAGE_ENGINE=cloudbase")
+        return CloudBaseStore(env_id, region=getattr(settings, "cloudbase_region", "ap-shanghai") or "ap-shanghai")
+    return DocumentStore(settings.data_path)
+
+
 class DocumentStore:
     """Tenant-scoped document repository.
 
-    MVP persistence is a JSON document file with an exclusive lock, standing in
-    for CloudBase documents. Domain code uses this repository and does not call
-    CloudBase HTTP. Queries that pass tenant_id always filter on it.
+    The default engine is a JSON file with an exclusive lock. STORAGE_ENGINE=cloudbase
+    stores the same documents in remote CloudBase PostgreSQL. Queries that pass
+    tenant_id always filter on it.
     """
 
     def __init__(self, path: str | Path):
@@ -86,6 +98,7 @@ class DocumentStore:
         filters: dict | None = None,
         limit: int = 50,
         cursor: str | None = None,
+        q: str | None = None,
     ) -> dict:
         filters = filters or {}
 
@@ -97,6 +110,8 @@ class DocumentStore:
                 if tenant_id is not None and doc.get("tenant_id") != tenant_id:
                     continue
                 if not all(doc.get(key) == value for key, value in filters.items()):
+                    continue
+                if not matches_text(doc, q):
                     continue
                 rows.append(doc)
             rows.sort(key=lambda item: (item.get("created_at", ""), item["id"]), reverse=True)
@@ -119,6 +134,15 @@ class DocumentStore:
             return doc
 
         return self.transaction(op)
+
+
+def matches_text(doc: dict, q: str | None) -> bool:
+    needle = (q or "").strip().lower()
+    if not needle:
+        return True
+    fields = ("id", "name", "sku", "normalized_sku", "email", "company", "title", "category", "target_market")
+    haystack = " ".join(str(doc.get(key) or "") for key in fields).lower()
+    return needle in haystack
 
 
 def _cursor_key(rows: list[dict], cursor: str) -> tuple[str, str]:
