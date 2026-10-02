@@ -11,6 +11,7 @@ import {
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import { readClient, type ClientInfo } from '@/lib/client-adapter'
 import { ProductLibrary } from '@/components/product-library'
+import { GuideVideo } from '@/components/guide-video'
 
 const marketData = [
   { name: '利润', value: 50 }, { name: '税费', value: 18 }, { name: '物流', value: 32 }, { name: '风险', value: 24 },
@@ -96,10 +97,14 @@ export default function Page() {
             <button onClick={() => scrollTo('faq')}>常见问题</button>
           </nav>
           <div className="hidden items-center gap-3 md:flex">
-            <Link href="/workspace" className={buttonVariants({ variant: 'ghost' })}>登录</Link>
-            <Link href="/workspace/products" className={buttonVariants()}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
+            <Link href="/login" className={buttonVariants({ variant: 'ghost' })}>登录</Link>
+            <Link href="/register" className={buttonVariants()}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
+            <GuideVideo />
           </div>
-          <Button variant="ghost" size="icon" className="size-11 md:hidden" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? '关闭菜单' : '打开菜单'}>{menuOpen ? <X /> : <Menu />}</Button>
+          <div className="flex items-center gap-2 md:hidden">
+            <GuideVideo />
+            <Button variant="ghost" size="icon" className="size-11" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? '关闭菜单' : '打开菜单'}>{menuOpen ? <X /> : <Menu />}</Button>
+          </div>
         </div>
         {menuOpen && (
           <div className="border-t border-border bg-background px-5 py-5 md:hidden">
@@ -108,7 +113,8 @@ export default function Page() {
               <button className="min-h-11 text-left" onClick={() => scrollTo('path-b')}>获客九路</button>
               <button className="min-h-11 text-left" onClick={() => scrollTo('scenes')}>应用场景</button>
               <button className="min-h-11 text-left" onClick={() => scrollTo('faq')}>常见问题</button>
-              <Link href="/workspace/products" className={buttonVariants({ className: 'mt-2 min-h-12' })}>免费体验</Link>
+              <Link href="/login" className="min-h-11 text-left">登录</Link>
+              <Link href="/register" className={buttonVariants({ className: 'mt-2 min-h-12' })}>免费体验</Link>
             </nav>
           </div>
         )}
@@ -305,7 +311,7 @@ export default function Page() {
               <h2 className="text-balance text-3xl font-semibold tracking-tight text-white md:text-5xl">让每一个商品，都找到更合适的海外市场</h2>
               <p className="text-slate-300">从第一次分析到客户召回，在一个工作台完成。</p>
               <div className="flex flex-wrap justify-center gap-3">
-                <Link href="/workspace/products" className={buttonVariants({ size: 'lg', className: 'bg-white text-primary hover:bg-white/90' })}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
+                <Link href="/register" className={buttonVariants({ size: 'lg', className: 'bg-white text-primary hover:bg-white/90' })}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
                 <Link href="/workspace" className={buttonVariants({ size: 'lg', variant: 'outline', className: 'border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white' })}>预约演示</Link>
               </div>
             </div>

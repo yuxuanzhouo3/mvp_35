@@ -18,6 +18,7 @@ ENV PORT=8000 \
     TONGYI_ENABLED=false \
     SES_MODE=mock \
     WECHAT_PAY_MODE=disabled \
+    DEMO_SIGNING_HELPER=false \
     CORS_ORIGINS=https://pickglobal.mornscience.top
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/api/v1/health/live' % os.environ.get('PORT','8000'))"

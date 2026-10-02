@@ -31,6 +31,7 @@ Add a row when a merge lands. Newest row first.
 
 | Day | Step | Pull request | Result |
 | --- | --- | --- | --- |
+| 2 Oct 2026 | `yzcmf` → `test` | [#9](https://github.com/yuxuanzhouo3/mvp_35/pull/9) | `1.4` on `test` (`951b554`). Tip `e31c5d7`. `pro` stays `1.2`. |
 | 1 Oct 2026 | `yzcmf` → `test` | [#8](https://github.com/yuxuanzhouo3/mvp_35/pull/8) | `1.3` on `test` (`02915cc`). Commit `8d47ec8`. `pro` stays `1.2`. |
 | 30 Sep 2026 | `test` → `pro` | [#7](https://github.com/yuxuanzhouo3/mvp_35/pull/7) | `1.2` on `pro` (`32b3707`) |
 | 30 Sep 2026 | `yzcmf` → `test` | [#6](https://github.com/yuxuanzhouo3/mvp_35/pull/6) | `1.2` on `test` (`3a23696`) |
@@ -39,6 +40,10 @@ Add a row when a merge lands. Newest row first.
 ## Pace
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
+
+### 2 October 2026
+
+`yzcmf` through `e31c5d7` is on `test` as `1.4` ([#9](https://github.com/yuxuanzhouo3/mvp_35/pull/9), `951b554`). `pro` stays `1.2`. Test now has the 4S contract, the optional CloudBase document store, the signed-in admin, and the voice guides. Next: CloudBase `tcb` with git. A `test` → `pro` merge waits until you agree. WeChat pay, Hunyuan, and live SES stay unwired.
 
 ### 1 October 2026
 

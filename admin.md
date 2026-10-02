@@ -59,36 +59,25 @@
 桌面端使用固定左侧导航；移动端仅支持紧急查看和暂停活动，不把复杂配置压缩成完整移动编辑器。
 
 ```text
-/admin
-├── overview                 运营总览
-├── ads                      广告管理
-│   ├── placements           广告位
-│   ├── creatives            素材库
-│   ├── campaigns            投放活动
-│   └── analytics            广告效果
-├── users                    用户数据
-│   ├── segments             用户分群
-│   ├── privacy-requests     导出/删除请求
-│   └── risk                 风险用户
-├── analytics                行为分析
-│   ├── events               事件趋势
-│   ├── funnels              漏斗
-│   ├── retention            留存
-│   ├── paths                行为路径
-│   └── features             功能采用
-├── invitations              用户邀请
-│   ├── campaigns            邀请活动
-│   ├── codes                邀请码
-│   ├── rewards              奖励账本
-│   └── fraud                反作弊
-├── recall                   用户召回
-│   ├── audiences            待召回人群
-│   ├── campaigns            召回活动
-│   ├── templates            内容模板
-│   └── suppression          禁止触达名单
-├── jobs                     批处理任务
-├── audit                    审计日志
-└── settings                 权限、字典和全局配置
+/admin                              当前已有页面
+├── login                           平台登录（与租户 /login 分开）
+├── /                               运营总览：八率、五时效
+├── ads                             广告管理（广告位、素材、活动在同一页）
+├── users                           用户数据（含分群、导出）
+├── analytics                       行为分析
+├── invitations                     用户邀请
+├── recall                          平台用户召回
+├── search                          全局搜索
+├── audit                           审计日志
+└── settings                        平台设置
+
+还没有独立路由、仍放在上面页面里的设计分栏：
+  ads        placements · creatives · campaigns · analytics
+  users      segments · privacy-requests · risk
+  analytics  events · funnels · retention · paths · features
+  invitations campaigns · codes · rewards · fraud
+  recall     audiences · campaigns · templates · suppression
+  jobs       批处理任务中心
 ```
 
 全局顶栏包含：
@@ -851,28 +840,32 @@ CloudBase 定时器
        └── SES 分批发送与回调处理
 ```
 
-代码建议：
+当前代码（平台接口在 `admin_routes.py`，没有单独的 `domains/platform_admin/`）：
 
 ```text
-backend/app/domains/platform_admin/
-├── access/
-├── ads/
-├── users/
-├── analytics/
-├── segments/
-├── invitations/
-├── user_recall/
-└── audit/
+backend/app/api/v1/admin_routes.py
+├── /admin/users · /admin/users/summary · /admin/users/{id} · status · export
+├── /admin/ads · placements · creatives · /admin/ads/{id}/status
+├── /admin/analytics · export
+├── /admin/invitations
+├── /admin/segments
+├── /admin/recall · pause-all · /admin/recall/{id}
+├── /admin/audit
+├── /admin/search
+└── /admin/settings · password
 
 front/app/admin/
-├── page.tsx
-├── layout.tsx
-├── components.tsx
+├── login/page.tsx
+├── layout.tsx · components.tsx
+├── page.tsx                 运营总览
 ├── ads/page.tsx
 ├── users/page.tsx
 ├── analytics/page.tsx
 ├── invitations/page.tsx
-└── recall/page.tsx
+├── recall/page.tsx
+├── search/page.tsx
+├── audit/page.tsx
+└── settings/page.tsx
 ```
 
 官网和管理后台都通过 `/api/v1/admin/*` 调用同一个 FastAPI；生产环境由网关保持同源路径，避免在浏览器开放宽泛 CORS。平台 repository 与租户 repository 分开，调用方必须显式选择，不能通过缺少 `tenant_id` 意外变成全表查询。
@@ -1033,17 +1026,23 @@ front/app/admin/
 
 ```text
 front/app/
-├── globals.css                  # 官网与后台共享设计变量
-├── page.tsx                     # 官网
+├── globals.css
+├── page.tsx                         # 官网
+├── login/ register/ forgot/ reset/  # 租户账号
+├── workspace/                       # 企业工作台，不是本后台
 └── admin/
-    ├── components.tsx           # 响应式侧栏、顶栏、指标卡、表格和筛选
-    ├── layout.tsx               # Platform Admin 应用壳
-    ├── page.tsx                 # 运营总览：八率、五时效、送达红线
-    ├── ads/page.tsx             # 广告管理
-    ├── users/page.tsx           # 用户数据
-    ├── analytics/page.tsx       # 行为分析
-    ├── invitations/page.tsx     # 用户邀请
-    └── recall/page.tsx          # 用户召回
+    ├── login/page.tsx               # 平台登录
+    ├── components.tsx               # 侧栏、顶栏、指标卡
+    ├── layout.tsx
+    ├── page.tsx                     # 运营总览
+    ├── ads/page.tsx
+    ├── users/page.tsx
+    ├── analytics/page.tsx
+    ├── invitations/page.tsx
+    ├── recall/page.tsx
+    ├── search/page.tsx
+    ├── audit/page.tsx
+    └── settings/page.tsx
 ```
 
 本地启动：
