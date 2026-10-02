@@ -26,8 +26,11 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       router.replace(`/login?next=${encodeURIComponent(pathname)}`)
       return
     }
-    api<{ user: { display_name: string } }>('/users/me')
-      .then((me) => setName(me.user.display_name))
+    api<{ user: { display_name?: string; username?: string; email?: string; phone?: string } }>('/users/me')
+      .then((me) => {
+        const user = me.user
+        setName(user.display_name || user.username || user.email || user.phone || '')
+      })
       .catch(() => undefined)
       .finally(() => setReady(true))
   }, [pathname, router])
@@ -52,10 +55,10 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
               )
             })}
           </nav>
-          <div className="flex items-center gap-3 text-sm">
-            {name && <span className="hidden max-w-24 truncate text-muted-foreground sm:inline">{name}</span>}
-            <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => void logoutSession().then(() => router.replace('/login'))}>退出</button>
-            <GuideVideo />
+          <div className="flex min-w-0 items-center gap-2 text-xs sm:gap-3 sm:text-sm">
+            <button type="button" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => void logoutSession().then(() => router.replace('/login'))}>退出</button>
+            {name && <span className="min-w-0 max-w-[6.5rem] truncate text-muted-foreground sm:max-w-32">{name}</span>}
+            <GuideVideo className="mr-3 shrink-0 sm:mr-0" />
           </div>
         </div>
       </header>

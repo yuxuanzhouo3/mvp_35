@@ -40,8 +40,9 @@ export function safeNext(value: string | null) {
 
 export function accountBody(account: string) {
   const value = account.trim()
-  if (value.includes('@')) return { email: value }
-  if (/^\+?\d{6,}$/.test(value)) return { phone: value }
+  if (value.includes('@')) return { email: value.replace(/\s/g, '').toLowerCase() }
+  const compact = value.replace(/[\s-]/g, '')
+  if (/^\+?\d{6,}$/.test(compact)) return { phone: compact }
   return { username: value }
 }
 
@@ -62,11 +63,16 @@ export async function loginAccount(account: string, password: string) {
   return data
 }
 
-export async function registerAccount(input: { account: string; password: string; displayName: string }) {
+export async function registerAccount(input: { account: string; password: string; displayName: string; code?: string }) {
   const response = await fetch('/api/v1/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...accountBody(input.account), password: input.password, display_name: input.displayName || null }),
+    body: JSON.stringify({
+      ...accountBody(input.account),
+      password: input.password,
+      display_name: input.displayName || null,
+      code: input.code || null,
+    }),
   })
   await readError(response)
   return loginAccount(input.account, input.password)
@@ -78,7 +84,16 @@ export async function forgotAccount(account: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(accountBody(account)),
   })
-  return (await readError(response)) as { accepted: boolean; reset_token?: string }
+  return (await readError(response)) as { accepted: boolean; reset_token?: string; channel?: string }
+}
+
+export async function resetWithSms(phone: string, code: string, password: string) {
+  const response = await fetch('/api/v1/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, code, password }),
+  })
+  return (await readError(response)) as { reset: boolean }
 }
 
 export async function resetAccount(token: string, password: string) {
@@ -90,13 +105,29 @@ export async function resetAccount(token: string, password: string) {
   return (await readError(response)) as { reset: boolean }
 }
 
-export async function sendLoginCode(account: string) {
+export async function sendLoginCode(account: string, purpose: 'login' | 'register' | 'reset_password' = 'login') {
   const response = await fetch('/api/v1/auth/code/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(accountBody(account)),
+    body: JSON.stringify({ ...accountBody(account), purpose }),
   })
-  return (await readError(response)) as { sent: boolean; code?: string }
+  return (await readError(response)) as { sent: boolean; code?: string; channel?: string; purpose?: string }
+}
+
+export async function wechatAuthorizeUrl() {
+  const response = await fetch('/api/v1/auth/wechat/authorize')
+  return (await readError(response)) as { url: string }
+}
+
+export async function completeWechatLogin(code: string, state: string) {
+  const response = await fetch('/api/v1/auth/oauth/wechat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, state }),
+  })
+  const data = (await readError(response)) as SessionTokens
+  writeSession(data)
+  return data
 }
 
 export async function loginWithCode(account: string, code: string) {

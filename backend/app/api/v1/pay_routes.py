@@ -2,7 +2,7 @@ from fastapi import APIRouter, Header, Request
 from pydantic import BaseModel
 
 from app.api.deps import bind, respond
-from app.modules.payment import apply_webhook, cancel_subscription, checkout, query_payment, reconcile_payments, refund
+from app.modules.payment import apply_webhook, cancel_subscription, checkout, open_channel, query_payment, reconcile_payments, refund
 from app.services.common import PLANS
 from config.flags import require_flag
 
@@ -14,6 +14,7 @@ class CheckoutIn(BaseModel):
     idempotency_key: str
     kind: str = "subscription"
     amount_fen: int | None = None
+    provider: str | None = None
 
 
 class WebhookIn(BaseModel):
@@ -40,18 +41,18 @@ class RaasIn(BaseModel):
 
 @router.post("/payments/checkout")
 def payments_checkout(request: Request, body: CheckoutIn, authorization: str | None = Header(default=None)):
-    _settings, store, prof = bind(request, authorization, write=True, permission="billing.write")
-    return respond(
-        request,
-        checkout(
-            store,
-            prof,
-            body.plan_id,
-            body.idempotency_key,
-            kind=body.kind,
-            amount_fen=body.amount_fen,
-        ),
+    settings, store, prof = bind(request, authorization, write=True, permission="billing.write")
+    payment = checkout(
+        store,
+        prof,
+        body.plan_id,
+        body.idempotency_key,
+        kind=body.kind,
+        amount_fen=body.amount_fen,
     )
+    if body.provider:
+        payment = {**payment, **open_channel(store, settings, payment, body.provider)}
+    return respond(request, payment)
 
 
 @router.post("/payments/webhook")

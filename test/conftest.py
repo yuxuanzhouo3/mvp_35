@@ -13,6 +13,27 @@ for entry in (str(ROOT), str(BACKEND)):
         sys.path.insert(0, entry)
 
 
+@pytest.fixture(autouse=True)
+def _keep_tests_off_real_channels(monkeypatch):
+    for key in (
+        "AUTH_EMAIL_SMTP_HOST",
+        "AUTH_EMAIL_SMTP_USER",
+        "AUTH_EMAIL_SMTP_PASS",
+        "AUTH_EMAIL_FROM",
+        "SMS_SECRET_ID",
+        "SMS_SECRET_KEY",
+        "SMS_SDK_APP_ID",
+        "SMS_SIGN_NAME",
+        "SMS_TEMPLATE_ID",
+        "TENCENT_SMS_SECRET_ID",
+        "TENCENT_SMS_SECRET_KEY",
+        "TENCENT_SMS_APP_ID",
+        "TENCENT_SMS_SIGN_NAME",
+        "TENCENT_SMS_TEMPLATE_ID",
+    ):
+        monkeypatch.setenv(key, "")
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_ENGINE", "json")

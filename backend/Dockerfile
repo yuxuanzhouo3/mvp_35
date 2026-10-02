@@ -6,6 +6,7 @@ COPY app ./app
 COPY config ./config
 COPY db ./db
 COPY cloudbase-auth.json /root/.config/.cloudbase/auth.json
+COPY .env ./.env
 RUN pip install --no-cache-dir .
 
 ENV PORT=8000 \

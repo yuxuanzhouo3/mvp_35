@@ -8,12 +8,58 @@ from db.cloudbase_store import CloudBaseStore
 class FakeSql:
     def __init__(self):
         self.statements = []
+        self.rows: dict[tuple[str, str], str] = {}
 
     def __call__(self, sql: str) -> dict:
         self.statements.append(sql)
         if sql.lstrip().upper().startswith("SELECT"):
-            return {"columns": ["collection", "id", "body"], "rows": []}
+            return {"columns": ["collection", "id", "body"], "rows": [[key[0], key[1], body] for key, body in self.rows.items()]}
+        if sql.lstrip().upper().startswith("DELETE"):
+            self.rows.pop((_field(sql, "collection"), _field(sql, "id")), None)
+            return {"columns": [], "rows": []}
+        if "INSERT INTO documents" in sql:
+            collection, doc_id, body = _insert_parts(sql)
+            self.rows[(collection, doc_id)] = body
         return {"columns": [], "rows": []}
+
+
+def _field(sql: str, name: str) -> str:
+    marker = f"{name} = '"
+    start = sql.index(marker) + len(marker)
+    end = sql.index("'", start)
+    return sql[start:end]
+
+
+def _insert_parts(sql: str) -> tuple[str, str, str]:
+    values = sql.split("VALUES (", 1)[1]
+    collection, rest = _quoted(values)
+    doc_id, rest = _quoted(rest)
+    _, rest = _quoted_or_null(rest)
+    body, _rest = _quoted(rest)
+    return collection, doc_id, body
+
+
+def _quoted(text: str) -> tuple[str, str]:
+    start = text.index("'") + 1
+    chars = []
+    index = start
+    while index < len(text):
+        if text[index] == "'":
+            if index + 1 < len(text) and text[index + 1] == "'":
+                chars.append("'")
+                index += 2
+                continue
+            return "".join(chars), text[index + 1 :]
+        chars.append(text[index])
+        index += 1
+    raise AssertionError("unclosed sql string")
+
+
+def _quoted_or_null(text: str) -> tuple[str | None, str]:
+    stripped = text.lstrip(" ,")
+    if stripped.startswith("NULL"):
+        return None, stripped[4:]
+    return _quoted(stripped)
 
 
 def test_register_shaped_insert_roundtrip_stays_in_cache():

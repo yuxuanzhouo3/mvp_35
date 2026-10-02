@@ -4,7 +4,17 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 
 type Plan = { id: string; name: string; amount_fen: number; period: string }
-type Payment = { id: string; amount: number; status: string; kind?: string; plan_id?: string | null; currency?: string }
+type Payment = {
+  id: string
+  amount: number
+  status: string
+  kind?: string
+  plan_id?: string | null
+  currency?: string
+  code_url?: string | null
+  pay_url?: string | null
+  message?: string
+}
 type Invoice = { id: string; amount: number; status: string; payment_id?: string }
 type Subscription = { id: string; status: string; plan_id?: string; plan?: string; period_end?: string }
 type Summary = {
@@ -43,16 +53,28 @@ export default function BillingPage() {
     load().catch((reason: Error) => setError(reason.message))
   }, [])
 
-  async function checkout(planId: string) {
+  async function checkout(planId: string, provider: 'wechat' | 'alipay') {
     setBusy(true)
     setError('')
     setNotice('')
     try {
       const payment = await api<Payment>('/payments/checkout', {
         method: 'POST',
-        body: JSON.stringify({ plan_id: planId, kind: 'subscription', idempotency_key: `plan-${planId}-${Date.now()}` }),
+        body: JSON.stringify({
+          plan_id: planId,
+          kind: 'subscription',
+          provider,
+          idempotency_key: `plan-${planId}-${provider}-${Date.now()}`,
+        }),
       })
-      setNotice(`订单 ${payment.id} 已创建，状态为${statusLabel[payment.status] || payment.status}。页面不会伪造支付成功，入账以后台签名回调为准。`)
+      const link = payment.pay_url || payment.code_url
+      const channel = provider === 'wechat' ? '微信' : '支付宝'
+      setNotice(
+        link
+          ? `${channel}订单 ${payment.id} 已创建。请完成付款，入账以后台签名回调为准。`
+          : payment.message || `${channel}订单 ${payment.id} 保持待支付，尚未入账。`,
+      )
+      if (link) window.open(link, '_blank', 'noopener,noreferrer')
       await load()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '下单失败')
@@ -82,7 +104,7 @@ export default function BillingPage() {
       <div>
         <span className="eyebrow">账单</span>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">套餐与支付</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">下单后状态是待支付。微信收款未接通。浏览器不调用支付回调，也不把待支付显示成成功。</p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">下单后状态是待支付。微信支付和支付宝只在商户配置完整后给出付款地址。浏览器不调用支付回调，也不把待支付显示成成功。</p>
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {notice && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
@@ -92,7 +114,10 @@ export default function BillingPage() {
             <h2 className="font-semibold">{plan.name}</h2>
             <p className="mt-2 text-2xl font-semibold">{yuan(plan.amount_fen)}<span className="text-sm font-normal text-muted-foreground"> / {plan.period === 'year' ? '年' : '月'}</span></p>
             {plan.amount_fen > 0 ? (
-              <button disabled={busy} className="mt-4 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50" onClick={() => void checkout(plan.id)}>下单</button>
+              <div className="mt-4 flex gap-2">
+                <button disabled={busy} className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50" onClick={() => void checkout(plan.id, 'wechat')}>微信支付</button>
+                <button disabled={busy} className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50" onClick={() => void checkout(plan.id, 'alipay')}>支付宝</button>
+              </div>
             ) : (
               <p className="mt-4 text-sm text-muted-foreground">当前默认套餐</p>
             )}

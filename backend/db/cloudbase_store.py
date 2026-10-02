@@ -20,17 +20,13 @@ class CloudBaseStore:
         self._data: dict | None = None
 
     def transaction(self, fn: Callable[[dict], Any]) -> Any:
-        data = self._ensure()
+        data = self._load()
         before = json.dumps(data, ensure_ascii=False, sort_keys=True)
-        try:
-            result = fn(data)
-            after = json.dumps(data, ensure_ascii=False, sort_keys=True)
-            if before != after:
-                self._flush(json.loads(before), data)
-            return result
-        except Exception:
-            self._data = json.loads(before)
-            raise
+        result = fn(data)
+        after = json.dumps(data, ensure_ascii=False, sort_keys=True)
+        if before != after:
+            self._flush(json.loads(before), data)
+        return result
 
     def insert(self, collection: str, doc: dict) -> dict:
         def op(data: dict) -> dict:
@@ -115,11 +111,6 @@ class CloudBaseStore:
             return doc
 
         return self.transaction(op)
-
-    def _ensure(self) -> dict:
-        if self._data is None:
-            self._data = self._load()
-        return self._data
 
     def _load(self) -> dict:
         result = self._sql("SELECT collection, id, body::text FROM documents")

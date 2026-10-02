@@ -9,6 +9,7 @@ dependencies = [
   "pydantic>=2",
   "pydantic-settings>=2",
   "uvicorn>=0.32",
+  "cryptography>=43",
 ]
 
 [project.optional-dependencies]

@@ -15,7 +15,7 @@ mvp_35/
 │       ├── pickglobal-user-guide-xiaoxiao.mp4   晓晓
 │       ├── pickglobal-user-guide-yunxi.mp4      云希
 │       ├── pickglobal-user-guide-yunjian.mp4    云健；站上拷贝在 public/guides
-│       └── frames/                              官网到后台的教程截图
+│       └── frames/                              官网到看板的教程截图，不含后台
 ├── front/                     Next.js 16 · :3000 · pickglobal-web
 │   ├── app/
 │   │   ├── layout.tsx · globals.css             全站壳与样式
