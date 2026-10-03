@@ -34,7 +34,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["app*", "config*", "db*"]
+include = ["app*", "config*", "db*", "algorithm*"]
 
 [tool.setuptools.package-data]
 db = ["sql/*/*.sql"]

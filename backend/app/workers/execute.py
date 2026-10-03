@@ -5,6 +5,9 @@ from datetime import timedelta
 from config.settings import Settings
 from db.store import DocumentStore
 
+from algorithm.feeds import prepare_market
+from algorithm.product_pricer import PRODUCT_PRICER, compare_product
+from algorithm.sources import DOMESTIC_SOURCE, OVERSEAS_SOURCE
 from app.core.errors import AppError
 from app.core.timeutil import iso, parse_iso, utcnow
 from app.modules.events import emit
@@ -112,7 +115,7 @@ def _fail(store: DocumentStore, job: dict, message: str) -> None:
 def _run(store: DocumentStore, settings: Settings, job: dict) -> dict:
     kind = job["job_type"]
     if kind == "product_import":
-        return _import(store, job)
+        return _import(store, settings, job)
     if kind == "product_analysis":
         return _analysis(store, settings, job)
     if kind == "lead_discovery":
@@ -126,9 +129,10 @@ def _run(store: DocumentStore, settings: Settings, job: dict) -> dict:
     raise AppError("UNKNOWN_JOB", "未知任务类型")
 
 
-def _import(store: DocumentStore, job: dict) -> dict:
+def _import(store: DocumentStore, settings: Settings, job: dict) -> dict:
     reader = csv.DictReader(io.StringIO(job["payload"].get("csv") or ""))
-    imported, failed, ids, errors = 0, 0, [], []
+    algorithm = (job.get("payload") or {}).get("algorithm")
+    imported, failed, ids, errors, quotes = 0, 0, [], [], []
     for index, row in enumerate(reader, start=2):
         try:
             fields = product_from_body(row, source="csv")
@@ -137,24 +141,38 @@ def _import(store: DocumentStore, job: dict) -> dict:
             )
             if existing and not existing.get("deleted_at"):
                 raise AppError("DUPLICATE_SKU", f"SKU {fields['normalized_sku']} 已存在")
+            if algorithm == PRODUCT_PRICER:
+                fields, overseas, feed = prepare_market(fields, settings)
+                quote = compare_product(fields, settings.rules_version, overseas_quotes=overseas, feed=feed)
+            else:
+                quote = None
             doc = base_doc(job["tenant_id"], job["created_by"], id=new_id("prd"), **fields)
             store.insert("products", doc)
             ids.append(doc["id"])
+            if quote is not None:
+                quotes.append({"product_id": doc["id"], **quote})
             imported += 1
         except AppError as exc:
             failed += 1
             errors.append({"line": index, "message": exc.message})
     total = imported + failed
     emit(store, job["tenant_id"], "product.imported", {"imported": imported, "failed": failed}, job["created_by"])
-    return {
+    steps = [{"key": "parse", "status": "succeeded"}, {"key": "upsert", "status": "succeeded"}]
+    result = {
         "imported": imported,
         "failed": failed,
         "total": total,
         "success_rate": None if total == 0 else round(imported / total, 4),
         "product_ids": ids,
         "errors": errors[:20],
-        "steps": [{"key": "parse", "status": "succeeded"}, {"key": "upsert", "status": "succeeded"}],
+        "steps": steps,
     }
+    if algorithm == PRODUCT_PRICER:
+        steps.append({"key": "price_compare", "status": "succeeded"})
+        result["algorithm"] = PRODUCT_PRICER
+        result["sources"] = {"domestic": DOMESTIC_SOURCE, "overseas": OVERSEAS_SOURCE}
+        result["quotes"] = quotes
+    return result
 
 
 def _analysis(store: DocumentStore, settings: Settings, job: dict) -> dict:

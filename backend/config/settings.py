@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     worker_token: str = "demo-worker"
     quality_threshold: int = 60
     rules_version: str = "pg-rules-1.0"
+    fx_api_url: str = "https://api.frankfurter.dev/v1/latest"
+    pricer_api_url: str = ""
+    pricer_api_key: str = ""
     prompt_version: str = "prompt-v1"
     session_secret: str = "demo-session-secret"
     access_ttl_seconds: int = 3600

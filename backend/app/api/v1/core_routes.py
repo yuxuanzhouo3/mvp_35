@@ -1,12 +1,13 @@
 from fastapi import APIRouter, BackgroundTasks, Header, Request
 from pydantic import BaseModel
 
+from algorithm.selection_assist import catalog_payload
 from app.api.deps import bind, respond
 from app.modules.acquisition import enqueue_recall, open_acquisition_task, score_lead
 from app.modules.jobs import enqueue_tenant_job
 from app.modules.kpi_view import build_dashboard
 from app.modules.selection import mark_acquired, present_report
-from app.services.common import require_doc, search_catalog
+from app.services.common import require_doc
 from app.workers.execute import execute_job
 from config.flags import load_flags, require_flag
 
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/api/v1")
 
 class CatalogIn(BaseModel):
     q: str = ""
+    algorithm: str | None = None
 
 
 class CsvIn(BaseModel):
@@ -54,8 +56,8 @@ def feature_flags(request: Request):
 
 @router.post("/catalog/search")
 def catalog_search(request: Request, body: CatalogIn, authorization: str | None = Header(default=None)):
-    bind(request, authorization)
-    return respond(request, {"items": search_catalog(body.q)})
+    settings, _store, _prof = bind(request, authorization)
+    return respond(request, catalog_payload(body.q, body.algorithm, settings.rules_version))
 
 
 @router.post("/products/import", status_code=202)

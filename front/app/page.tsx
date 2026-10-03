@@ -95,7 +95,7 @@ export default function Page() {
       })
   }, [])
   function openChannel(code: string, id: string) {
-    const next = `/workspace/acquire?channel=${id}`
+    const next = `/workspace/acquire/${id}`
     if (accessToken()) {
       router.push(next)
       return

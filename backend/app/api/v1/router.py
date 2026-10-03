@@ -4,6 +4,8 @@ from fastapi import APIRouter, BackgroundTasks, Header, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from algorithm.product_pricer import assert_product_pricer
+from algorithm.selection_assist import catalog_payload
 from app.api.deps import bind
 from app.core.errors import AppError
 from app.core.timeutil import iso
@@ -268,11 +270,8 @@ def create_router() -> APIRouter:
 
     @router.get("/catalog/search")
     def catalog_search(request: Request, q: str = "", algorithm: str | None = None, authorization: str | None = Header(default=None)):
-        ctx(request, authorization)
-        payload = {"items": search_catalog(q)}
-        if algorithm == "selection-assist":
-            payload["algorithm"] = algorithm
-        return respond(request, payload)
+        settings, _store, _prof = ctx(request, authorization)
+        return respond(request, catalog_payload(q, algorithm, settings.rules_version))
 
     @router.post("/catalog/adopt")
     def catalog_adopt(request: Request, body: AdoptIn, authorization: str | None = Header(default=None)):
@@ -351,8 +350,9 @@ def create_router() -> APIRouter:
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
         settings, store, prof = ctx(request, authorization, write=True)
+        assert_product_pricer(body.algorithm)
         payload = {"csv": body.csv}
-        if body.algorithm == "product-pricer":
+        if body.algorithm:
             payload["algorithm"] = body.algorithm
         job = start_job(store, settings, prof, "product_import", payload, None, idempotency_key)
         if job["status"] == "queued":

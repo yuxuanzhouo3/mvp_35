@@ -1,8 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { api, waitJob } from '@/lib/api'
+import { api, percent, waitJob } from '@/lib/api'
 import { ProductLibrary } from '@/components/product-library'
+import { ReportDialog } from '@/components/report-dialog'
+
+type Selection = {
+  pick: boolean
+  score: number
+  net_margin: string
+  risk_level: string
+  reason: string
+}
 
 type CatalogItem = {
   id: string
@@ -12,6 +21,37 @@ type CatalogItem = {
   cost_cny: string
   target_price_usd: string
   supplier: string
+  selection?: Selection
+}
+
+type Quote = {
+  sku: string
+  name: string
+  listed_price_usd: string
+  recommended_price_usd: string
+  floor_price_usd: string
+  position: string
+  advice: string
+  domestic: { median: string | null; currency: string; count: number }
+  overseas: { median: string | null; currency: string; market: string; count: number }
+  report: {
+    profit: { net_margin: string; net_profit_usd?: string }
+    tax?: { tax_usd: string }
+    time?: { transit_days_min: number; transit_days_max: number }
+    risk: { risk_level: string }
+  }
+  market_feed?: {
+    strategy: string
+    fx?: { provider: string; rate?: string; used?: boolean }
+    offers?: { provider: string; count?: number }
+  }
+}
+
+const positionLabel: Record<string, string> = {
+  below_market: '低于海外中位',
+  in_band: '贴近海外中位',
+  above_market: '高于海外中位',
+  no_overseas_comp: '无海外报价',
 }
 
 const emptyForm = {
@@ -33,6 +73,32 @@ const emptyForm = {
   hs_code_hint: '',
 }
 
+function tsvToCsv(text: string) {
+  return text.split(/\r?\n/).map((line) => {
+    if (!line.includes('\t')) return line
+    return line.split('\t').map((cell) => {
+      const value = cell.trim()
+      return /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+    }).join(',')
+  }).join('\n')
+}
+
+async function spreadsheetToCsv(file: File) {
+  const name = file.name.toLowerCase()
+  if (/\.(xlsx|xls|xlsm)$/.test(name)) {
+    const XLSX = await import('xlsx')
+    const book = XLSX.read(await file.arrayBuffer())
+    const sheet = book.Sheets[book.SheetNames[0]]
+    if (!sheet) throw new Error('这个表格没有工作表')
+    const text = XLSX.utils.sheet_to_csv(sheet)
+    if (!text.trim()) throw new Error('这个表格是空的')
+    return text
+  }
+  const text = await file.text()
+  if (name.endsWith('.tsv') || (text.includes('\t') && !text.slice(0, 400).includes(','))) return tsvToCsv(text)
+  return text
+}
+
 export default function ProductsPage() {
   const [tab, setTab] = useState<'own' | 'catalog'>('own')
   const [form, setForm] = useState(emptyForm)
@@ -44,6 +110,9 @@ export default function ProductsPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [quotes, setQuotes] = useState<Quote[]>([])
+  const [quoteOpen, setQuoteOpen] = useState(false)
+  const [quoteIndex, setQuoteIndex] = useState(0)
 
   function setField(key: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }))
@@ -68,7 +137,7 @@ export default function ProductsPage() {
       <div>
         <span className="eyebrow">路径 A · 选品与分析报告</span>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">双向入口，同一商品库</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">手动、CSV 或国内货源目录都会写入 products。默认货源中国、目标美国、中美税、成本人民币、售价美元。改市场后必须重新分析。</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">手动、表格文件或国内货源目录都会写入 products。表格支持 CSV、TSV 和 Excel。默认货源中国、目标美国、中美税、成本人民币、售价美元。改市场后必须重新分析。</p>
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>}
@@ -117,45 +186,75 @@ export default function ProductsPage() {
               const created = await api<{ job_id: string }>('/products/imports', { method: 'POST', body: JSON.stringify({ csv, algorithm: 'product-pricer' }) })
               const job = await waitJob(created.job_id)
               if (job.status === 'failed') throw new Error(job.error?.message || '导入失败')
-              setMessage(`CSV 导入完成：成功 ${job.result?.imported ?? 0}，失败 ${job.result?.failed ?? 0}。`)
+              const priced = job.result as { imported?: number; failed?: number; quotes?: Quote[] } | null
+              const next = priced?.quotes ?? []
+              setQuotes(next)
+              setQuoteIndex(0)
+              setQuoteOpen(next.length > 0)
+              setMessage(`表格导入完成：成功 ${priced?.imported ?? 0}，失败 ${priced?.failed ?? 0}。定价算法已比对国内外报价。`)
             })
           }}>
-            <h2 className="font-semibold">CSV 导入</h2>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">表头至少包含 sku、name、cost_cny、target_price_usd。可以粘贴，也可以上传文件。任务返回 202，由 worker 入库。</p>
+            <h2 className="font-semibold">表格导入</h2>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">表头至少包含 sku、name、cost_cny、target_price_usd。可粘贴 CSV，或上传 CSV、TSV、Excel（.xlsx / .xls）。任务返回 202，由 worker 入库。</p>
             <textarea className="mt-3 h-40 w-full rounded-xl border border-border bg-background p-3 font-mono text-xs" value={csv} onChange={(event) => setCsv(event.target.value)} />
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <label className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-border px-3 text-sm">
                 上传文件
                 <input
                   type="file"
-                  accept=".csv,text/csv,text/plain"
+                  accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,text/csv,text/tab-separated-values,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="sr-only"
                   onChange={(event) => {
                     const file = event.target.files?.[0]
+                    event.target.value = ''
                     if (!file) return
                     setCsvFile(file.name)
-                    file.text().then((text) => setCsv(text)).catch(() => setError('无法读取这个文件'))
+                    void spreadsheetToCsv(file).then((text) => setCsv(text)).catch((reason: Error) => setError(reason.message || '无法读取这个文件'))
                   }}
                 />
               </label>
               <button disabled={busy} className="min-h-9 rounded-lg bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50">开始导入</button>
               {csvFile && <span className="text-xs text-muted-foreground">{csvFile}</span>}
             </div>
-            <AlgorithmHold
+            <AlgorithmPanel
               title="国内外商品定价"
               algorithm="product-pricer"
-              copy="这里只留给即将接入的定价算法和国内外商品 pricer API。导入只提交这一路，不带选品算法。"
+              copy="导入只提交 product-pricer。比价读取国内与海外报价，不带选品算法。"
+              sources={[
+                ['国内报价', '/api/v1/sources/pricer/domestic'],
+                ['海外报价', '/api/v1/sources/pricer/overseas'],
+              ]}
             />
+            <button
+              type="button"
+              disabled={busy}
+              className="mt-3 min-h-9 rounded-lg border border-border px-3 text-sm disabled:opacity-50"
+              onClick={() => {
+                void run(async () => {
+                  const priced = await api<{ items: Quote[] }>('/algorithms/product-pricer', { method: 'POST', body: JSON.stringify({ csv }) })
+                  setQuotes(priced.items)
+                  setQuoteIndex(0)
+                  setQuoteOpen(priced.items.length > 0)
+                  setMessage(priced.items.length ? `已比对 ${priced.items.length} 条售价。` : '没有可比对的商品行。')
+                })
+              }}
+            >先比价，不入库</button>
+            {quotes.length > 0 && (
+              <button type="button" className="mt-3 text-sm text-primary" onClick={() => setQuoteOpen(true)}>
+                阅读利润报告（{quotes.length}）
+              </button>
+            )}
           </form>
         </div>
       ) : (
         <div className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-semibold">国内货源目录</h2>
-          <p className="mt-2 text-xs text-muted-foreground">当前是演示目录。选品算法和外部货源 API 还在占位，搜索只带这一路。</p>
-          <AlgorithmHold
+          <p className="mt-2 text-xs text-muted-foreground">搜索只带 selection-assist，按利润率、时效和风险排序。不带定价接口。</p>
+          <AlgorithmPanel
             title="帮我选品"
             algorithm="selection-assist"
-            copy="这里只留给即将接入的选品算法和货源 API。搜索只提交这一路，不带定价接口。"
+            copy="排序读取货源目录，金额仍由规则引擎计算。利润率达到 15% 且风险不是高的商品优先。"
+            sources={[['货源目录', '/api/v1/sources/catalog']]}
           />
           <div className="mt-3 flex gap-2">
             <input className="w-full max-w-xs rounded-lg border border-border px-3 py-2 text-sm" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索货源" />
@@ -172,6 +271,12 @@ export default function ProductsPage() {
                 <h3 className="font-medium">{item.name}</h3>
                 <p className="mt-1 text-xs text-muted-foreground">{item.supplier} · {item.sku}</p>
                 <p className="mt-2 text-sm">成本 ¥{item.cost_cny} · 参考售价 ${item.target_price_usd}</p>
+                {item.selection && (
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    {item.selection.pick ? '优先' : '暂缓'} · 机会分 {item.selection.score} · 利润率 {item.selection.net_margin} · 风险 {item.selection.risk_level}
+                    <span className="mt-1 block">{item.selection.reason}</span>
+                  </p>
+                )}
                 <button disabled={busy} className="mt-3 text-sm text-primary" onClick={() => {
                   void run(async () => {
                     await api('/catalog/adopt', { method: 'POST', body: JSON.stringify({ catalog_id: item.id }) })
@@ -182,6 +287,17 @@ export default function ProductsPage() {
             ))}
           </div>
         </div>
+      )}
+      {quoteOpen && quotes[quoteIndex] && (
+        <ReportDialog title="利润报告" onClose={() => setQuoteOpen(false)}>
+          <ProfitReport
+            quote={quotes[quoteIndex]}
+            index={quoteIndex}
+            total={quotes.length}
+            onPrev={() => setQuoteIndex((current) => Math.max(0, current - 1))}
+            onNext={() => setQuoteIndex((current) => Math.min(quotes.length - 1, current + 1))}
+          />
+        </ReportDialog>
       )}
       <div>
         <h2 className="text-lg font-semibold">已入库商品</h2>
@@ -194,13 +310,59 @@ export default function ProductsPage() {
   )
 }
 
-function AlgorithmHold({ title, algorithm, copy }: { title: string; algorithm: string; copy: string }) {
+function ProfitReport({
+  quote,
+  index,
+  total,
+  onPrev,
+  onNext,
+}: {
+  quote: Quote
+  index: number
+  total: number
+  onPrev: () => void
+  onNext: () => void
+}) {
+  const fx = quote.market_feed?.fx
+  const offers = quote.market_feed?.offers
   return (
-    <div className="mt-4 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4">
-      <p className="text-xs font-semibold text-primary">算法占位</p>
+    <div className="text-sm leading-6">
+      <p className="font-medium">{quote.name} · {quote.sku}</p>
+      <p className="mt-1 text-xs text-muted-foreground">竞争中位价，且不低于 15% 成本加成。汇率 {fx?.used ? `Frankfurter ${fx.rate}` : fx?.rate || '商品汇率'}。货架价 {offers?.provider === 'global-pricer' ? '全球商品动态报价' : '本地报价本'}。</p>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <p>标价 <span className="font-semibold">${quote.listed_price_usd}</span></p>
+        <p>建议 <span className="font-semibold">${quote.recommended_price_usd}</span></p>
+        <p>利润线 <span className="font-semibold">${quote.floor_price_usd}</span></p>
+        <p>利润率 <span className="font-semibold">{percent(quote.report.profit.net_margin)}</span></p>
+        <p>国内中位 {quote.domestic.median ? `¥${quote.domestic.median}` : '—'}</p>
+        <p>{quote.overseas.market} 中位 {quote.overseas.median ? `$${quote.overseas.median}` : '—'}</p>
+        <p>位置 {positionLabel[quote.position] || quote.position}</p>
+        <p>风险 {quote.report.risk.risk_level}</p>
+      </div>
+      <p className="mt-4">{quote.advice}</p>
+      {total > 1 && (
+        <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+          <button type="button" className="rounded-lg border border-border px-2 py-1" onClick={onPrev} disabled={index === 0}>上一条</button>
+          <span>{index + 1} / {total}</span>
+          <button type="button" className="rounded-lg border border-border px-2 py-1" onClick={onNext} disabled={index === total - 1}>下一条</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AlgorithmPanel({ title, algorithm, copy, sources }: { title: string; algorithm: string; copy: string; sources: [string, string][] }) {
+  return (
+    <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+      <p className="text-xs font-semibold text-primary">算法</p>
       <p className="mt-1 text-sm font-medium">{title}</p>
       <p className="mt-1 text-xs leading-5 text-muted-foreground">{copy}</p>
-      <p className="mt-2 font-mono text-[11px] text-muted-foreground">即将接入 · {algorithm}</p>
+      <p className="mt-2 font-mono text-[11px] text-muted-foreground">{algorithm}</p>
+      <ul className="mt-2 space-y-1">
+        {sources.map(([label, path]) => (
+          <li key={path} className="font-mono text-[11px] text-muted-foreground">{label} {path}</li>
+        ))}
+      </ul>
     </div>
   )
 }
