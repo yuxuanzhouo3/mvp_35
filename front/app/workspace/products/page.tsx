@@ -71,7 +71,7 @@ const emptyForm = {
   cost_cny: '72',
   packaging_cny: '4',
   domestic_freight_cny: '6',
-  international_freight_usd: '0',
+  international_freight_usd: '3.2',
   target_price_usd: '39',
   origin_country: 'CN',
   target_market: 'CN',
@@ -156,7 +156,7 @@ export default function ProductsPage() {
       <div>
         <span className="eyebrow">路径 A · 选品与分析报告</span>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">双向入口，同一商品库</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">手动、表格文件或国内货源目录都会写入同一个商品库。表格支持 CSV、TSV 和 Excel。默认是国内销售。也可以选中国到美国、香港或澳大利亚，或把路线倒过来，从美国到中国。改路线后必须重新分析。</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">手动、表格文件或国内货源目录都会写入 products。表格支持 CSV、TSV 和 Excel。默认国内销售。路线可以选中国到美国、香港、澳大利亚，或从美国到中国。改市场后必须重新分析。</p>
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>}
@@ -239,7 +239,11 @@ export default function ProductsPage() {
               <button disabled={busy} className="min-h-9 rounded-lg bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50">开始导入</button>
               {csvFile && <span className="text-xs text-muted-foreground">{csvFile}</span>}
             </div>
-            <p className="mt-4 text-xs leading-5 text-muted-foreground">先比价会对照货架价给出建议售价，并保证不低于 15% 利润线。比价结果不入库。</p>
+            <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+              <p className="text-xs font-semibold text-primary">算法</p>
+              <p className="mt-1 text-sm font-medium">国内外商品定价</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">比价对照货架价给出建议售价，不低于 15% 利润线。先比价不入库。</p>
+            </div>
             <button
               type="button"
               disabled={busy}
@@ -264,7 +268,12 @@ export default function ProductsPage() {
       ) : (
         <div className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-semibold">国内货源目录</h2>
-          <p className="mt-2 text-xs text-muted-foreground">按利润率、时效和风险排序。利润率达到 15% 且风险不是高的商品优先。金额仍由规则引擎计算。</p>
+          <p className="mt-2 text-xs text-muted-foreground">搜索只带选品排序，按利润率、时效和风险排序。不带定价接口。</p>
+          <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+            <p className="text-xs font-semibold text-primary">算法</p>
+            <p className="mt-1 text-sm font-medium">帮我选品</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">利润率达到 15% 且风险不是高的商品优先。金额仍由规则引擎计算。</p>
+          </div>
           <div className="mt-3 flex gap-2">
             <input className="w-full max-w-xs rounded-lg border border-border px-3 py-2 text-sm" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索货源" />
             <button className="inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-lg border border-border px-3 text-sm" onClick={() => {
