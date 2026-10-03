@@ -29,6 +29,7 @@ type Invoice = { id: string; amount: number; status: string; payment_id?: string
 type Subscription = { id: string; status: string; plan_id?: string; plan?: string; period_end?: string }
 type Summary = {
   plans: Plan[]
+  payment_testing?: boolean
   subscription: { items: Subscription[] }
   payments: { items: Payment[] }
   invoices: { items: Invoice[] }
@@ -162,6 +163,8 @@ export default function BillingPage() {
         <span className="eyebrow">账单</span>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">套餐与支付</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">下单后状态是待支付。微信支付和支付宝只在商户配置完整后给出付款地址。浏览器不调用支付回调，也不把待支付显示成成功。</p>
+        {summary?.payment_testing && <p className="mt-2 text-sm text-muted-foreground">当前是支付测试，付费套餐实付 0.10 元。</p>}
+        {!summary && !error && <p className="mt-4 text-sm text-muted-foreground">正在加载账单…</p>}
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {notice && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}

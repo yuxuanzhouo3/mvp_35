@@ -98,6 +98,47 @@ def test_soft_delete_is_hidden_and_tenant_filter_holds():
     assert [item["id"] for item in listed["items"]] == ["p2"]
 
 
+def test_repeated_reads_do_not_reload_the_table():
+    sql = FakeSql()
+    store = CloudBaseStore("env-test", execute=sql)
+    store.insert("users", {"id": "user_1", "tenant_id": "tenant_1", "email": "a@b.c", "deleted_at": None})
+    selects = sum(1 for item in sql.statements if item.lstrip().upper().startswith("SELECT"))
+    store.query("users")
+    store.get("users", "user_1")
+    store.find_global("users", email="a@b.c")
+    again = sum(1 for item in sql.statements if item.lstrip().upper().startswith("SELECT"))
+    assert again == selects
+
+
+def test_billing_read_loads_only_hot_collections():
+    seen = []
+
+    def execute(sql: str) -> dict:
+        seen.append(sql)
+        return {"columns": ["collection", "id", "body"], "rows": []}
+
+    store = CloudBaseStore("env-test", execute=execute)
+    store.query("payments", tenant_id="tenant_1")
+    store.get("users", "user_1")
+    assert len(seen) == 1
+    assert "WHERE collection IN" in seen[0]
+    assert "audit_logs" not in seen[0]
+
+
+def test_job_claim_loads_the_rest_of_the_table():
+    seen = []
+
+    def execute(sql: str) -> dict:
+        seen.append(sql)
+        return {"columns": ["collection", "id", "body"], "rows": []}
+
+    store = CloudBaseStore("env-test", execute=execute)
+    store.get("users", "user_1")
+    store.get("jobs", "job_1")
+    assert "WHERE collection IN" in seen[0]
+    assert "WHERE collection NOT IN" in seen[1]
+
+
 def test_load_reads_remote_body_json():
     body = {"id": "user_9", "tenant_id": "tenant_9", "email": "remote@b.c", "deleted_at": None}
 

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Header, Request
 from pydantic import BaseModel
 
 from app.api.deps import bind, respond
-from app.modules.payment import apply_webhook, cancel_subscription, checkout, open_channel, query_payment, reconcile_payments, refund
+from app.modules.payment import apply_webhook, cancel_subscription, checkout, listed_amount, open_channel, query_payment, reconcile_payments, refund
 from app.services.common import PLANS
 from config.flags import require_flag
 
@@ -51,6 +51,7 @@ def payments_checkout(request: Request, body: CheckoutIn, authorization: str | N
         body.idempotency_key,
         kind=body.kind,
         amount_fen=body.amount_fen,
+        settings=settings,
     )
     if body.provider:
         payment = {
@@ -119,12 +120,13 @@ def list_invoices(request: Request, authorization: str | None = Header(default=N
 @router.get("/billing/summary")
 def billing_summary(request: Request, authorization: str | None = Header(default=None)):
     """One read for the payment screen: plans, subscription, payments, invoices."""
-    _settings, store, prof = bind(request, authorization, permission="billing.write")
+    settings, store, prof = bind(request, authorization, permission="billing.write")
     tenant_id = prof["tenant"]["id"]
     return respond(
         request,
         {
-            "plans": PLANS,
+            "plans": [{**plan, "amount_fen": listed_amount(settings, plan["amount_fen"])} for plan in PLANS],
+            "payment_testing": int(settings.payment_test_amount_fen or 0) > 0,
             "subscription": store.query("subscriptions", tenant_id=tenant_id, limit=5),
             "payments": store.query("payments", tenant_id=tenant_id, limit=20),
             "invoices": store.query("invoices", tenant_id=tenant_id, limit=20),

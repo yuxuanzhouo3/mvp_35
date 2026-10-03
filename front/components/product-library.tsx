@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import { api, waitJob } from '@/lib/api'
 
 type Product = {
@@ -15,6 +16,7 @@ type Product = {
 
 export function ProductLibrary() {
   const router = useRouter()
+  const pathname = usePathname()
   const [q, setQ] = useState('')
   const [items, setItems] = useState<Product[]>([])
   const [error, setError] = useState('')
@@ -62,11 +64,17 @@ export function ProductLibrary() {
           placeholder="按名称或 SKU 搜索"
           aria-label="搜索商品"
         />
-        <button disabled={busy} className="min-h-12 rounded-xl bg-primary px-5 text-base text-primary-foreground disabled:opacity-50">
+        <button disabled={busy} className="inline-flex min-h-12 shrink-0 items-center justify-center whitespace-nowrap rounded-xl bg-primary px-6 text-base font-medium text-primary-foreground disabled:opacity-50">
           搜索
         </button>
       </form>
-      {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
+      {error === '需要登录' ? (
+        <Link href={`/login?next=${encodeURIComponent(pathname || '/')}`} className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive underline">
+          需要登录
+        </Link>
+      ) : error ? (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>
+      ) : null}
       {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>}
       <div className="grid gap-3">
         {items.map((product) => (

@@ -5,15 +5,15 @@ import { useSearchParams } from 'next/navigation'
 import { api, waitJob } from '@/lib/api'
 
 const channels = [
-  { id: 'ecommerce', label: 'B1 电商', platforms: ['amazon', 'temu', 'walmart', 'taobao', 'pinduoduo'] },
-  { id: 'social', label: 'B2 社交', platforms: ['linkedin', 'facebook', 'wechat_mini', 'douyin', 'xiaohongshu', 'kuaishou'] },
-  { id: 'expo', label: 'B3 展会', platforms: ['online_expo'] },
-  { id: 'agency', label: 'B4 代理', platforms: ['agent_1', 'agent_2', 'agent_3'] },
-  { id: 'enrichment', label: 'B5 大数据', platforms: ['qichacha', 'tianyancha'] },
-  { id: 'geo_seo', label: 'B6 GEO/SEO', platforms: ['landing'] },
-  { id: 'content_dh', label: 'B7 内容/数智人', platforms: ['content_factory', 'digital_human_placeholder', 'offline_qr'] },
-  { id: 'cross_border', label: 'B8 跨境元素', platforms: ['cn_us', 'cn_hk', 'cn_au', 'domestic'] },
-  { id: 'raas', label: 'B9 RaaS', platforms: ['site_success', 'app_account'] },
+  { id: 'ecommerce', code: 'B1', name: '电商平台', copy: 'Amazon、Temu、Walmart、淘宝、拼多多', platforms: ['amazon', 'temu', 'walmart', 'taobao', 'pinduoduo'] },
+  { id: 'social', code: 'B2', name: '社交平台', copy: 'LinkedIn、Facebook、微信、抖音、小红书、快手', platforms: ['linkedin', 'facebook', 'wechat_mini', 'douyin', 'xiaohongshu', 'kuaishou'] },
+  { id: 'expo', code: 'B3', name: '线上展会', copy: '会期集中发现，会后冷启或召回', platforms: ['online_expo'] },
+  { id: 'agency', code: 'B4', name: '代理渠道', copy: '渠道子账户获客，分成与线索账分开', platforms: ['agent_1', 'agent_2', 'agent_3'] },
+  { id: 'enrichment', code: 'B5', name: '智慧大脑', copy: '企查查、天眼查去重、打分并留痕', platforms: ['qichacha', 'tianyancha'] },
+  { id: 'geo_seo', code: 'B6', name: 'GEO / SEO', copy: '落地页归因，不另开线索主表', platforms: ['landing'] },
+  { id: 'content_dh', code: 'B7', name: '内容与数智人', copy: '内容任务和扫码获客', platforms: ['content_factory', 'digital_human_placeholder', 'offline_qr'] },
+  { id: 'cross_border', code: 'B8', name: '跨境元素', copy: '中美、中港、中澳与内陆', platforms: ['cn_us', 'cn_hk', 'cn_au', 'domestic'] },
+  { id: 'raas', code: 'B9', name: 'RaaS', copy: '官网抽成和账户销售，单独入账', platforms: ['site_success', 'app_account'] },
 ]
 
 type Lead = {
@@ -38,9 +38,11 @@ export default function AcquirePage() {
 }
 
 function AcquireDesk() {
-  const seed = useSearchParams().get('seed_analysis_id') || ''
-  const [channel, setChannel] = useState(channels[0])
-  const [platform, setPlatform] = useState(channels[0].platforms[0])
+  const params = useSearchParams()
+  const seed = params.get('seed_analysis_id') || ''
+  const requested = channels.find((item) => item.id === params.get('channel')) || channels[0]
+  const [channel, setChannel] = useState(requested)
+  const [platform, setPlatform] = useState(requested.platforms[0])
   const [leads, setLeads] = useState<Lead[]>([])
   const [picked, setPicked] = useState<string[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -63,6 +65,14 @@ function AcquireDesk() {
     setActivation(activationData.items)
     setRecall(recallData.items)
   }
+
+  const channelId = params.get('channel')
+  useEffect(() => {
+    const next = channels.find((item) => item.id === channelId)
+    if (!next) return
+    setChannel(next)
+    setPlatform(next.platforms[0])
+  }, [channelId])
 
   useEffect(() => {
     reload().catch((reason: Error) => setError(reason.message))
@@ -87,7 +97,7 @@ function AcquireDesk() {
     <div className="flex flex-col gap-6">
       <div>
         <span className="eyebrow">路径 B · 九路获客</span>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">线索、触达、成交与召回</h1>
+        <h1 className="mt-2 text-4xl font-semibold tracking-tight">线索、触达、成交与召回</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
           九路进入同一线索池。触达顺序是生成草稿、人工批准、再发送。冷启和召回由规则入队。B9 抽成单独入账，不混进普通获客率。
           {seed ? ` 当前种子报告 ${seed}。` : ''}
@@ -96,18 +106,23 @@ function AcquireDesk() {
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>}
 
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="font-semibold">发现线索</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
+      <section className="rounded-3xl border border-border bg-card p-6 md:p-8">
+        <h2 className="text-xl font-semibold">发现线索 · {channel.code} {channel.name}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{channel.copy}</p>
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {channels.map((item) => (
-            <button key={item.id} className={`rounded-lg px-2.5 py-1.5 text-xs ${channel.id === item.id ? 'bg-primary text-primary-foreground' : 'border border-border'}`} onClick={() => { setChannel(item); setPlatform(item.platforms[0]) }}>{item.label}</button>
+            <button key={item.id} className={`min-h-24 rounded-2xl px-4 py-4 text-left ${channel.id === item.id ? 'bg-primary text-primary-foreground' : 'border border-border bg-background hover:border-primary/40'}`} onClick={() => { setChannel(item); setPlatform(item.platforms[0]) }}>
+              <span className={`text-xs font-semibold ${channel.id === item.id ? 'text-primary-foreground/80' : 'text-primary'}`}>{item.code}</span>
+              <span className="mt-2 block text-base font-semibold">{item.name}</span>
+              <span className={`mt-1 block text-xs leading-5 ${channel.id === item.id ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>{item.copy}</span>
+            </button>
           ))}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <select className="rounded-lg border border-border bg-background px-2 py-2 text-sm" value={platform} onChange={(event) => setPlatform(event.target.value)} aria-label="平台">
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <select className="min-h-11 rounded-xl border border-border bg-background px-3 text-sm" value={platform} onChange={(event) => setPlatform(event.target.value)} aria-label="平台">
             {channel.platforms.map((item) => <option key={item}>{item}</option>)}
           </select>
-          <button disabled={busy} className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50" onClick={() => {
+          <button disabled={busy} className="min-h-11 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => {
             void run(async () => {
               const created = await api<{ job_id: string }>('/lead-searches', {
                 method: 'POST',

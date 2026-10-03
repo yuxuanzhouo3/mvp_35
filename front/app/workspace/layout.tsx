@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Globe2 } from 'lucide-react'
 import { GuideVideo } from '@/components/guide-video'
+import { AdSlot } from '@/components/ad-slot'
 import { api } from '@/lib/api'
 import { accessToken, logoutSession } from '@/lib/session'
 
@@ -23,17 +24,27 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!accessToken()) {
+      setReady(false)
       router.replace(`/login?next=${encodeURIComponent(pathname)}`)
       return
     }
+    setReady(true)
+  }, [pathname, router])
+
+  useEffect(() => {
+    if (!accessToken()) return
+    let cancelled = false
     api<{ user: { display_name?: string; username?: string; email?: string; phone?: string } }>('/users/me')
       .then((me) => {
+        if (cancelled) return
         const user = me.user
         setName(user.display_name || user.username || user.email || user.phone || '')
       })
       .catch(() => undefined)
-      .finally(() => setReady(true))
-  }, [pathname, router])
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-background pb-28 md:pb-0">
@@ -62,7 +73,16 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           </div>
         </div>
       </header>
-      <div className="container py-6 md:py-8">{ready ? children : <p className="text-sm text-muted-foreground">正在确认登录</p>}</div>
+      <div className="container py-6 md:py-8">
+        {ready ? (
+          <>
+            <AdSlot placement="dashboard_top" className="mb-5 max-md:mb-4" />
+            {children}
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">正在确认登录</p>
+        )}
+      </div>
       <nav className="phone-dock md:hidden" aria-label="手机导航">
         {links.map(([href, label]) => {
           const active = href === '/workspace' ? pathname === href : pathname.startsWith(href)

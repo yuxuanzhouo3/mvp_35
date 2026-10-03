@@ -107,6 +107,59 @@ def test_platform_admin_login_and_operator_actions(client: TestClient):
     assert segment.status_code == 200, segment.text
     assert client.get("/api/v1/admin/segments", headers=headers).json()["data"]["items"][0]["name"] == "活跃管理员"
 
+    for account in (
+        {"email": "seller-a@gmail.com", "password": "secret-pass", "display_name": "邮箱甲"},
+        {"email": "seller-b@163.com", "password": "secret-pass", "display_name": "邮箱乙"},
+        {"phone": "15700006704", "password": "secret-pass", "display_name": "手机甲"},
+        {"phone": "18800001556", "password": "secret-pass", "display_name": "手机乙"},
+    ):
+        created_user = client.post("/api/v1/auth/register", json=account)
+        assert created_user.status_code == 200, created_user.text
+    listed = client.get("/api/v1/admin/users", headers=headers)
+    assert listed.status_code == 200, listed.text
+    body = listed.json()["data"]
+    emails = {item.get("email_masked") for item in body["items"]}
+    phones = {item.get("phone_masked") for item in body["items"]}
+    assert {"se***@gmail.com", "se***@163.com"} <= emails
+    assert {"157****6704", "188****1556"} <= phones
+    assert body["total"] >= 5
+    assert "seller-a@gmail.com" not in listed.text
+    assert "15700006704" not in listed.text
+    summary = client.get("/api/v1/admin/users/summary", headers=headers)
+    assert summary.json()["data"]["users"] >= 5
+    phone_user = next(item for item in body["items"] if item.get("phone_masked") == "157****6704")
+    detail = client.get(f"/api/v1/admin/users/{phone_user['id']}", headers=headers)
+    assert detail.json()["data"]["phone_masked"] == "157****6704"
+    assert "15700006704" not in detail.text
+
+    opened = client.post(
+        "/api/v1/admin/ads",
+        headers=headers,
+        json={"title": "官网中部", "placement": "home_mid_banner", "media_type": "image"},
+    )
+    banner_id = opened.json()["data"]["id"]
+    missing = client.post(f"/api/v1/admin/ads/{banner_id}/status", headers=headers, json={"status": "active"})
+    assert missing.status_code == 400
+    internal = client.post(
+        f"/api/v1/admin/ads/{banner_id}/status",
+        headers=headers,
+        json={"status": "active", "link_url": "https://pickglobal.mornscience.top/login"},
+    )
+    assert internal.status_code == 400
+    published = client.post(
+        f"/api/v1/admin/ads/{banner_id}/status",
+        headers=headers,
+        json={"status": "active", "link_url": "https://shop.example.com/campaign"},
+    )
+    assert published.status_code == 200, published.text
+    placed = client.get("/api/v1/placements/home_mid_banner")
+    assert placed.status_code == 200
+    assert placed.json()["data"]["ad"]["title"] == "官网中部"
+    assert placed.json()["data"]["ad"]["link_url"] == "https://shop.example.com/campaign"
+    clicked = client.post(f"/api/v1/ads/{banner_id}/click")
+    assert clicked.status_code == 200
+    assert clicked.json()["data"]["href"] == "https://shop.example.com/campaign"
+
     invitation = client.post("/api/v1/admin/invitations", headers=headers, json={"name": "伙伴计划"})
     invitation_id = invitation.json()["data"]["id"]
     assert invitation.json()["data"]["share_path"] == f"/invite/{invitation_id}"

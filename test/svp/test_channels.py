@@ -103,6 +103,41 @@ def test_alipay_books_only_after_rsa2(client: TestClient):
     assert len(client.get("/api/v1/invoices", headers=headers).json()["data"]["items"]) == 1
 
 
+def test_alipay_page_pay_encrypts_biz_content(client: TestClient):
+    headers = register(client, "alipay-aes@example.com")
+    private_pem, public_pem = _rsa_pems()
+    settings = client.app.state.settings
+    settings.alipay_app_id = "2021000000000000"
+    settings.alipay_private_key = private_pem
+    settings.alipay_alipay_public_key = public_pem
+    settings.alipay_aes_key = "MDEyMzQ1Njc4OWFiY2RlZg=="
+    payment = client.post(
+        "/api/v1/payments/checkout",
+        headers=headers,
+        json={"plan_id": "growth", "provider": "alipay", "idempotency_key": "ali-aes"},
+    ).json()["data"]
+    assert "encrypt_type=AES" in payment["pay_url"]
+    assert "out_trade_no" not in payment["pay_url"]
+    assert payment["status"] == "pending"
+
+
+def test_payment_test_amount_overrides_paid_plans(client: TestClient):
+    headers = register(client, "amount-test@example.com")
+    client.app.state.settings.payment_test_amount_fen = 10
+    summary = client.get("/api/v1/billing/summary", headers=headers).json()["data"]
+    plans = {item["id"]: item["amount_fen"] for item in summary["plans"]}
+    assert plans["free"] == 0
+    assert plans["growth"] == 10
+    assert plans["scale"] == 10
+    assert summary["payment_testing"] is True
+    payment = client.post(
+        "/api/v1/payments/checkout",
+        headers=headers,
+        json={"plan_id": "growth", "idempotency_key": "fen-10"},
+    ).json()["data"]
+    assert payment["amount"] == 10
+
+
 def test_wechat_authorize_url_does_not_call_wechat(client: TestClient):
     settings = client.app.state.settings
     settings.wechat_app_id = "wx-test-app"

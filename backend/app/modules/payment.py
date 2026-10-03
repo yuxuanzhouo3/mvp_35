@@ -120,6 +120,14 @@ def _user_openid(store: DocumentStore, payment: dict) -> str:
     return str(user.get("wechat_openid") or "")
 
 
+def listed_amount(settings, amount_fen: int) -> int:
+    """Paid plans charge this many fen. 0 keeps the catalog price."""
+    override = int(getattr(settings, "payment_test_amount_fen", 0) or 0)
+    if override > 0 and amount_fen > 0:
+        return override
+    return amount_fen
+
+
 def checkout(
     store: DocumentStore,
     prof: dict,
@@ -128,6 +136,7 @@ def checkout(
     *,
     kind: str = "subscription",
     amount_fen: int | None = None,
+    settings=None,
 ) -> dict:
     if kind not in {"subscription", "usage"}:
         raise AppError("INVALID_PAYMENT_KIND", "支付类型无效")
@@ -140,7 +149,7 @@ def checkout(
         stored_plan = None
     else:
         plan = _plan(plan_id or "")
-        amount = plan["amount_fen"]
+        amount = listed_amount(settings, plan["amount_fen"]) if settings is not None else plan["amount_fen"]
         stored_plan = plan["id"]
     existing = store.find_global("payments", tenant_id=prof["tenant"]["id"], idempotency_key=idempotency_key)
     if existing:

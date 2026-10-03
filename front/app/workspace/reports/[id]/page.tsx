@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { api, percent } from '@/lib/api'
+import { AdSlot } from '@/components/ad-slot'
 
 type Report = {
   id: string
@@ -66,9 +67,9 @@ export default function ReportPage() {
         <Metric label="风险" value={metrics ? String(metrics.risk_level) : '—'} />
       </div>
       <div className="report-card">
-        <div className="flex flex-wrap gap-1 border-b border-border px-3 pt-3">
+        <div className="flex gap-1 overflow-x-auto border-b border-border px-3 pt-3">
           {tabs.map(([key, label]) => (
-            <button key={key} className={`report-tab ${tab === key ? 'report-tab-active' : ''}`} onClick={() => setTab(key)}>{label}</button>
+            <button key={key} className={`report-tab shrink-0 ${tab === key ? 'report-tab-active' : ''}`} onClick={() => setTab(key)}>{label}</button>
           ))}
         </div>
         <div className="p-5 text-sm leading-7">
@@ -80,6 +81,7 @@ export default function ReportPage() {
         </div>
       </div>
       <p className="rounded-2xl border border-border bg-muted/40 p-4 text-sm leading-7">{report?.explanation}</p>
+      <AdSlot placement="report_footer" className="mt-5 max-md:mb-4" />
     </div>
   )
 }

@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     alipay_alipay_public_key: str = ""
     alipay_gateway_url: str = "https://openapi.alipay.com/gateway.do"
     alipay_notify_url: str = ""
+    alipay_aes_key: str = ""
+    payment_test_amount_fen: int = 0
     ledger_hmac_secret: str = "demo-ledger-secret"
     demo_signing_helper: bool = True
     worker_token: str = "demo-worker"

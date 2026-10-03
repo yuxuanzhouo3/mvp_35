@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from app.core.errors import AppError
 from app.modules.payment import book_verified_payment
@@ -23,6 +24,7 @@ def page_pay_url(settings: Settings, *, out_trade_no: str, amount_fen: int, subj
     if not ready(settings):
         raise AppError("NOT_ENABLED", "支付宝未开通", 501, {"flag": "payment.alipay", "placeholder": True})
     notify = settings.alipay_notify_url or "https://pickglobal.mornscience.top/api/v1/webhooks/alipay"
+    origin = (settings.public_web_origin or "https://pickglobal.mornscience.top").rstrip("/")
     params = {
         "app_id": settings.alipay_app_id,
         "method": "alipay.trade.page.pay",
@@ -32,17 +34,19 @@ def page_pay_url(settings: Settings, *, out_trade_no: str, amount_fen: int, subj
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "version": "1.0",
         "notify_url": notify,
-        "biz_content": json.dumps(
+        "return_url": f"{origin}/workspace/billing",
+        "biz_content": _biz_content(
+            settings,
             {
                 "out_trade_no": out_trade_no,
                 "total_amount": f"{Decimal(amount_fen) / Decimal(100):.2f}",
                 "subject": subject,
                 "product_code": "FAST_INSTANT_TRADE_PAY",
             },
-            ensure_ascii=False,
-            separators=(",", ":"),
         ),
     }
+    if (settings.alipay_aes_key or "").strip():
+        params["encrypt_type"] = "AES"
     params["sign"] = _sign(settings.alipay_private_key, params)
     gateway = (settings.alipay_gateway_url or "https://openapi.alipay.com/gateway.do").rstrip("?")
     return f"{gateway}?{urlencode(params)}"
@@ -73,6 +77,25 @@ def accept_notification(store: DocumentStore, settings: Settings, params: dict[s
     )
 
 
+def _biz_content(settings: Settings, payload: dict) -> str:
+    plain = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    key = (settings.alipay_aes_key or "").strip()
+    if not key:
+        return plain
+    return _aes_encrypt(plain, key)
+
+
+def _aes_encrypt(plain: str, key_b64: str) -> str:
+    raw = base64.b64decode(key_b64)
+    data = plain.encode()
+    pad = 16 - (len(data) % 16)
+    data += bytes([pad]) * pad
+    cipher = Cipher(algorithms.AES(raw), modes.CBC(b"\0" * 16))
+    encryptor = cipher.encryptor()
+    encrypted = encryptor.update(data) + encryptor.finalize()
+    return base64.b64encode(encrypted).decode()
+
+
 def _public_key(settings: Settings) -> str:
     return (settings.alipay_alipay_public_key or settings.alipay_public_key or "").strip()
 
@@ -96,8 +119,12 @@ def _verify(public_key: str, params: dict[str, str]) -> bool:
 
 
 def _content(params: dict) -> str:
-    skipped = {"sign", "sign_type"}
-    return "&".join(f"{key}={params[key]}" for key in sorted(params) if key not in skipped and params[key] not in {None, ""})
+    # The current gateway verifies sign_type as part of the string and skips only sign.
+    return "&".join(
+        f"{key}={params[key]}"
+        for key in sorted(params)
+        if key != "sign" and params[key] not in {None, ""}
+    )
 
 
 def _pem(value: str, label: str) -> str:

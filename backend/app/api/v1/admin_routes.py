@@ -7,6 +7,7 @@ Creates stay drafts and do not send mail or post a reward ledger.
 
 import hashlib
 import secrets
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Header, Request
 from pydantic import BaseModel
@@ -31,6 +32,11 @@ class AdIn(BaseModel):
     title: str
     placement: str
     media_type: str = "image"
+    link_url: str = ""
+
+
+class AdLinkIn(BaseModel):
+    link_url: str
 
 
 class InvitationIn(BaseModel):
@@ -44,6 +50,7 @@ class RecallIn(BaseModel):
 class StatusIn(BaseModel):
     status: str
     reason: str = ""
+    link_url: str = ""
 
 
 class SegmentIn(BaseModel):
@@ -82,6 +89,55 @@ def _mask_email(email: str | None) -> str | None:
     return f"{local[:2]}***@{domain}"
 
 
+def _mask_account(value: str | None) -> str | None:
+    if not value:
+        return value
+    if "@" in value:
+        return _mask_email(value)
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if len(digits) >= 7 and len(digits) >= len(value) - 3:
+        return _mask_phone(value)
+    return value
+
+
+def _mask_phone(phone: str | None) -> str | None:
+    if not phone:
+        return None
+    digits = "".join(ch for ch in str(phone) if ch.isdigit())
+    if digits.startswith("86") and len(digits) > 11:
+        digits = digits[2:]
+    if len(digits) < 7:
+        return "***"
+    return f"{digits[:3]}****{digits[-4:]}"
+
+
+def _platform_users(store) -> list[dict]:
+    return store.query("users", limit=500)["items"]
+
+
+def _public_user(store, row: dict) -> dict:
+    tenant = store.get("tenants", row.get("tenant_id") or "")
+    return {
+        "id": row["id"],
+        "display_name": row.get("display_name"),
+        "email_masked": _mask_email(row.get("email")),
+        "phone_masked": _mask_phone(row.get("phone")),
+        "plan_id": (tenant or {}).get("plan_id"),
+        "tenant_name": (tenant or {}).get("name"),
+        "status": row.get("status") or "active",
+        "role": row.get("role"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _platform_user(store, user_id: str) -> dict:
+    row = store.get("users", user_id)
+    if not row or row.get("deleted_at"):
+        raise AppError("USER_NOT_FOUND", "用户不存在", 404)
+    return row
+
+
 def _csv_cell(value: str) -> str:
     text = (value or "").replace('"', '""')
     if text[:1] in "=+-@":
@@ -99,6 +155,17 @@ def _public_invitation(item: dict) -> dict:
     public = {key: value for key, value in item.items() if key != "code_hash"}
     public["share_path"] = f"/invite/{item['id']}"
     return public
+
+
+def _ad_link(value: str) -> str:
+    link = (value or "").strip()
+    parsed = urlparse(link)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme not in {"http", "https"} or "." not in host:
+        raise AppError("INVALID_LINK", "请填写客户广告网站的完整链接，例如 https://customer.com")
+    if host in {"pickglobal.mornscience.top", "localhost", "127.0.0.1"} or host.endswith(".mornscience.top"):
+        raise AppError("INVALID_LINK", "广告网站链接需要指向客户网站，不能指向本站登录页")
+    return link
 
 
 def _public_ad(item: dict) -> dict:
@@ -135,30 +202,15 @@ def _audit(store, prof: dict, action: str, resource: str) -> None:
 
 @router.get("/admin/users")
 def admin_users(request: Request, authorization: str | None = Header(default=None)):
-    store, prof = _admin_read(request, authorization)
-    tenant_id = prof["tenant"]["id"]
-    rows = store.query("users", tenant_id=tenant_id, limit=100)["items"]
-    items = [
-        {
-            "id": row["id"],
-            "display_name": row.get("display_name"),
-            "email_masked": _mask_email(row.get("email")),
-            "phone_masked": None,
-            "plan_id": prof["tenant"].get("plan_id"),
-            "status": row.get("status") or "active",
-            "role": row.get("role"),
-            "created_at": row.get("created_at"),
-            "updated_at": row.get("updated_at"),
-        }
-        for row in rows
-    ]
+    store, _prof = _admin_read(request, authorization)
+    items = [_public_user(store, row) for row in _platform_users(store)]
     return respond(request, {"items": items, "total": len(items)})
 
 
 @router.get("/admin/users/summary")
 def admin_users_summary(request: Request, authorization: str | None = Header(default=None)):
-    store, prof = _admin_read(request, authorization)
-    rows = store.query("users", tenant_id=prof["tenant"]["id"], limit=200)["items"]
+    store, _prof = _admin_read(request, authorization)
+    rows = _platform_users(store)
     return respond(
         request,
         {
@@ -193,6 +245,7 @@ def admin_ads_create(request: Request, body: AdIn, authorization: str | None = H
         raise AppError("INVALID_PLACEMENT", "广告位不存在")
     if body.media_type not in {"image", "video"}:
         raise AppError("INVALID_MEDIA", "素材类型只能是 image 或 video")
+    link_url = _ad_link(body.link_url) if body.link_url.strip() else ""
     doc = store.insert(
         "ad_campaigns",
         base_doc(
@@ -202,6 +255,7 @@ def admin_ads_create(request: Request, body: AdIn, authorization: str | None = H
             title=title,
             placement=body.placement,
             media_type=body.media_type,
+            link_url=link_url,
             status="draft",
             scope="platform",
             impressions=0,
@@ -334,17 +388,61 @@ def admin_ad_status(ad_id: str, request: Request, body: StatusIn, authorization:
     store, prof = _admin_write(request, authorization)
     if body.status not in {"draft", "active", "paused", "ended"}:
         raise AppError("INVALID_STATUS", "广告状态无效")
-    _require_doc(store, "ad_campaigns", ad_id, prof["tenant"]["id"], "AD_NOT_FOUND", "广告不存在")
-    updated = store.touch("ad_campaigns", ad_id, {"status": body.status})
+    current = _require_doc(store, "ad_campaigns", ad_id, prof["tenant"]["id"], "AD_NOT_FOUND", "广告不存在")
+    patch = {"status": body.status}
+    if body.status == "active":
+        patch["link_url"] = _ad_link(body.link_url or current.get("link_url") or "")
+    updated = store.touch("ad_campaigns", ad_id, patch)
     _audit(store, prof, "ad.status", ad_id)
     return respond(request, _public_ad(updated or {}))
+
+
+@router.post("/admin/ads/{ad_id}/link")
+def admin_ad_link(ad_id: str, request: Request, body: AdLinkIn, authorization: str | None = Header(default=None)):
+    store, prof = _admin_write(request, authorization)
+    _require_doc(store, "ad_campaigns", ad_id, prof["tenant"]["id"], "AD_NOT_FOUND", "广告不存在")
+    updated = store.touch("ad_campaigns", ad_id, {"link_url": _ad_link(body.link_url)})
+    _audit(store, prof, "ad.link", ad_id)
+    return respond(request, _public_ad(updated or {}))
+
+
+@router.get("/placements/{placement}")
+def public_placement(placement: str, request: Request):
+    if placement not in PLACEMENTS:
+        raise AppError("INVALID_PLACEMENT", "广告位不存在", 404)
+    store = request.app.state.store
+    active = [
+        row
+        for row in store.query("ad_campaigns", limit=100)["items"]
+        if row.get("status") == "active" and row.get("placement") == placement and (row.get("link_url") or "").strip()
+    ]
+    if not active:
+        return respond(request, {"ad": None})
+    ad = active[0]
+    return respond(
+        request,
+        {"ad": {"id": ad["id"], "title": ad.get("title"), "placement": placement, "media_type": ad.get("media_type"), "link_url": ad.get("link_url")}},
+    )
+
+
+@router.post("/ads/{ad_id}/click")
+def public_ad_click(ad_id: str, request: Request):
+    store = request.app.state.store
+    ad = store.get("ad_campaigns", ad_id)
+    if not ad or ad.get("deleted_at") or ad.get("status") != "active":
+        raise AppError("AD_NOT_FOUND", "广告不存在", 404)
+    link = (ad.get("link_url") or "").strip()
+    if not link:
+        raise AppError("LINK_REQUIRED", "这个广告还没有链接")
+    store.touch("ad_campaigns", ad_id, {"clicks": int(ad.get("clicks") or 0) + 1})
+    return respond(request, {"href": link})
 
 
 @router.post("/admin/users/export")
 def admin_users_export(request: Request, authorization: str | None = Header(default=None)):
     store, prof = _admin_write(request, authorization)
-    rows = store.query("users", tenant_id=prof["tenant"]["id"], limit=200)["items"]
-    lines = ["id,display_name,email_masked,status,role"]
+    rows = _platform_users(store)
+    lines = ["id,display_name,email_masked,phone_masked,status,role"]
     for row in rows:
         lines.append(
             ",".join(
@@ -353,6 +451,7 @@ def admin_users_export(request: Request, authorization: str | None = Header(defa
                     row.get("id"),
                     row.get("display_name"),
                     _mask_email(row.get("email")),
+                    _mask_phone(row.get("phone")),
                     row.get("status") or "active",
                     row.get("role"),
                 )
@@ -376,28 +475,17 @@ def admin_users_export(request: Request, authorization: str | None = Header(defa
 
 @router.get("/admin/users/{user_id}")
 def admin_user_detail(user_id: str, request: Request, authorization: str | None = Header(default=None)):
-    store, prof = _admin_read(request, authorization)
-    row = _require_doc(store, "users", user_id, prof["tenant"]["id"], "USER_NOT_FOUND", "用户不存在")
+    store, _prof = _admin_read(request, authorization)
+    row = _platform_user(store, user_id)
+    public = _public_user(store, row)
     audits = [
         item
-        for item in store.query("audit_logs", tenant_id=prof["tenant"]["id"], limit=20)["items"]
+        for item in store.query("audit_logs", limit=200)["items"]
         if item.get("resource") == user_id or item.get("user_id") == user_id
     ]
-    return respond(
-        request,
-        {
-            "id": row["id"],
-            "display_name": row.get("display_name"),
-            "username": row.get("username"),
-            "email_masked": _mask_email(row.get("email")),
-            "status": row.get("status") or "active",
-            "role": row.get("role"),
-            "plan_id": prof["tenant"].get("plan_id"),
-            "created_at": row.get("created_at"),
-            "updated_at": row.get("updated_at"),
-            "recent_audit": [{"action": item.get("action"), "created_at": item.get("created_at")} for item in audits[:8]],
-        },
-    )
+    public["username"] = _mask_account(row.get("username"))
+    public["recent_audit"] = [{"action": item.get("action"), "created_at": item.get("created_at")} for item in audits[:8]]
+    return respond(request, public)
 
 
 @router.post("/admin/users/{user_id}/status")
@@ -409,7 +497,7 @@ def admin_user_status(user_id: str, request: Request, body: StatusIn, authorizat
         raise AppError("INVALID_STATUS", "用户状态无效")
     if len(body.reason.strip()) < 2:
         raise AppError("REASON_REQUIRED", "请填写操作原因")
-    _require_doc(store, "users", user_id, prof["tenant"]["id"], "USER_NOT_FOUND", "用户不存在")
+    _platform_user(store, user_id)
     updated = store.touch("users", user_id, {"status": body.status})
     _audit(store, prof, f"user.{body.status}", user_id)
     return respond(request, {"id": updated["id"], "status": updated.get("status")})
@@ -427,13 +515,17 @@ def admin_segments_create(request: Request, body: SegmentIn, authorization: str 
     name = body.name.strip()
     if not name:
         raise AppError("INVALID_SEGMENT", "请填写分群名称")
-    rows = store.query("users", tenant_id=prof["tenant"]["id"], limit=200)["items"]
+    rows = _platform_users(store)
     if body.stage and body.stage not in {"全部阶段", ""}:
         wanted = "suspended" if body.stage == "已停用" else "active"
         rows = [row for row in rows if (row.get("status") or "active") == wanted]
     if body.query:
         needle = body.query.lower()
-        rows = [row for row in rows if needle in f"{row.get('id')} {row.get('display_name')} {row.get('email')}".lower()]
+        rows = [
+            row
+            for row in rows
+            if needle in f"{row.get('id')} {row.get('display_name')} {row.get('email')} {row.get('phone')}".lower()
+        ]
     doc = store.insert(
         "user_segments",
         base_doc(
@@ -557,8 +649,8 @@ def admin_search(request: Request, q: str = "", authorization: str | None = Head
 
     users = [
         {"id": row["id"], "label": row.get("display_name") or row["id"], "href": "/admin/users"}
-        for row in store.query("users", tenant_id=tenant_id, limit=50)["items"]
-        if hit(row, "id", "display_name", "email", "username")
+        for row in _platform_users(store)
+        if hit(row, "id", "display_name", "email", "phone", "username")
     ]
     ads = [
         {"id": row["id"], "label": row.get("title"), "href": "/admin/ads"}

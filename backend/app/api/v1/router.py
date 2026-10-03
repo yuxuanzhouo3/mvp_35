@@ -75,6 +75,7 @@ class ProductPatch(BaseModel):
 
 class CsvIn(BaseModel):
     csv: str
+    algorithm: str | None = None
 
 
 class AdoptIn(BaseModel):
@@ -139,7 +140,7 @@ class SuppressionIn(BaseModel):
 
 
 def _channel_order(settings, store, prof, plan: dict, provider: str, *, scene: str = "web", openid: str | None = None) -> dict:
-    from app.modules.payment import channel_ready, checkout, open_channel
+    from app.modules.payment import channel_ready, checkout, listed_amount, open_channel
 
     label = "微信" if provider == "wechat" else "支付宝"
     if not channel_ready(settings, provider):
@@ -150,7 +151,7 @@ def _channel_order(settings, store, prof, plan: dict, provider: str, *, scene: s
                 prof["user"]["id"],
                 id=new_id("ord"),
                 plan_id=plan["id"],
-                amount_fen=plan["amount_fen"],
+                amount_fen=listed_amount(settings, plan["amount_fen"]),
                 currency="CNY",
                 provider="wechat_pay" if provider == "wechat" else "alipay",
                 status="pending",
@@ -161,7 +162,7 @@ def _channel_order(settings, store, prof, plan: dict, provider: str, *, scene: s
                 message=f"{label}支付未开通，订单保持待支付，不会发放权益",
             ),
         )
-    payment = checkout(store, prof, plan["id"], new_id("idem"))
+    payment = checkout(store, prof, plan["id"], new_id("idem"), settings=settings)
     charge = open_channel(store, settings, payment, provider, scene=scene, openid=openid)
     return store.insert(
         "payment_orders",
@@ -170,7 +171,7 @@ def _channel_order(settings, store, prof, plan: dict, provider: str, *, scene: s
             prof["user"]["id"],
             id=new_id("ord"),
             plan_id=plan["id"],
-            amount_fen=plan["amount_fen"],
+            amount_fen=payment["amount"],
             currency="CNY",
             provider="wechat_pay" if provider == "wechat" else "alipay",
             status="pending",
@@ -266,9 +267,12 @@ def create_router() -> APIRouter:
         return respond(request, {"channels": CHANNELS, "providers": "mock"})
 
     @router.get("/catalog/search")
-    def catalog_search(request: Request, q: str = "", authorization: str | None = Header(default=None)):
+    def catalog_search(request: Request, q: str = "", algorithm: str | None = None, authorization: str | None = Header(default=None)):
         ctx(request, authorization)
-        return respond(request, {"items": search_catalog(q)})
+        payload = {"items": search_catalog(q)}
+        if algorithm == "selection-assist":
+            payload["algorithm"] = algorithm
+        return respond(request, payload)
 
     @router.post("/catalog/adopt")
     def catalog_adopt(request: Request, body: AdoptIn, authorization: str | None = Header(default=None)):
@@ -347,7 +351,10 @@ def create_router() -> APIRouter:
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
         settings, store, prof = ctx(request, authorization, write=True)
-        job = start_job(store, settings, prof, "product_import", {"csv": body.csv}, None, idempotency_key)
+        payload = {"csv": body.csv}
+        if body.algorithm == "product-pricer":
+            payload["algorithm"] = body.algorithm
+        job = start_job(store, settings, prof, "product_import", payload, None, idempotency_key)
         if job["status"] == "queued":
             schedule(background, store, settings, job["id"])
         return respond(request, {"job_id": job["id"], "status": job["status"]})
@@ -697,6 +704,8 @@ def create_router() -> APIRouter:
 
     @router.post("/billing/orders")
     def create_order(request: Request, body: OrderIn, authorization: str | None = Header(default=None)):
+        from app.modules.payment import listed_amount
+
         settings, store, prof = ctx(request, authorization, write=True)
         plan = next((item for item in PLANS if item["id"] == body.plan_id), None)
         if not plan or plan["amount_fen"] <= 0:
@@ -717,7 +726,7 @@ def create_router() -> APIRouter:
             prof["user"]["id"],
             id=new_id("ord"),
             plan_id=plan["id"],
-            amount_fen=plan["amount_fen"],
+            amount_fen=listed_amount(settings, plan["amount_fen"]),
             currency="CNY",
             provider="wechat_pay",
             status="pending",

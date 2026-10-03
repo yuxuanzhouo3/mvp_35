@@ -37,6 +37,7 @@ export default function ProductsPage() {
   const [tab, setTab] = useState<'own' | 'catalog'>('own')
   const [form, setForm] = useState(emptyForm)
   const [csv, setCsv] = useState('sku,name,cost_cny,target_price_usd,international_freight_usd\nCUP-1,样品杯,72,40,2\n')
+  const [csvFile, setCsvFile] = useState('')
   const [query, setQuery] = useState('杯')
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [libraryKey, setLibraryKey] = useState(0)
@@ -113,27 +114,54 @@ export default function ProductsPage() {
           <form className="rounded-2xl border border-border bg-card p-5" onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
-              const created = await api<{ job_id: string }>('/products/imports', { method: 'POST', body: JSON.stringify({ csv }) })
+              const created = await api<{ job_id: string }>('/products/imports', { method: 'POST', body: JSON.stringify({ csv, algorithm: 'product-pricer' }) })
               const job = await waitJob(created.job_id)
               if (job.status === 'failed') throw new Error(job.error?.message || '导入失败')
               setMessage(`CSV 导入完成：成功 ${job.result?.imported ?? 0}，失败 ${job.result?.failed ?? 0}。`)
             })
           }}>
             <h2 className="font-semibold">CSV 导入</h2>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">表头至少包含 sku、name、cost_cny、target_price_usd。任务返回 202，由 worker 入库。</p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">表头至少包含 sku、name、cost_cny、target_price_usd。可以粘贴，也可以上传文件。任务返回 202，由 worker 入库。</p>
             <textarea className="mt-3 h-40 w-full rounded-xl border border-border bg-background p-3 font-mono text-xs" value={csv} onChange={(event) => setCsv(event.target.value)} />
-            <button disabled={busy} className="mt-3 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">开始导入</button>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-border px-3 text-sm">
+                上传文件
+                <input
+                  type="file"
+                  accept=".csv,text/csv,text/plain"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (!file) return
+                    setCsvFile(file.name)
+                    file.text().then((text) => setCsv(text)).catch(() => setError('无法读取这个文件'))
+                  }}
+                />
+              </label>
+              <button disabled={busy} className="min-h-9 rounded-lg bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50">开始导入</button>
+              {csvFile && <span className="text-xs text-muted-foreground">{csvFile}</span>}
+            </div>
+            <AlgorithmHold
+              title="国内外商品定价"
+              algorithm="product-pricer"
+              copy="这里只留给即将接入的定价算法和国内外商品 pricer API。导入只提交这一路，不带选品算法。"
+            />
           </form>
         </div>
       ) : (
         <div className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-semibold">国内货源目录</h2>
-          <p className="mt-2 text-xs text-muted-foreground">当前是演示目录，不绑定外部电商选品主库。</p>
+          <p className="mt-2 text-xs text-muted-foreground">当前是演示目录。选品算法和外部货源 API 还在占位，搜索只带这一路。</p>
+          <AlgorithmHold
+            title="帮我选品"
+            algorithm="selection-assist"
+            copy="这里只留给即将接入的选品算法和货源 API。搜索只提交这一路，不带定价接口。"
+          />
           <div className="mt-3 flex gap-2">
             <input className="w-full max-w-xs rounded-lg border border-border px-3 py-2 text-sm" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索货源" />
-            <button className="rounded-lg border border-border px-3 py-2 text-sm" onClick={() => {
+            <button className="inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-lg border border-border px-3 text-sm" onClick={() => {
               void run(async () => {
-                const data = await api<{ items: CatalogItem[] }>(`/catalog/search?q=${encodeURIComponent(query)}`)
+                const data = await api<{ items: CatalogItem[] }>(`/catalog/search?q=${encodeURIComponent(query)}&algorithm=selection-assist`)
                 setCatalog(data.items)
               })
             }}>搜索</button>
@@ -162,6 +190,17 @@ export default function ProductsPage() {
           <ProductLibrary key={libraryKey} />
         </div>
       </div>
+    </div>
+  )
+}
+
+function AlgorithmHold({ title, algorithm, copy }: { title: string; algorithm: string; copy: string }) {
+  return (
+    <div className="mt-4 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4">
+      <p className="text-xs font-semibold text-primary">算法占位</p>
+      <p className="mt-1 text-sm font-medium">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">{copy}</p>
+      <p className="mt-2 font-mono text-[11px] text-muted-foreground">即将接入 · {algorithm}</p>
     </div>
   )
 }
