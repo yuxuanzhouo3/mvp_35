@@ -102,23 +102,31 @@ BFF
   ├── MiniProgram BFF
   └── Desktop BFF
 
-Core Services
-  ├── User Service
-  ├── Payment Service
-  ├── Product Service
-  ├── Selection Engine
-  ├── Report Service
-  ├── Acquisition Service
-  ├── Lead Service
-  ├── Campaign Service
-  ├── Recall Service
-  ├── AI Model Service
-  ├── GEO / SEO Service
-  ├── Content Factory
-  ├── Digital Human
-  ├── Channel Service
-  ├── RAAS Service
-  └── Analytics Service
+Core Services（当前仓库是一个 FastAPI 进程，不是独立微服务）
+  ├── User            app/modules/auth.py · tokens.py · passwords.py · services/identity.py
+  ├── Payment         app/modules/payment.py · api/v1/pay_routes.py
+  ├── Product         /products · /catalog · services/common.py
+  ├── Selection       app/modules/selection.py · services/profit.py
+  ├── Report          selection.present_report · /analyses/{id}
+  ├── Acquisition     app/modules/acquisition.py · /analyses/{id}/acquire
+  ├── Lead            /leads · /lead-searches
+  ├── Campaign        /campaigns（草稿 → 批准 → 发送）
+  ├── Recall          /activation/jobs · /recall/jobs · /lifecycle/scan
+  ├── AI              app/modules/ai_gateway.py · api/v1/ai_routes.py
+  ├── Channel         services/common.py CHANNELS（九路，provider 可 mock）
+  ├── RAAS / 代理     /billing/agency/commissions · /billing/raas/commissions
+  └── Analytics       app/modules/kpi_view.py · services/metrics.py · /metrics
+
+当前 front/（Web 这一端，Next.js）
+  ├── app/page.tsx                     官网 /
+  ├── app/login|register|forgot|reset  账号
+  ├── app/workspace/                   看板 · 选品 · 获客 · 账单 · 报告
+  ├── app/admin/                       平台后台，见 admin.md
+  ├── app/api/[...path]/route.ts       把 /api 转到 FastAPI :8000
+  ├── components/guide-video.tsx       顶栏「操作演示」，播放云健教程
+  ├── components/auth-shell.tsx        登录类页面外壳
+  ├── components/product-library.tsx   官网商品库
+  └── lib/api.ts · session.ts          租户请求与登录态
 ```
 
 **BFF 职责**

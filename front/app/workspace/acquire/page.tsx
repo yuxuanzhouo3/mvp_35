@@ -47,7 +47,6 @@ function AcquireDesk() {
   const [activeId, setActiveId] = useState('')
   const [activation, setActivation] = useState<LifeJob[]>([])
   const [recall, setRecall] = useState<LifeJob[]>([])
-  const [amount, setAmount] = useState('1500')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -203,32 +202,10 @@ function AcquireDesk() {
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="font-semibold">代理分成与 RaaS 抽成</h2>
-        <p className="mt-2 text-xs leading-6 text-muted-foreground">金额是整数分。服务端先验签，同一幂等键不会重复入账。浏览器拿不到签名密钥。</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input className="w-32 rounded-lg border border-border px-2 py-2 text-sm" value={amount} onChange={(event) => setAmount(event.target.value)} aria-label="金额分" />
-          <button className="rounded-lg border border-border px-3 py-2 text-sm" onClick={() => void postLedger('agency_commission', '/billing/agency/commissions')}>代理分成入账</button>
-          <button className="rounded-lg border border-border px-3 py-2 text-sm" onClick={() => void postLedger('raas_fee', '/billing/raas/commissions')}>RaaS 抽成入账</button>
-        </div>
+        <p className="mt-2 text-xs leading-6 text-muted-foreground">分成由服务端验签后入账。页面不请求签名，也不代发支付回调。RaaS 抽成不计入普通获客率。未开通的微信收款、自动成交和数智人购买不会出现在这里。</p>
       </section>
     </div>
   )
-
-  async function postLedger(subject: string, path: string) {
-    await run(async () => {
-      const fen = Number(amount)
-      if (!Number.isInteger(fen) || fen <= 0) throw new Error('金额必须是正整数分')
-      const idempotencyKey = `${subject}-${Date.now()}`
-      const signed = await api<{ signature: string }>('/dev/ledger-signature', {
-        method: 'POST',
-        body: JSON.stringify({ idempotency_key: idempotencyKey, amount_fen: fen, subject }),
-      })
-      await api(path, {
-        method: 'POST',
-        body: JSON.stringify({ amount_fen: fen, idempotency_key: idempotencyKey, signature: signed.signature, channel_account_id: 'agent_1' }),
-      })
-      setMessage(subject === 'raas_fee' ? 'RaaS 抽成已入账，不会计入普通获客率。' : '代理分成已入账。')
-    })
-  }
 }
 
 function LifeList({ title, jobs, busy, onScan, onApprove, onSend }: { title: string; jobs: LifeJob[]; busy: boolean; onScan: () => void; onApprove: (id: string) => void; onSend: (id: string) => void }) {

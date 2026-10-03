@@ -24,6 +24,102 @@ def _plan(plan_id: str) -> dict:
     return plan
 
 
+def channel_ready(settings: Settings, provider: str) -> bool:
+    if provider == "wechat":
+        notify = settings.wechat_pay_notify_url or "https://pickglobal.mornscience.top/api/v1/webhooks/wechat-pay"
+        return bool(
+            settings.wechat_pay_mode == "live"
+            and settings.wechat_pay_appid
+            and settings.wechat_pay_mchid
+            and settings.wechat_pay_private_key
+            and settings.wechat_pay_serial_no
+            and notify.startswith("https://")
+        )
+    if provider == "alipay":
+        from app.modules.alipay_pay import ready
+
+        return ready(settings)
+    return False
+
+
+def open_channel(
+    store: DocumentStore,
+    settings: Settings,
+    payment: dict,
+    provider: str,
+    *,
+    scene: str = "web",
+    openid: str | None = None,
+) -> dict:
+    if provider not in {"wechat", "alipay"}:
+        raise AppError("INVALID_PROVIDER", "支付渠道无效")
+    if scene not in {"web", "miniprogram"}:
+        raise AppError("INVALID_SCENE", "支付场景无效")
+    amount = int(payment["amount"])
+    subject = next((item["name"] for item in PLANS if item["id"] == payment.get("plan_id")), "PickGlobal")
+    if not channel_ready(settings, provider):
+        label = "微信" if provider == "wechat" else "支付宝"
+        return {
+            "channel": provider,
+            "code_url": None,
+            "pay_url": None,
+            "jsapi": None,
+            "message": f"{label}支付未开通，订单保持待支付，不会发放权益",
+        }
+    if provider == "wechat" and scene == "miniprogram":
+        from app.modules.wechat_pay import create_jsapi_order
+
+        payer = (openid or "").strip() or _user_openid(store, payment)
+        if not payer:
+            raise AppError("WECHAT_OPENID_REQUIRED", "小程序支付需要先用微信登录", 400)
+        jsapi = create_jsapi_order(
+            settings,
+            out_trade_no=payment["id"],
+            amount_fen=amount,
+            description=subject,
+            openid=payer,
+            scene="miniprogram",
+        )
+        store.touch("payments", payment["id"], {"provider": provider})
+        return {
+            "channel": provider,
+            "code_url": None,
+            "pay_url": None,
+            "jsapi": jsapi,
+            "message": "请在微信小程序内确认支付",
+        }
+    if provider == "wechat":
+        from app.modules.wechat_pay import create_native_order
+
+        url = create_native_order(settings, out_trade_no=payment["id"], amount_fen=amount, description=subject)
+        store.touch("payments", payment["id"], {"provider": provider})
+        return {
+            "channel": provider,
+            "code_url": url,
+            "pay_url": url,
+            "jsapi": None,
+            "message": "请使用微信扫码支付",
+        }
+    from app.modules.alipay_pay import page_pay_url
+
+    url = page_pay_url(settings, out_trade_no=payment["id"], amount_fen=amount, subject=subject)
+    store.touch("payments", payment["id"], {"provider": provider})
+    return {
+        "channel": provider,
+        "code_url": None,
+        "pay_url": url,
+        "jsapi": None,
+        "message": "请前往支付宝完成支付",
+    }
+
+
+def _user_openid(store: DocumentStore, payment: dict) -> str:
+    user = store.get("users", payment.get("user_id") or "")
+    if not user:
+        return ""
+    return str(user.get("wechat_openid") or "")
+
+
 def checkout(
     store: DocumentStore,
     prof: dict,
@@ -83,7 +179,19 @@ def apply_webhook(
     expected = sign_payment_event(settings.ledger_hmac_secret, event_id, payment_id, status)
     if not hmac.compare_digest(expected, signature or ""):
         raise AppError("PAYMENT_SIGNATURE_INVALID", "验签失败，未入账", 401)
-    seen = store.find_global("payment_events", external_id=event_id)
+    return book_verified_payment(store, payment_id=payment_id, status=status, external_id=event_id)
+
+
+def book_verified_payment(
+    store: DocumentStore,
+    *,
+    payment_id: str,
+    status: str,
+    external_id: str,
+    amount_fen: int | None = None,
+) -> dict:
+    """Post a subscription, its invoice, and the payment event. Callers must verify first."""
+    seen = store.find_global("payment_events", external_id=external_id)
     if seen:
         payment = store.get("payments", seen["payment_id"])
         if not payment:
@@ -92,10 +200,12 @@ def apply_webhook(
     payment = store.get("payments", payment_id)
     if not payment:
         raise AppError("PAYMENT_NOT_FOUND", "支付单不存在", 404)
+    if amount_fen is not None and int(amount_fen) != int(payment["amount"]):
+        raise AppError("PAYMENT_AMOUNT_MISMATCH", "回调金额与订单不一致，未入账", 409)
     if status not in {"succeeded", "failed"}:
         raise AppError("INVALID_PAYMENT_STATUS", "无法识别的支付结果")
     nxt = transition("Payment", payment["status"], status)
-    store.touch("payments", payment_id, {"status": nxt, "external_id": event_id})
+    store.touch("payments", payment_id, {"status": nxt, "external_id": external_id})
     store.insert(
         "payment_events",
         base_doc(
@@ -103,7 +213,7 @@ def apply_webhook(
             "webhook",
             id=new_id("pev"),
             payment_id=payment_id,
-            external_id=event_id,
+            external_id=external_id,
             status=nxt,
         ),
     )

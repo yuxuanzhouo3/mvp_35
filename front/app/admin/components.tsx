@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { type ComponentType, type ReactNode, useEffect, useState } from 'react'
 import { AdminSession, adminApi, adminToken, clearAdminToken } from '@/lib/admin-session'
+import { GuideVideo } from '@/components/guide-video'
 import {
   BarChart3,
   Bell,
@@ -152,6 +153,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <button className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white" type="submit">搜索</button>
           </form>
           <div className="relative ml-auto flex items-center gap-2">
+            <GuideVideo />
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-amber-700">{label}</span>
             <button className="admin-focus relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600" aria-label="通知" aria-expanded={notesOpen} onClick={() => void openNotes()}><Bell className="size-5" /><span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 ring-2 ring-white" /></button>
             {notesOpen && (

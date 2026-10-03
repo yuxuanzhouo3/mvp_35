@@ -106,6 +106,9 @@ class CampaignIn(BaseModel):
 
 class OrderIn(BaseModel):
     plan_id: str
+    provider: str | None = None
+    scene: str = "web"
+    openid: str | None = None
 
 
 class LedgerIn(BaseModel):
@@ -133,6 +136,51 @@ class MessageIn(BaseModel):
 
 class SuppressionIn(BaseModel):
     email: str
+
+
+def _channel_order(settings, store, prof, plan: dict, provider: str, *, scene: str = "web", openid: str | None = None) -> dict:
+    from app.modules.payment import channel_ready, checkout, open_channel
+
+    label = "微信" if provider == "wechat" else "支付宝"
+    if not channel_ready(settings, provider):
+        return store.insert(
+            "payment_orders",
+            base_doc(
+                prof["tenant"]["id"],
+                prof["user"]["id"],
+                id=new_id("ord"),
+                plan_id=plan["id"],
+                amount_fen=plan["amount_fen"],
+                currency="CNY",
+                provider="wechat_pay" if provider == "wechat" else "alipay",
+                status="pending",
+                code_url=None,
+                pay_url=None,
+                jsapi=None,
+                payment_id=None,
+                message=f"{label}支付未开通，订单保持待支付，不会发放权益",
+            ),
+        )
+    payment = checkout(store, prof, plan["id"], new_id("idem"))
+    charge = open_channel(store, settings, payment, provider, scene=scene, openid=openid)
+    return store.insert(
+        "payment_orders",
+        base_doc(
+            prof["tenant"]["id"],
+            prof["user"]["id"],
+            id=new_id("ord"),
+            plan_id=plan["id"],
+            amount_fen=plan["amount_fen"],
+            currency="CNY",
+            provider="wechat_pay" if provider == "wechat" else "alipay",
+            status="pending",
+            code_url=charge["code_url"],
+            pay_url=charge["pay_url"],
+            jsapi=charge.get("jsapi"),
+            payment_id=payment["id"],
+            message=charge["message"],
+        ),
+    )
 
 
 def create_router() -> APIRouter:
@@ -653,6 +701,11 @@ def create_router() -> APIRouter:
         plan = next((item for item in PLANS if item["id"] == body.plan_id), None)
         if not plan or plan["amount_fen"] <= 0:
             raise AppError("PLAN_NOT_PURCHASABLE", "这个套餐不能下单")
+        if body.provider in {"wechat", "alipay"}:
+            return respond(
+                request,
+                _channel_order(settings, store, prof, plan, body.provider, scene=body.scene, openid=body.openid),
+            )
         if settings.wechat_pay_mode != "live":
             code_url = None
             pay_message = "微信支付未开通，订单保持待支付，不会发放权益"
@@ -690,7 +743,16 @@ def create_router() -> APIRouter:
     def query_order(order_id: str, request: Request, authorization: str | None = Header(default=None)):
         _settings, store, prof = ctx(request, authorization)
         order = require_doc(store, "payment_orders", order_id, prof["tenant"]["id"], "ORDER_NOT_FOUND", "订单不存在")
-        return respond(request, {"status": order["status"], "granted": False, "amount_fen": order["amount_fen"]})
+        payment = store.get("payments", order["payment_id"], prof["tenant"]["id"]) if order.get("payment_id") else None
+        granted = bool(payment and payment["status"] == "succeeded")
+        return respond(
+            request,
+            {
+                "status": "paid" if granted else order["status"],
+                "granted": granted,
+                "amount_fen": order["amount_fen"],
+            },
+        )
 
     @router.post("/billing/agency/commissions")
     def agency_commission(request: Request, body: LedgerIn, authorization: str | None = Header(default=None)):
@@ -743,9 +805,33 @@ def create_router() -> APIRouter:
         doc = base_doc(prof["tenant"]["id"], prof["user"]["id"], id=new_id("sup"), email=body.email.strip().lower())
         return respond(request, store.insert("suppressions", doc))
 
+    @router.post("/webhooks/alipay")
+    async def alipay_webhook(request: Request):
+        from urllib.parse import parse_qsl
+
+        from app.modules.alipay_pay import accept_notification
+
+        raw = (await request.body()).decode()
+        params = {key: value for key, value in parse_qsl(raw, keep_blank_values=False)}
+        return respond(request, accept_notification(request.app.state.store, request.app.state.settings, params))
+
     @router.post("/webhooks/wechat-pay")
-    def wechat_webhook(request: Request):
-        raise AppError("WECHAT_PAY_DISABLED", "微信支付未开通，拒绝入账", 401)
+    async def wechat_webhook(request: Request):
+        from app.modules.wechat_pay import accept_wechat_notification
+
+        raw = (await request.body()).decode()
+        return respond(
+            request,
+            accept_wechat_notification(
+                request.app.state.store,
+                request.app.state.settings,
+                body=raw,
+                timestamp=request.headers.get("wechatpay-timestamp"),
+                nonce=request.headers.get("wechatpay-nonce"),
+                signature=request.headers.get("wechatpay-signature"),
+                serial=request.headers.get("wechatpay-serial"),
+            ),
+        )
 
     @router.post("/webhooks/ses")
     def ses_webhook(request: Request, x_worker_token: str | None = Header(default=None)):

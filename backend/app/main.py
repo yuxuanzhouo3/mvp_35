@@ -1,3 +1,4 @@
+import logging
 import uuid
 from contextlib import asynccontextmanager
 
@@ -17,8 +18,12 @@ from db.store import open_store
 async def lifespan(app: FastAPI):
     settings = Settings()
     app.state.settings = settings
-    app.state.store = open_store(settings)
-    ensure_platform_admin(app.state.store)
+    try:
+        app.state.store = open_store(settings)
+        ensure_platform_admin(app.state.store)
+    except Exception:
+        logging.getLogger("uvicorn.error").exception("platform store failed to open")
+        raise
     yield
 
 

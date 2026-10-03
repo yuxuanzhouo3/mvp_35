@@ -6,6 +6,7 @@ from app.modules.auth import (
     assert_oauth_provider,
     forgot_password,
     login,
+    reset_password_with_code,
     login_with_code,
     refresh,
     register,
@@ -22,6 +23,7 @@ class RegisterIn(BaseModel):
     phone: str | None = None
     password: str
     display_name: str | None = None
+    code: str | None = None
 
 
 class LoginIn(BaseModel):
@@ -41,13 +43,25 @@ class ForgotIn(BaseModel):
 
 
 class ResetIn(BaseModel):
-    token: str
+    token: str | None = None
+    phone: str | None = None
+    code: str | None = None
     password: str
 
 
 class CodeSendIn(BaseModel):
     email: str | None = None
     phone: str | None = None
+    purpose: str = "login"
+
+
+class MiniIn(BaseModel):
+    code: str | None = None
+
+
+class OAuthIn(BaseModel):
+    code: str | None = None
+    state: str | None = None
 
 
 class CodeLoginIn(BaseModel):
@@ -69,6 +83,7 @@ def auth_register(request: Request, body: RegisterIn):
         phone=body.phone,
         password=body.password,
         display_name=body.display_name,
+        code=body.code,
     )
     return respond(request, prof)
 
@@ -96,7 +111,14 @@ def auth_forgot(request: Request, body: ForgotIn):
 
 @router.post("/auth/reset-password")
 def auth_reset(request: Request, body: ResetIn):
-    return respond(request, reset_password(request.app.state.store, body.token, body.password))
+    store = request.app.state.store
+    if body.token:
+        return respond(request, reset_password(store, body.token, body.password))
+    if body.phone and body.code:
+        return respond(request, reset_password_with_code(store, phone=body.phone, code=body.code, password=body.password))
+    from app.core.errors import AppError
+
+    raise AppError("RESET_INVALID", "重置凭证无效或已使用", 400)
 
 
 @router.get("/users/me")
@@ -105,9 +127,26 @@ def users_me(request: Request, authorization: str | None = Header(default=None))
     return respond(request, prof)
 
 
+@router.get("/auth/wechat/authorize")
+def wechat_authorize(request: Request):
+    from app.modules.wechat_login import authorize_url
+
+    return respond(request, authorize_url(request.app.state.settings))
+
+
 @router.post("/auth/oauth/{provider}")
-def auth_oauth(provider: str, request: Request, authorization: str | None = Header(default=None)):
+def auth_oauth(
+    provider: str,
+    request: Request,
+    body: OAuthIn | None = None,
+    authorization: str | None = Header(default=None),
+):
     assert_oauth_provider(provider)
+    if provider == "wechat":
+        from app.modules.wechat_login import login_open
+
+        payload = body or OAuthIn()
+        return respond(request, login_open(request.app.state.store, request.app.state.settings, code=payload.code or "", state=payload.state or ""))
     require_flag("auth.oauth")
     bind(request, authorization, write=True)
     return respond(request, {"provider": provider})
@@ -130,7 +169,10 @@ def auth_sso(request: Request, authorization: str | None = Header(default=None))
 @router.post("/auth/code/send")
 def auth_code_send(request: Request, body: CodeSendIn):
     settings = request.app.state.settings
-    return respond(request, send_login_code(request.app.state.store, settings, email=body.email, phone=body.phone))
+    return respond(
+        request,
+        send_login_code(request.app.state.store, settings, email=body.email, phone=body.phone, purpose=body.purpose),
+    )
 
 
 @router.post("/auth/code/login")
@@ -149,10 +191,14 @@ def auth_code_login(request: Request, body: CodeLoginIn):
 
 
 @router.post("/auth/miniprogram")
-def auth_miniprogram(request: Request, authorization: str | None = Header(default=None)):
-    require_flag("auth.miniprogram")
-    bind(request, authorization, write=True)
-    return respond(request, {"logged_in": False})
+def auth_miniprogram(request: Request, body: MiniIn | None = None, authorization: str | None = Header(default=None)):
+    from app.modules.wechat_login import login_miniprogram
+
+    payload = body or MiniIn()
+    return respond(
+        request,
+        login_miniprogram(request.app.state.store, request.app.state.settings, code=payload.code or ""),
+    )
 
 
 @router.post("/auth/switch-tenant")

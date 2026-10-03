@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Globe2 } from 'lucide-react'
 import { adminLogin } from '@/lib/admin-session'
 import { primaryButton } from '../components'
+import { GuideVideo } from '@/components/guide-video'
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -28,7 +29,8 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center bg-[#10203f] px-4">
+    <div className="relative grid min-h-screen place-items-center bg-[#10203f] px-4">
+      <div className="absolute right-4 top-4"><GuideVideo onDark /></div>
       <form onSubmit={onSubmit} className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
         <div className="mb-6 flex items-center gap-3">
           <div className="grid size-11 place-items-center rounded-xl bg-blue-500 text-white"><Globe2 className="size-5" /></div>
