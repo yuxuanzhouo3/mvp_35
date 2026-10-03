@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from config.settings import Settings
 from db.store import DocumentStore
@@ -14,6 +14,8 @@ from app.services.common import base_doc, new_id
 from app.services.identity import bootstrap
 
 OAUTH_PROVIDERS = {"google", "linkedin", "facebook", "wechat", "apple"}
+SMS_DAILY_CAP = 10
+_BEIJING = timezone(timedelta(hours=8))
 
 
 def _email(value: str | None) -> str | None:
@@ -64,6 +66,7 @@ def register(
     password: str,
     display_name: str | None,
     code: str | None = None,
+    invite_code: str | None = None,
 ) -> dict:
     email_n = _email(email)
     phone_n = _phone(phone)
@@ -86,6 +89,12 @@ def register(
         status="active",
         username=email_n or phone_n,
     )
+    from app.modules.referrals import attach_inviter, ensure_invite_code
+
+    created = store.get("users", prof["user"]["id"])
+    if created:
+        ensure_invite_code(store, created)
+        attach_inviter(store, created, invite_code)
     _audit(store, prof["tenant"]["id"], prof["user"]["id"], "user.registered", "user")
     emit(store, prof["tenant"]["id"], "user.registered", {"user_id": prof["user"]["id"]}, prof["user"]["id"])
     return prof
@@ -143,6 +152,7 @@ def login(
     phone: str | None,
     password: str,
     username: str | None = None,
+    recall: str | None = None,
 ) -> dict:
     if username and username.strip():
         user = store.find_global("users", username=username.strip())
@@ -157,6 +167,9 @@ def login(
     if user.get("status") not in {None, "active"}:
         raise AppError("ACCOUNT_INACTIVE", "账号未激活或已停用", 403)
     tokens = _issue(store, settings, user)
+    from app.modules.presence import note_login
+
+    note_login(store, user, recall_token=recall)
     _audit(store, user["tenant_id"], user["id"], "user.login", "session")
     emit(store, user["tenant_id"], "user.login", {"user_id": user["id"]}, user["id"])
     return tokens
@@ -217,6 +230,7 @@ def forgot_password(store: DocumentStore, settings: Settings, *, email: str | No
         code = _issue_code(store, user, "reset_password", 5)
         deliver_code(settings, email=None, phone=phone_n, code=code, purpose="reset_password")
         _retire_other_codes(store, user, "reset_password", hashlib.sha256(code.encode()).hexdigest())
+        body.update(_mark_sms(store, code, phone_n))
         return body
     token = secrets.token_urlsafe(24)
     store.insert(
@@ -345,7 +359,35 @@ def send_login_code(
         body["channel"] = channel
     elif settings.auth_mode == "demo":
         body["code"] = code
+    if channel == "sms" and phone_n:
+        body.update(_mark_sms(store, code, phone_n))
     return body
+
+
+def _mark_sms(store: DocumentStore, code: str, phone: str) -> dict:
+    digest = hashlib.sha256(code.encode()).hexdigest()
+    row = store.find_global("verification_codes", code_hash=digest)
+    if row and not row.get("sms_sent_at"):
+        store.touch("verification_codes", row["id"], {"sms_sent_at": iso(), "sms_phone": _phone(phone)})
+    return sms_quota(store, phone)
+
+
+def sms_quota(store: DocumentStore, phone: str) -> dict:
+    aliases = set(_phone_aliases(_phone(phone)))
+    today = utcnow().astimezone(_BEIJING).date()
+    rows = store.query("verification_codes", limit=500)["items"]
+    count = 0
+    for row in rows:
+        sent_at = row.get("sms_sent_at")
+        if not sent_at or str(row.get("sms_phone") or "") not in aliases:
+            continue
+        if parse_iso(sent_at).astimezone(_BEIJING).date() == today:
+            count += 1
+    return {
+        "sms_sent_today": count,
+        "sms_daily_cap": SMS_DAILY_CAP,
+        "sms_quota_warning": count > 5,
+    }
 
 
 def _issue_pending_code(store: DocumentStore, email: str | None, phone: str | None, purpose: str, minutes: int = 10) -> str:
@@ -394,6 +436,7 @@ def login_with_code(
     email: str | None,
     phone: str | None,
     code: str,
+    recall: str | None = None,
 ) -> dict:
     email_n = _email(email)
     phone_n = _phone(phone)
@@ -419,6 +462,9 @@ def login_with_code(
         raise AppError("UNAUTHENTICATED", "验证码不正确或已过期", 401)
     store.touch("verification_codes", row["id"], {"used_at": iso()})
     tokens = _issue(store, settings, user)
+    from app.modules.presence import note_login
+
+    note_login(store, user, recall_token=recall)
     _audit(store, user["tenant_id"], user["id"], "user.login", "session")
     emit(store, user["tenant_id"], "user.login", {"user_id": user["id"], "method": "code"}, user["id"])
     return tokens

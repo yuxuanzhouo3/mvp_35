@@ -47,6 +47,10 @@ class RecallIn(BaseModel):
     name: str
 
 
+class RecallLinkIn(BaseModel):
+    days: int
+
+
 class StatusIn(BaseModel):
     status: str
     reason: str = ""
@@ -300,6 +304,24 @@ def admin_invitations_create(request: Request, body: InvitationIn, authorization
     public = _public_invitation(doc)
     public["invite_code"] = code
     return respond(request, public)
+
+
+@router.get("/admin/invitations/payouts")
+def admin_invitation_payouts(request: Request, authorization: str | None = Header(default=None)):
+    from app.modules.referrals import REFERRAL_RATE, payout_rows
+
+    store, _prof = _admin_read(request, authorization)
+    return respond(request, {"rate": str(REFERRAL_RATE), "items": payout_rows(store)})
+
+
+@router.post("/admin/invitations/payouts/{payout_id}/paid")
+def admin_invitation_payout_paid(payout_id: str, request: Request, authorization: str | None = Header(default=None)):
+    from app.modules.referrals import mark_payout_paid
+
+    store, prof = _admin_write(request, authorization)
+    updated = mark_payout_paid(store, payout_id)
+    _audit(store, prof, "invitation.payout_paid", payout_id)
+    return respond(request, updated)
 
 
 @router.get("/admin/analytics")
@@ -581,6 +603,24 @@ def admin_recall_pause_all(request: Request, authorization: str | None = Header(
             paused += 1
     _audit(store, prof, "user_recall.pause_all", "user_recall_campaigns")
     return respond(request, {"paused": paused})
+
+
+@router.get("/admin/recall/audience")
+def admin_recall_audience(request: Request, authorization: str | None = Header(default=None)):
+    from app.modules.presence import recall_audience
+
+    store, _prof = _admin_read(request, authorization)
+    return respond(request, recall_audience(store))
+
+
+@router.post("/admin/recall/links")
+def admin_recall_links(request: Request, body: RecallLinkIn, authorization: str | None = Header(default=None)):
+    from app.modules.presence import issue_recall_links
+
+    store, prof = _admin_write(request, authorization)
+    links = issue_recall_links(store, body.days)
+    _audit(store, prof, "user_recall.links", str(body.days))
+    return respond(request, {"items": links})
 
 
 @router.get("/admin/recall/{campaign_id}")

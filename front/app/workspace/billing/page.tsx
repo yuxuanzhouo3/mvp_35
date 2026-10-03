@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { readClient } from '@/lib/client-adapter'
+import { sharePlan } from '../acquire/share-plans'
 
 type Plan = { id: string; name: string; amount_fen: number; period: string }
 type JsapiPay = {
@@ -77,6 +78,7 @@ export default function BillingPage() {
   const [busy, setBusy] = useState(false)
   const [qr, setQr] = useState('')
   const [qrImage, setQrImage] = useState('')
+  const [pickedPlan, setPickedPlan] = useState('')
 
   async function load() {
     const data = await api<Summary>('/billing/summary')
@@ -84,6 +86,7 @@ export default function BillingPage() {
   }
 
   useEffect(() => {
+    setPickedPlan(new URLSearchParams(window.location.search).get('plan') || '')
     load().catch((reason: Error) => setError(reason.message))
   }, [])
 
@@ -156,6 +159,7 @@ export default function BillingPage() {
   }
 
   const active = summary?.subscription.items.find((item) => item.status === 'active')
+  const picked = sharePlan(pickedPlan)
 
   return (
     <div className="flex flex-col gap-6">
@@ -164,6 +168,13 @@ export default function BillingPage() {
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">套餐与支付</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">下单后状态是待支付。微信支付和支付宝只在商户配置完整后给出付款地址。浏览器不调用支付回调，也不把待支付显示成成功。</p>
         {summary?.payment_testing && <p className="mt-2 text-sm text-muted-foreground">当前是支付测试，付费套餐实付 0.10 元。</p>}
+        {picked && (
+          <p className="mt-3 max-w-3xl rounded-xl border border-border bg-card px-4 py-3 text-sm leading-6">
+            这一档是{picked.name}：成交和召回成交抽成 {Math.round(picked.take * 100)}%，已送达线索 ¥{(picked.leadFen / 100).toFixed(2)} / 条，已送达召回 ¥{(picked.recallFen / 100).toFixed(2)} / 次。
+            {picked.monthYuan > 0 ? ` 月费 ¥${picked.monthYuan}。抽成要等这笔支付成功才换成新档，待支付仍按原档。` : ' 免费档不产生支付单。'}
+            手点赢单和私下收款不进入抽成。
+          </p>
+        )}
         {!summary && !error && <p className="mt-4 text-sm text-muted-foreground">正在加载账单…</p>}
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
@@ -176,6 +187,7 @@ export default function BillingPage() {
         </section>
       )}
       <section className="grid gap-4 md:grid-cols-3">
+        {picked && <h2 className="md:col-span-3 font-semibold">已接通的支付套餐</h2>}
         {(summary?.plans || []).map((plan) => (
           <article key={plan.id} className="rounded-2xl border border-border bg-card p-5">
             <h2 className="font-semibold">{plan.name}</h2>

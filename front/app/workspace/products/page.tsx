@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { api, percent, waitJob } from '@/lib/api'
 import { ProductLibrary } from '@/components/product-library'
 import { ReportDialog } from '@/components/report-dialog'
+import { ResultDesk } from '@/components/result-desk'
 
 type Selection = {
   pick: boolean
@@ -119,11 +120,10 @@ async function spreadsheetToCsv(file: File) {
 }
 
 export default function ProductsPage() {
-  const [tab, setTab] = useState<'own' | 'catalog'>('own')
+  const [tab, setTab] = useState<'manual' | 'sheet' | 'catalog' | 'library'>('manual')
   const [form, setForm] = useState(emptyForm)
   const [csv, setCsv] = useState('sku,name,cost_cny,target_price_usd,international_freight_usd\nCUP-1,样品杯,72,40,2\n')
   const [csvFile, setCsvFile] = useState('')
-  const [query, setQuery] = useState('杯')
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [libraryKey, setLibraryKey] = useState(0)
   const [message, setMessage] = useState('')
@@ -151,22 +151,32 @@ export default function ProductsPage() {
     }
   }
 
+  const views = [
+    { id: 'manual', name: '手动录入' },
+    { id: 'sheet', name: '表格导入' },
+    { id: 'catalog', name: '帮我选品' },
+    { id: 'library', name: '已入库' },
+  ] as const
+
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div className="flex h-[calc(100dvh-11rem)] flex-col gap-3 overflow-hidden md:h-[calc(100dvh-9rem)]">
+      <div className="shrink-0">
         <span className="eyebrow">路径 A · 选品与分析报告</span>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">双向入口，同一商品库</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">手动、表格文件或国内货源目录都会写入 products。表格支持 CSV、TSV 和 Excel。默认国内销售。路线可以选中国到美国、香港、澳大利亚，或从美国到中国。改市场后必须重新分析。</p>
+        <h1 className="text-2xl font-semibold tracking-tight">双向入口，同一商品库</h1>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">四个功能在这一屏切换。表格支持 CSV、TSV 和 Excel。改市场后必须重新分析。</p>
       </div>
-      {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
-      {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>}
-      <div className="flex gap-2">
-        <button className={`rounded-lg px-3 py-1.5 text-sm ${tab === 'own' ? 'bg-primary text-primary-foreground' : 'border border-border'}`} onClick={() => setTab('own')}>自有导入</button>
-        <button className={`rounded-lg px-3 py-1.5 text-sm ${tab === 'catalog' ? 'bg-primary text-primary-foreground' : 'border border-border'}`} onClick={() => setTab('catalog')}>帮我选品</button>
+      {error && <p className="shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
+      <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4">
+        {views.map((item) => (
+          <button key={item.id} type="button" className={`h-11 rounded-xl px-2 text-sm font-medium ${tab === item.id ? 'bg-primary text-primary-foreground' : 'border border-border bg-card'}`} onClick={() => setTab(item.id)}>
+            {item.name}
+          </button>
+        ))}
       </div>
-      {tab === 'own' ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <form className="rounded-2xl border border-border bg-card p-5" onSubmit={(event) => {
+      <section className="min-h-0 flex-1 overflow-y-auto rounded-3xl border border-border bg-card p-4 md:p-5">
+      {tab === 'manual' ? (
+          <form onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
               await api('/products', { method: 'POST', body: JSON.stringify(form) })
@@ -201,9 +211,10 @@ export default function ProductsPage() {
               </label>
               <Field label="贸易术语" value={form.incoterm} onChange={(value) => setField('incoterm', value)} />
             </div>
-            <button disabled={busy} className="mt-4 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">写入商品库</button>
+            <button disabled={busy} className="mt-4 h-11 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50">写入商品库</button>
           </form>
-          <form className="rounded-2xl border border-border bg-card p-5" onSubmit={(event) => {
+      ) : tab === 'sheet' ? (
+          <form onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
               const created = await api<{ job_id: string }>('/products/imports', { method: 'POST', body: JSON.stringify({ csv, algorithm: 'product-pricer' }) })
@@ -264,48 +275,58 @@ export default function ProductsPage() {
               </button>
             )}
           </form>
+      ) : tab === 'catalog' ? (
+        <div>
+          <h2 className="font-semibold">国内货源目录</h2>
+          <p className="mt-1 text-sm text-muted-foreground">搜索只带选品排序。利润率达到 15% 且风险不是高的商品优先。</p>
+          <div className="mt-3">
+            <ResultDesk
+              items={catalog}
+              placeholder="搜索名称、SKU 或供应商"
+              keywords={(item) => `${item.name} ${item.sku} ${item.supplier} ${item.category}`}
+              onSearch={(next) => {
+                void run(async () => {
+                  const data = await api<{ items: CatalogItem[] }>(`/catalog/search?q=${encodeURIComponent(next)}&algorithm=selection-assist`)
+                  setCatalog(data.items)
+                })
+              }}
+              filters={[{ key: 'pick', label: '建议', value: (item) => item.selection?.pick ? '优先' : '暂缓' }]}
+              sorts={[
+                { id: 'score', label: '机会分', compare: (left, right) => (right.selection?.score || 0) - (left.selection?.score || 0) },
+                { id: 'margin', label: '利润率', compare: (left, right) => (right.selection?.net_margin || '').localeCompare(left.selection?.net_margin || '') },
+                { id: 'name', label: '名称', compare: (left, right) => left.name.localeCompare(right.name, 'zh') },
+              ]}
+              empty="还没有货源结果。输入关键词后搜索。"
+              render={(item) => (
+                <article className="rounded-xl border border-border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-medium">{item.name}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">{item.supplier} · {item.sku} · ¥{item.cost_cny} · ${item.target_price_usd}</p>
+                      {item.selection && <p className="mt-1 text-xs text-muted-foreground">{item.selection.pick ? '优先' : '暂缓'} · 机会分 {item.selection.score} · 利润率 {item.selection.net_margin} · 风险 {item.selection.risk_level}</p>}
+                    </div>
+                    <button type="button" disabled={busy} className="h-9 rounded-lg border border-border px-3 text-sm" onClick={() => {
+                      void run(async () => {
+                        await api('/catalog/adopt', { method: 'POST', body: JSON.stringify({ catalog_id: item.id }) })
+                        setMessage(`${item.name} 已进入商品库。`)
+                      })
+                    }}>入库</button>
+                  </div>
+                </article>
+              )}
+            />
+          </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-semibold">国内货源目录</h2>
-          <p className="mt-2 text-xs text-muted-foreground">搜索只带选品排序，按利润率、时效和风险排序。不带定价接口。</p>
-          <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
-            <p className="text-xs font-semibold text-primary">算法</p>
-            <p className="mt-1 text-sm font-medium">帮我选品</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">利润率达到 15% 且风险不是高的商品优先。金额仍由规则引擎计算。</p>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <input className="w-full max-w-xs rounded-lg border border-border px-3 py-2 text-sm" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索货源" />
-            <button className="inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-lg border border-border px-3 text-sm" onClick={() => {
-              void run(async () => {
-                const data = await api<{ items: CatalogItem[] }>(`/catalog/search?q=${encodeURIComponent(query)}&algorithm=selection-assist`)
-                setCatalog(data.items)
-              })
-            }}>搜索</button>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {catalog.map((item) => (
-              <article key={item.id} className="rounded-xl border border-border p-3">
-                <h3 className="font-medium">{item.name}</h3>
-                <p className="mt-1 text-xs text-muted-foreground">{item.supplier} · {item.sku}</p>
-                <p className="mt-2 text-sm">成本 ¥{item.cost_cny} · 参考售价 ${item.target_price_usd}</p>
-                {item.selection && (
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    {item.selection.pick ? '优先' : '暂缓'} · 机会分 {item.selection.score} · 利润率 {item.selection.net_margin} · 风险 {item.selection.risk_level}
-                    <span className="mt-1 block">{item.selection.reason}</span>
-                  </p>
-                )}
-                <button disabled={busy} className="mt-3 text-sm text-primary" onClick={() => {
-                  void run(async () => {
-                    await api('/catalog/adopt', { method: 'POST', body: JSON.stringify({ catalog_id: item.id }) })
-                    setMessage(`${item.name} 已进入商品库。`)
-                  })
-                }}>入库</button>
-              </article>
-            ))}
+        <div>
+          <h2 className="font-semibold">已入库商品</h2>
+          <p className="mt-1 text-sm text-muted-foreground">按名称或 SKU 搜索。使用会生成分析报告。</p>
+          <div className="mt-3">
+            <ProductLibrary key={libraryKey} />
           </div>
         </div>
       )}
+      </section>
       {quoteOpen && quotes[quoteIndex] && (
         <ReportDialog title="利润报告" onClose={() => setQuoteOpen(false)}>
           <ProfitReport
@@ -317,13 +338,6 @@ export default function ProductsPage() {
           />
         </ReportDialog>
       )}
-      <div>
-        <h2 className="text-lg font-semibold">已入库商品</h2>
-        <p className="mt-1 text-sm text-muted-foreground">搜索名称或 SKU，使用会生成分析报告，删除后这条记录不再出现。</p>
-        <div className="mt-4">
-          <ProductLibrary key={libraryKey} />
-        </div>
-      </div>
     </div>
   )
 }

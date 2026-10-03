@@ -24,6 +24,7 @@ class RegisterIn(BaseModel):
     password: str
     display_name: str | None = None
     code: str | None = None
+    invite_code: str | None = None
 
 
 class LoginIn(BaseModel):
@@ -31,6 +32,7 @@ class LoginIn(BaseModel):
     phone: str | None = None
     username: str | None = None
     password: str
+    recall: str | None = None
 
 
 class RefreshIn(BaseModel):
@@ -68,6 +70,7 @@ class CodeLoginIn(BaseModel):
     email: str | None = None
     phone: str | None = None
     code: str
+    recall: str | None = None
 
 
 class SwitchIn(BaseModel):
@@ -84,6 +87,7 @@ def auth_register(request: Request, body: RegisterIn):
         password=body.password,
         display_name=body.display_name,
         code=body.code,
+        invite_code=body.invite_code,
     )
     return respond(request, prof)
 
@@ -93,7 +97,15 @@ def auth_login(request: Request, body: LoginIn):
     settings, store = request.app.state.settings, request.app.state.store
     return respond(
         request,
-        login(store, settings, email=body.email, phone=body.phone, password=body.password, username=body.username),
+        login(
+            store,
+            settings,
+            email=body.email,
+            phone=body.phone,
+            password=body.password,
+            username=body.username,
+            recall=body.recall,
+        ),
     )
 
 
@@ -125,6 +137,39 @@ def auth_reset(request: Request, body: ResetIn):
 def users_me(request: Request, authorization: str | None = Header(default=None)):
     _settings, _store, prof = bind(request, authorization)
     return respond(request, prof)
+
+
+@router.get("/users/me/invite")
+def users_me_invite(request: Request, authorization: str | None = Header(default=None)):
+    from app.modules.referrals import REFERRAL_RATE, my_invite
+
+    _settings, store, prof = bind(request, authorization)
+    user = store.get("users", prof["user"]["id"])
+    if not user:
+        from app.core.errors import AppError
+
+        raise AppError("USER_NOT_FOUND", "用户不存在", 404)
+    payload = my_invite(store, user)
+    payload["rate"] = str(REFERRAL_RATE)
+    return respond(request, payload)
+
+
+@router.post("/users/me/invite/cash")
+def users_me_invite_cash(request: Request, authorization: str | None = Header(default=None)):
+    from app.modules.referrals import request_cash
+
+    _settings, store, prof = bind(request, authorization)
+    user = store.get("users", prof["user"]["id"])
+    return respond(request, request_cash(store, user or prof["user"]))
+
+
+@router.post("/users/me/draw")
+def users_me_draw(request: Request, authorization: str | None = Header(default=None)):
+    from app.modules.presence import draw_cash
+
+    _settings, store, prof = bind(request, authorization)
+    user = store.get("users", prof["user"]["id"])
+    return respond(request, draw_cash(store, user or prof["user"]))
 
 
 @router.get("/auth/wechat/authorize")
@@ -186,6 +231,7 @@ def auth_code_login(request: Request, body: CodeLoginIn):
             email=body.email,
             phone=body.phone,
             code=body.code,
+            recall=body.recall,
         ),
     )
 

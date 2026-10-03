@@ -3,6 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY pyproject.toml ./
 COPY app ./app
+COPY algorithm ./algorithm
 COPY config ./config
 COPY db ./db
 COPY cloudbase-auth.json /root/.config/.cloudbase/auth.json

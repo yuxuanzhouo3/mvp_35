@@ -75,6 +75,18 @@ def _smtp(settings: Settings, to: str, subject: str, text: str, failure: str = "
         raise AppError("MESSAGE_FAILED", failure, 502) from exc
 
 
+def sms_failure_message(code: str) -> str:
+    if code == "LimitExceeded.PhoneNumberDailyLimit":
+        return "这个手机号今天的短信次数已用完，请明天再试，或改用密码登录。"
+    if code in {
+        "LimitExceeded.PhoneNumberThirtySecondLimit",
+        "LimitExceeded.PhoneNumberOneHourLimit",
+        "LimitExceeded.DeliveryFrequencyLimit",
+    }:
+        return "短信发送太频繁，请稍后再试，或改用密码登录。"
+    return "验证码短信没有发出"
+
+
 def _sms(settings: Settings, phone: str, code: str) -> None:
     payload = json.dumps(
         {
@@ -94,11 +106,13 @@ def _sms(settings: Settings, phone: str, code: str) -> None:
     except (httpx.HTTPError, json.JSONDecodeError) as exc:
         raise AppError("MESSAGE_FAILED", "验证码短信没有发出", 502) from exc
     payload_body = body.get("Response") or {}
-    error = payload_body.get("Error")
+    error = payload_body.get("Error") or {}
     statuses = payload_body.get("SendStatusSet") or []
-    failed = error or response.status_code >= 400 or any(item.get("Code") != "Ok" for item in statuses)
+    failed_status = next((item for item in statuses if item.get("Code") != "Ok"), None)
+    failed = bool(error) or response.status_code >= 400 or failed_status is not None
     if failed:
-        raise AppError("MESSAGE_FAILED", "验证码短信没有发出", 502)
+        provider_code = str(error.get("Code") or (failed_status or {}).get("Code") or "")
+        raise AppError("MESSAGE_FAILED", sms_failure_message(provider_code), 502)
 
 
 def _tc3(secret_id: str, secret_key: str, payload: str, region: str) -> dict:

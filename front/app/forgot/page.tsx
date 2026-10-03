@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AuthShell, authButton, authInput } from '@/components/auth-shell'
+import { SmsQuotaDialog } from '@/components/sms-quota-dialog'
 import { forgotAccount, resetWithSms } from '@/lib/session'
 
 export default function ForgotPage() {
@@ -17,6 +18,7 @@ export default function ForgotPage() {
   const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
+  const [quota, setQuota] = useState<{ count: number; cap: number } | null>(null)
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -32,6 +34,7 @@ export default function ForgotPage() {
       setAccepted(true)
       setEmailed(result.channel === 'email')
       setSmsSent(result.channel === 'sms')
+      if (result.sms_quota_warning) setQuota({ count: result.sms_sent_today || 0, cap: result.sms_daily_cap || 10 })
       setToken(result.reset_token || '')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '发送失败')
@@ -82,6 +85,7 @@ export default function ForgotPage() {
         </form>
       )}
       {accepted && !token && !emailed && !smsSent && <p className="mt-4 text-sm text-muted-foreground">若账号存在，重置请求已受理。</p>}
+      {quota && <SmsQuotaDialog count={quota.count} cap={quota.cap} onClose={() => setQuota(null)} />}
       <p className="mt-4 text-sm"><Link href="/login" className="text-primary">返回登录</Link></p>
     </AuthShell>
   )

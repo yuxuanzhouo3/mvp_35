@@ -176,3 +176,105 @@ def test_platform_admin_login_and_operator_actions(client: TestClient):
     assert exported_analytics.json()["data"]["filename"] == "analytics.json"
     found = client.get("/api/v1/admin/search", headers=headers, params={"q": "首页横幅"})
     assert found.json()["data"]["ads"][0]["id"] == ad_id
+
+
+def test_personal_invite_chain_states_who_used_it_and_what_is_owed(client: TestClient):
+    from app.services.common import base_doc, new_id
+
+    headers_a = register(client, "invite-a@example.com")
+    code = client.get("/api/v1/users/me/invite", headers=headers_a).json()["data"]["invite_code"]
+    created_b = client.post(
+        "/api/v1/auth/register",
+        json={"email": "invite-b@example.com", "password": "secret-pass", "display_name": "乙方", "invite_code": code},
+    )
+    assert created_b.status_code == 200, created_b.text
+    logged_b = client.post("/api/v1/auth/login", json={"email": "invite-b@example.com", "password": "secret-pass"})
+    headers_b = {"Authorization": f"Bearer {logged_b.json()['data']['access_token']}"}
+    code_b = client.get("/api/v1/users/me/invite", headers=headers_b).json()["data"]["invite_code"]
+    created_c = client.post(
+        "/api/v1/auth/register",
+        json={"email": "invite-c@example.com", "password": "secret-pass", "display_name": "丙方", "invite_code": code_b},
+    )
+    assert created_c.status_code == 200, created_c.text
+    bad = client.post(
+        "/api/v1/auth/register",
+        json={"email": "invite-d@example.com", "password": "secret-pass", "display_name": "丁方", "invite_code": "NO-SUCH"},
+    )
+    assert bad.status_code == 400
+
+    store = client.app.state.store
+    person_b = store.find_global("users", email="invite-b@example.com")
+    store.insert(
+        "payments",
+        base_doc(
+            person_b["tenant_id"],
+            person_b["id"],
+            id=new_id("pay"),
+            user_id=person_b["id"],
+            amount=1000,
+            status="succeeded",
+            currency="CNY",
+            provider="mock",
+        ),
+    )
+    payouts = client.get("/api/v1/admin/invitations/payouts", headers=headers_a).json()["data"]["items"]
+    row = next(item for item in payouts if item["invite_code"] == code)
+    assert [person["name"] for person in row["used_by"]] == ["乙方"]
+    assert [person["name"] for person in row["invited_later"]] == ["丙方"]
+    assert row["paid_fen"] == 1000
+    assert row["owed_fen"] == 100
+    assert row["discount_fen"] == 100
+    event = row["events"][0]
+    assert event["invitee_name"] == "乙方"
+    assert event["link"] == f"/register?invite={code}"
+    assert event["paid_fen"] == 1000
+    assert event["reward_fen"] == 100
+
+    cash = client.post("/api/v1/users/me/invite/cash", headers=headers_a)
+    assert cash.status_code == 200, cash.text
+    due = cash.json()["data"]["due_at"]
+    from datetime import datetime
+
+    opened = datetime.fromisoformat(due)
+    assert opened.weekday() < 5
+    again = client.get("/api/v1/users/me/invite", headers=headers_a).json()["data"]
+    assert again["discount_fen"] == 0
+    assert again["cash_requests"][0]["status"] == "scheduled"
+    repeat = client.post("/api/v1/users/me/invite/cash", headers=headers_a)
+    assert repeat.status_code == 400
+
+
+def test_login_streak_recall_link_and_coupon(client: TestClient):
+    from datetime import date, datetime, timedelta, timezone
+
+    from app.core.timeutil import iso
+    from app.modules.presence import today_cn
+
+    headers = register(client, "streak@example.com")
+    store = client.app.state.store
+    user = store.find_global("users", email="streak@example.com")
+    today = date.fromisoformat(today_cn())
+    store.touch("users", user["id"], {"login_dates": [(today - timedelta(days=offset)).isoformat() for offset in range(1, 14)], "last_login_at": iso()})
+    logged = client.post("/api/v1/auth/login", json={"email": "streak@example.com", "password": "secret-pass"})
+    assert logged.status_code == 200, logged.text
+    mine = client.get("/api/v1/users/me/invite", headers=headers).json()["data"]
+    assert mine["login_streak"] == 14
+    assert mine["draw_chances"] == 3
+    drawn = client.post("/api/v1/users/me/draw", headers=headers)
+    assert drawn.status_code == 200, drawn.text
+    assert drawn.json()["data"]["draw_chances"] == 2
+
+    quiet = store.find_global("users", email="streak@example.com")
+    store.touch("users", quiet["id"], {"last_login_at": iso(datetime.now(timezone.utc) - timedelta(days=8)), "login_dates": []})
+    audience = client.get("/api/v1/admin/recall/audience", headers=headers)
+    assert audience.status_code == 200, audience.text
+    assert any(item["id"] == quiet["id"] for item in audience.json()["data"]["buckets"]["7"])
+    links = client.post("/api/v1/admin/recall/links", headers=headers, json={"days": 7})
+    assert links.status_code == 200, links.text
+    link = next(item for item in links.json()["data"]["items"] if item["user_id"] == quiet["id"])
+    token = link["share_path"].split("recall=", 1)[1]
+    returned = client.post("/api/v1/auth/login", json={"email": "streak@example.com", "password": "secret-pass", "recall": token})
+    assert returned.status_code == 200, returned.text
+    coupon = client.get("/api/v1/users/me/invite", headers=headers).json()["data"]["coupons"]
+    assert coupon[0]["rate"] == "0.10"
+    assert coupon[0]["label"] == "召回登录优惠"

@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Globe2 } from 'lucide-react'
+import { Globe2, MessageSquare } from 'lucide-react'
 import { GuideVideo } from '@/components/guide-video'
+import { UserMenu } from '@/components/user-menu'
 import { AdSlot } from '@/components/ad-slot'
+import { ChatSidebar } from '@/components/chat-sidebar'
 import { api } from '@/lib/api'
 import { accessToken, logoutSession } from '@/lib/session'
 
@@ -21,6 +23,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const [name, setName] = useState('')
   const [ready, setReady] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
 
   useEffect(() => {
     if (!accessToken()) {
@@ -46,6 +49,10 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     }
   }, [])
 
+  useEffect(() => {
+    if (window.matchMedia('(min-width: 768px)').matches) setChatOpen(true)
+  }, [])
+
   return (
     <div className="min-h-screen bg-background pb-28 md:pb-0">
       <header className="site-header sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-md">
@@ -67,12 +74,16 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
             })}
           </nav>
           <div className="flex min-w-0 items-center gap-2 text-xs sm:gap-3 sm:text-sm">
-            <button type="button" className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => void logoutSession().then(() => router.replace('/login'))}>退出</button>
-            {name && <span className="min-w-0 max-w-[6.5rem] truncate text-muted-foreground sm:max-w-32">{name}</span>}
+            <button type="button" className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 ${chatOpen ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`} aria-expanded={chatOpen} onClick={() => setChatOpen((open) => !open)}>
+              <MessageSquare className="size-4" />
+              对话
+            </button>
+            <UserMenu name={name || '账号'} onLogout={() => void logoutSession().then(() => router.replace('/login'))} />
             <GuideVideo className="mr-3 shrink-0 sm:mr-0" />
           </div>
         </div>
       </header>
+      <div className={chatOpen ? 'md:mr-80' : ''}>
       <div className="container py-6 md:py-8">
         {ready ? (
           <>
@@ -83,6 +94,8 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           <p className="text-sm text-muted-foreground">正在确认登录</p>
         )}
       </div>
+      </div>
+      {ready && <ChatSidebar open={chatOpen} onClose={() => setChatOpen(false)} />}
       <nav className="phone-dock md:hidden" aria-label="手机导航">
         {links.map(([href, label]) => {
           const active = href === '/workspace' ? pathname === href : pathname.startsWith(href)
