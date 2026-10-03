@@ -10,15 +10,4 @@ export const channels = [
   { id: 'raas', code: 'B9', name: 'RaaS', copy: '官网抽成和账户销售，单独入账', platforms: ['site_success', 'app_account'] },
 ]
 
-export const parts = [
-  { id: 'discover', name: '发现线索' },
-  { id: 'leads', name: '线索池' },
-  { id: 'outreach', name: '触达' },
-  { id: 'activation', name: '冷客启动' },
-  { id: 'recall', name: '流失召回' },
-  { id: 'ledger', name: '分成入账' },
-] as const
-
-export type PartId = (typeof parts)[number]['id']
-
 export const sameButton = 'inline-flex h-12 w-full items-center justify-center rounded-xl px-3 text-center text-sm font-medium leading-none disabled:opacity-50'

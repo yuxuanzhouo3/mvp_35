@@ -54,6 +54,16 @@ const positionLabel: Record<string, string> = {
   no_overseas_comp: '无海外报价',
 }
 
+const routes = {
+  domestic: { origin_country: 'CN', target_market: 'CN', tax_regime: 'domestic', route: 'CN-CN', label: '国内' },
+  cn_us: { origin_country: 'CN', target_market: 'US', tax_regime: 'cn_us', route: 'CN-US', label: '中国 → 美国' },
+  cn_hk: { origin_country: 'CN', target_market: 'HK', tax_regime: 'cn_hk', route: 'CN-HK', label: '中国 → 香港' },
+  cn_au: { origin_country: 'CN', target_market: 'AU', tax_regime: 'cn_au', route: 'CN-AU', label: '中国 → 澳大利亚' },
+  us_cn: { origin_country: 'US', target_market: 'CN', tax_regime: 'domestic', route: 'US-CN', label: '美国 → 中国' },
+} as const
+
+type RouteId = keyof typeof routes
+
 const emptyForm = {
   name: '',
   sku: '',
@@ -61,16 +71,25 @@ const emptyForm = {
   cost_cny: '72',
   packaging_cny: '4',
   domestic_freight_cny: '6',
-  international_freight_usd: '3.2',
+  international_freight_usd: '0',
   target_price_usd: '39',
   origin_country: 'CN',
-  target_market: 'US',
+  target_market: 'CN',
+  route: 'CN-CN',
   incoterm: 'DDP',
-  tax_regime: 'cn_us',
+  tax_regime: 'domestic',
   cost_currency: 'CNY',
   price_currency: 'USD',
   fx_usd_cny: '7.20',
   hs_code_hint: '',
+}
+
+function routeId(form: { origin_country: string; target_market: string }): RouteId {
+  if (form.origin_country === 'US' && form.target_market === 'CN') return 'us_cn'
+  if (form.target_market === 'HK') return 'cn_hk'
+  if (form.target_market === 'AU') return 'cn_au'
+  if (form.target_market === 'US') return 'cn_us'
+  return 'domestic'
 }
 
 function tsvToCsv(text: string) {
@@ -137,7 +156,7 @@ export default function ProductsPage() {
       <div>
         <span className="eyebrow">路径 A · 选品与分析报告</span>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">双向入口，同一商品库</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">手动、表格文件或国内货源目录都会写入 products。表格支持 CSV、TSV 和 Excel。默认货源中国、目标美国、中美税、成本人民币、售价美元。改市场后必须重新分析。</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">手动、表格文件或国内货源目录都会写入同一个商品库。表格支持 CSV、TSV 和 Excel。默认是国内销售。也可以选中国到美国、香港或澳大利亚，或把路线倒过来，从美国到中国。改路线后必须重新分析。</p>
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>}
@@ -164,16 +183,20 @@ export default function ProductsPage() {
               <Field label="国内段 CNY" value={form.domestic_freight_cny} onChange={(value) => setField('domestic_freight_cny', value)} />
               <Field label="国际段 USD" value={form.international_freight_usd} onChange={(value) => setField('international_freight_usd', value)} />
               <Field label="汇率 USD/CNY" value={form.fx_usd_cny} onChange={(value) => setField('fx_usd_cny', value)} />
-              <label className="text-xs text-muted-foreground">目标市场
-                <select className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-2 text-sm text-foreground" value={form.target_market} onChange={(event) => {
-                  const market = event.target.value
-                  const regime = market === 'AU' ? 'cn_au' : market === 'HK' ? 'cn_hk' : market === 'CN' ? 'domestic' : 'cn_us'
-                  setForm((current) => ({ ...current, target_market: market, tax_regime: regime }))
+              <label className="text-xs text-muted-foreground">路线
+                <select className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-2 text-sm text-foreground" value={routeId(form)} onChange={(event) => {
+                  const next = routes[event.target.value as RouteId]
+                  setForm((current) => ({
+                    ...current,
+                    origin_country: next.origin_country,
+                    target_market: next.target_market,
+                    tax_regime: next.tax_regime,
+                    route: next.route,
+                  }))
                 }}>
-                  <option value="US">美国</option>
-                  <option value="HK">香港</option>
-                  <option value="AU">澳大利亚</option>
-                  <option value="CN">内陆</option>
+                  {(Object.keys(routes) as RouteId[]).map((id) => (
+                    <option key={id} value={id}>{routes[id].label}</option>
+                  ))}
                 </select>
               </label>
               <Field label="贸易术语" value={form.incoterm} onChange={(value) => setField('incoterm', value)} />
@@ -216,15 +239,7 @@ export default function ProductsPage() {
               <button disabled={busy} className="min-h-9 rounded-lg bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50">开始导入</button>
               {csvFile && <span className="text-xs text-muted-foreground">{csvFile}</span>}
             </div>
-            <AlgorithmPanel
-              title="国内外商品定价"
-              algorithm="product-pricer"
-              copy="导入只提交 product-pricer。比价读取国内与海外报价，不带选品算法。"
-              sources={[
-                ['国内报价', '/api/v1/sources/pricer/domestic'],
-                ['海外报价', '/api/v1/sources/pricer/overseas'],
-              ]}
-            />
+            <p className="mt-4 text-xs leading-5 text-muted-foreground">先比价会对照货架价给出建议售价，并保证不低于 15% 利润线。比价结果不入库。</p>
             <button
               type="button"
               disabled={busy}
@@ -249,13 +264,7 @@ export default function ProductsPage() {
       ) : (
         <div className="rounded-2xl border border-border bg-card p-5">
           <h2 className="font-semibold">国内货源目录</h2>
-          <p className="mt-2 text-xs text-muted-foreground">搜索只带 selection-assist，按利润率、时效和风险排序。不带定价接口。</p>
-          <AlgorithmPanel
-            title="帮我选品"
-            algorithm="selection-assist"
-            copy="排序读取货源目录，金额仍由规则引擎计算。利润率达到 15% 且风险不是高的商品优先。"
-            sources={[['货源目录', '/api/v1/sources/catalog']]}
-          />
+          <p className="mt-2 text-xs text-muted-foreground">按利润率、时效和风险排序。利润率达到 15% 且风险不是高的商品优先。金额仍由规则引擎计算。</p>
           <div className="mt-3 flex gap-2">
             <input className="w-full max-w-xs rounded-lg border border-border px-3 py-2 text-sm" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索货源" />
             <button className="inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-lg border border-border px-3 text-sm" onClick={() => {
@@ -347,22 +356,6 @@ function ProfitReport({
           <button type="button" className="rounded-lg border border-border px-2 py-1" onClick={onNext} disabled={index === total - 1}>下一条</button>
         </div>
       )}
-    </div>
-  )
-}
-
-function AlgorithmPanel({ title, algorithm, copy, sources }: { title: string; algorithm: string; copy: string; sources: [string, string][] }) {
-  return (
-    <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
-      <p className="text-xs font-semibold text-primary">算法</p>
-      <p className="mt-1 text-sm font-medium">{title}</p>
-      <p className="mt-1 text-xs leading-5 text-muted-foreground">{copy}</p>
-      <p className="mt-2 font-mono text-[11px] text-muted-foreground">{algorithm}</p>
-      <ul className="mt-2 space-y-1">
-        {sources.map(([label, path]) => (
-          <li key={path} className="font-mono text-[11px] text-muted-foreground">{label} {path}</li>
-        ))}
-      </ul>
     </div>
   )
 }

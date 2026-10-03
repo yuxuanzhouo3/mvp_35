@@ -1,6 +1,6 @@
 # 4.3 核心功能 · 算法实现说明
 
-给后端实现用。只覆盖 [project.md](project.md) §4.3：选品、获客、KPI。登录、支付订阅、AI 模型不在这里。
+给后端实现用。只覆盖 [project.md](project.md) §4.3：选品、获客、KPI。登录、支付通道、AI 模型不在这里。套餐月费和获客利润抽成的对应关系在「获客分佣」。
 
 金额、利润率、机会分、线索是否合格、是否入队，只由规则 `pg-rules-1.0` 计算。模型只写解释和文案。改公式必须换 `rules_version`，已落库的报告按旧版本复算。
 
@@ -16,9 +16,9 @@
 | A3 分析引擎 | `pg-rules-1.0` | `app/services/profit.py` · `app/workers/execute.py` | `POST /selection/analyze` · `POST /products/{id}/analyses` |
 | A4 报告与获客 | 四维快照 | `app/modules/selection.py` | `GET /reports/{id}` · `POST /reports/{id}/acquire` |
 | B1–B5、B8 发现 | 去重 + `lead-score` | `app/workers/execute.py` · `app/modules/acquisition.py` | `POST /lead-searches` · `POST /acquisition/tasks` |
-| B4 分成 | 验签账本 | `app/services/common.py` | `POST /billing/agency/commissions` |
+| B4 二级代理分成 | `pg-share-1.0` + 验签账本 | `app/services/common.py` | `POST /billing/agency/commissions` |
 | B6、B7 | 占位，无算法 | `app/api/v1/core_routes.py` | 见各节 |
-| B9 RAAS | 验签账本 | `app/services/common.py` | `POST /billing/raas/commissions` |
+| B9 RAAS 与套餐抽成 | `pg-share-1.0` + 验签账本 | `app/services/common.py` | `POST /billing/raas/commissions` · `POST /payments/checkout` |
 | 触达 | 批准后发送 | `app/api/v1/router.py` | `POST /campaigns` |
 | 冷启 / 召回 | 入队规则 | `app/workers/execute.py` | `POST /lifecycle/scan` · `POST /recall` |
 | KPI | `snapshot` | `app/services/metrics.py` | `GET /kpi/dashboard` · `GET /metrics` |
@@ -403,34 +403,43 @@ dedupe_key = source_channel + ":" + company.小写去空白 + ":" + market
 
 `online_expo` 必须留在 `CHANNELS` 里，避免现有调用变成 `UNKNOWN_PLATFORM`。
 
-## B4 十二代理
+## B4 十二个二级代理
 
 `channel=agency`。发现仍进 `leads`。分成不进线索分。`POST /acquisition/agency` 在开关打开前保持未开通。
 
-十二路是渠道子账户，不是十二个商品搜索站。每一路一个平台 id，线索从该代理自己的系统用合作接口或对方推送进来。
+`agent_1` … `agent_12` 是二级代理，也就是渠道子账户。它们不是亚马逊、沃尔玛、Temu、独立站、国际站这些平台；那些平台属于 B1 和选品。二级代理不调用卖家订单接口。
 
-| 平台 id | 代理 | 对方系统 | 对接方式 | 线索里记什么 |
-| --- | --- | --- | --- | --- |
-| `agent_1` | 亚马逊代运营 | 卖家后台授权后的 SP-API | 拉订单与买家消息 | 代运营客户公司、站点 |
-| `agent_2` | 沃尔玛代运营 | Walmart Marketplace | 订单 | 同上 |
-| `agent_3` | Temu 代运营 | Temu 卖家合作接口 | 订单与询盘 | 店铺、订单号 |
-| `agent_4` | 独立站代运营 | Shopify Admin `https://{shop}.myshopify.com/admin/api` Orders、Customers | 客户 | 店铺域名作公司 |
-| `agent_5` | 国际站代运营 | 阿里巴巴国际站询盘 | 询盘 | 买家公司、国家 |
-| `agent_6` | 速卖通代运营 | AliExpress 卖家订单接口 | 订单 | 买家、站点 |
-| `agent_7` | Shopee / Lazada 代运营 | 对应 Open Platform 订单 | 订单 | 站点国家 |
-| `agent_8` | 海外仓 | 仓储合作方出库回传 | 收货公司 | 只取收货公司与国家，不取无关库存 |
-| `agent_9` | 物流货代 | 货代运单联系人回传 | 发货联系人 | 公司、邮箱 |
-| `agent_10` | 收款服务商 | 到账通知里的付款方名称 | 付款公司 | 只取公司名；金额不写入线索分 |
-| `agent_11` | 网红与联盟 | 联盟平台转化回调（如 Impact、ShareASale 的转化 postback） | 推广带来的公司 | 联盟点击 id 作 `external_id` |
-| `agent_12` | 本地经销与展团 | 代理商表格或 webhook | 批量公司名单 | 由代理推送，本系统不登录对方后台 |
+层级只有两级：
 
-分成：`POST /billing/agency/commissions`，正文 `{amount_fen, idempotency_key, signature, channel_account_id?, note?}`。
+| 层级 | 账户 | 做什么 |
+| --- | --- | --- |
+| 一级代理 | 通讯录里邀请来的上级账户，id 由系统生成，不占用 `agent_n`，也不进 `CHANNELS` | 不直接发现线索。下级成交后单独入一笔分成 |
+| 二级代理 | `agent_1` … `agent_12`，每个租户最多这 12 个 | 报备线索、跟进成交。平台 id 必须是这 12 个之一 |
+
+每个二级代理必须挂在一个一级代理下面。线索由该二级代理用表格或 webhook 推送公司名单，本系统不登录对方后台。推送字段：`company`、`contact_name`、`email`、`market`、`external_id`。入库时 `platform=agent_n`，`source_channel=agency`，并记下 `parent_channel_account_id`。没有上级的推送拒绝，错误 `AGENCY_PARENT_REQUIRED`，不入库。
+
+| 平台 id | 层级 | 线索从哪来 | 账本记在谁名下 |
+| --- | --- | --- | --- |
+| `agent_1` … `agent_12` | 二级代理 | 该子账户自己的名单或 webhook | `channel_account_id=agent_n`，`level=2`，并带 `parent_channel_account_id` |
+
+没配推送时，发现管线仍返回 5 条演示线索，`provider=mock`，平台 id 仍是 `agent_n`。
+
+分成仍走 `POST /billing/agency/commissions`。HMAC 科目不变，仍是 `agency_commission`。正文 `{amount_fen, idempotency_key, signature, channel_account_id?, parent_channel_account_id?, level?, note?}`。
 
 ```text
 signature = HMAC-SHA256(ledger_hmac_secret, f"{idempotency_key}:{amount_fen}:agency_commission")
 ```
 
-签名不符则拒绝，不入账。同一 `idempotency_key` 再提交返回已有账，不记第二次。`amount_fen` 为整数分。科目 `agency_commission`，集合 `commission_ledger`。`channel_account_id` 用上表的 `agent_n`。
+签名不符则拒绝，不入账。同一 `idempotency_key` 再提交返回已有账，不记第二次。`amount_fen` 为整数分。集合 `commission_ledger`。
+
+成交分成的金额由下面的「获客分佣」`pg-share-1.0` 算出，再验签写入本接口。本接口仍不自己改比例。一笔代理成交记两笔账，科目都是 `agency_commission`：
+
+| 笔 | `level` | `channel_account_id` | 幂等键 |
+| --- | --- | --- | --- |
+| 二级代理 | `2` | `agent_n` | 调用方原键 |
+| 一级代理 | `1` | 该二级的 `parent_channel_account_id` | `{原键}:l1` |
+
+`level=2` 时 `channel_account_id` 必须是 `agent_1` … `agent_12`，且 `parent_channel_account_id` 不能空。`level=1` 的账户不能是 `agent_n`。两笔幂等键不同，互不覆盖。现有调用只带金额、幂等键和签名时照旧入账；带上 `level` 之后才按上表校验。
 
 ## B5 智慧大脑
 
@@ -498,9 +507,117 @@ signature = HMAC-SHA256(ledger_hmac_secret, f"{idempotency_key}:{amount_fen}:age
 | `app_store` | Apple 销售报表 | App Store Connect Sales and Trends | 只对金额，不把下载用户写进 `leads` |
 | `wechat_virtual` | 小程序虚拟支付账户 | 微信支付虚拟支付订单查询 | 只对金额 |
 
-抽成正文与 B4 相同，签名字符串里的科目换成 `raas_commission`，账本集合与代理分开。
+平台留下的获客利润抽成走 `POST /billing/raas/commissions`，签名科目是 `raas_commission`，账本集合与代理分开。比例见「获客分佣」，不在这个接口里另算。
+
+`site_success` 记网页成交的平台留存。`app_account` 记 App 内成交的平台留存。`app_store` 与 `wechat_virtual` 只核对订阅实付金额，不把下载用户或付款人写进 `leads`，也不把应用商店流水当成获客利润。
 
 `POST /payments/raas` 由 `payment.raas` 挡住。`POST /raas/settle` 由 `raas` 挡住。默认都关。不要在占位路由里记抽成。`site_success` 与 `app_account` 必须留在 `CHANNELS` 里。
+
+---
+
+## 获客分佣 · `pg-share-1.0`
+
+卖家先按月付会费，再按当时生效的套餐，把一笔成交的获客利润分给卖家、平台和二级代理。会费走现有支付页。利润分成在标记赢单时入账。两笔钱不混在同一张支付单里。
+
+改抽成比例必须换 `share_rules_version`。已经入账的行保持旧版本，不重算。模型不能改月费、抽成或账本金额。
+
+当前代码里的套餐仍是 `free`、`growth`（299 元/月）、`scale`（999 元/年）。实现本规则时，账单页改列下面六档，不再出售 `growth` 和 `scale`。已在生效中的旧订阅维持到 `period_end`，到期后按免费档抽成。
+
+### 六档
+
+月费是人民币。抽成比例四舍五入到 `0.0001`。金额用整数分，四舍五入到分。
+
+| 套餐 id | 名称 | 月费 | `amount_fen` | 平台抽成 `r` | 卖家留存 |
+| --- | --- | --- | --- | --- | --- |
+| `free` | 免费 | 0 | 0 | 0.9000 | 0.1000 |
+| `op_100` | 会员 100 | 100 元 | 10000 | 0.7000 | 0.3000 |
+| `op_1000` | 会员 1000 | 1000 元 | 100000 | 0.5000 | 0.5000 |
+| `op_10000` | 会员 10000 | 10000 元 | 1000000 | 0.3000 | 0.7000 |
+| `op_100000` | 会员 100000 | 100000 元 | 10000000 | 0.1000 | 0.9000 |
+| `op_1000000` | 会员 1000000 | 1000000 元 | 100000000 | 0.0000 | 1.0000 |
+
+免费档不能下单。其余五档 `kind=subscription`，周期都是 `month`。
+
+生效套餐取该租户 `status=active` 且 `period_end` 未过的订阅。没有，或已过期，按 `free` 的 `r=0.9000`。待支付订单不改变 `r`。同一时刻只认一笔生效订阅；新订阅签名入账后，旧订阅改为 `replaced`。
+
+### 获客利润
+
+只在线索变成赢单、且还没有该 `deal_id` 的分佣行时计算。基数是这份成交对应报告里已经冻结的净利润，不重新跑利润公式，也不用赢单当刻的汇率。
+
+```text
+G_yuan = net_profit_usd × fx_usd_cny × quantity
+G = 把 G_yuan 四舍五入到 0.01 元后换成整数分
+```
+
+`net_profit_usd` 与 `fx_usd_cny` 来自线索上的 `seed_analysis_id` 那份报告。`quantity` 默认 1，正文可给正整数。没有报告、净利润为空、或 `G ≤ 0` 时不入账，返回 `PROFIT_REQUIRED`。卖家留存记在成交单上，不进佣金账本。
+
+```text
+platform_pool = round_half_up(G × r) 到分
+seller_keep = G − platform_pool
+```
+
+尾差留在卖家，保证 `seller_keep + platform_pool = G`。`r = 0` 时 `platform_pool = 0`，不写任何佣金行。
+
+### 平台抽成池怎么分
+
+卖家留存不参与代理分成。
+
+线索 `source_channel=agency` 时，池子按二级代理、一级代理、平台三份切开。比例相对于 `platform_pool`，不是相对于 `G`。
+
+| 去向 | 比例 | 科目 | 幂等键 |
+| --- | --- | --- | --- |
+| 二级代理 `agent_n` | 0.5000 | `agency_commission` | `share:{deal_id}:l2` |
+| 一级代理 | 0.2000 | `agency_commission` | `share:{deal_id}:l1` |
+| 平台留存 | 剩下的 | `raas_commission` | `share:{deal_id}:platform` |
+
+```text
+l2 = round_half_up(platform_pool × 0.50)
+l1 = round_half_up(platform_pool × 0.20)
+platform_keep = platform_pool − l2 − l1
+```
+
+若四舍五入后 `l2 + l1 > platform_pool`，先减 `l1` 再减 `l2`，直到 `platform_keep ≥ 0`。`level=2` 必须是 `agent_1` … `agent_12`，且有 `parent_channel_account_id`，否则整笔分佣不入账，错误 `AGENCY_PARENT_REQUIRED`。
+
+其他通道（B1–B3、B5–B8）的赢单：`platform_keep = platform_pool`，只写一条 `raas_commission`，不写代理账。RAAS 通道自己的线索仍 `exclude_from_ar=true`，不进入这条获客利润。
+
+网页成交的平台留存 `platform=site_success`。App 内成交为 `app_account`。App Store Connect 与微信虚拟支付只用来核对会员实付是否等于 `amount_fen`，对不上则会员不生效，抽成维持原档。
+
+签名与 B4、B9 现有规则相同：`HMAC-SHA256(secret, f"{idempotency_key}:{amount_fen}:{subject}")`。同一幂等键再提交返回已有行。
+
+例子：报告净利润 10.00 USD，冻结汇率 7.00，数量 1，则 `G = 7000` 分。免费档 `platform_pool = 6300`，卖家留存 `700`。若来自二级代理，`l2 = 3150`，`l1 = 1260`，平台留存 `1890`。会员 1000000 档 `platform_pool = 0`，卖家留存 `7000`，没有佣金行。
+
+### 会员费里的代理分成
+
+二级代理介绍来的租户，在会员费支付成功时，从这笔会员费里再分一次。这不是获客利润，不乘 `r`。
+
+| 去向 | 比例 | 幂等键 |
+| --- | --- | --- |
+| 二级代理 | 实付的 0.1000 | `sub:{payment_id}:l2` |
+| 一级代理 | 实付的 0.0500 | `sub:{payment_id}:l1` |
+
+科目仍是 `agency_commission`。尾差留在平台已收的会员费里，不另写 RAAS 行。租户没有上级代理时，会员费全部留在平台。免费档没有这笔。同一支付单只分一次。
+
+这样会员 1000000 档虽然获客利润抽成是 0，介绍该租户的代理仍能从月费里拿到分成。
+
+### 跳到支付页
+
+用户在获客页或套餐说明里点某一付费档，前端进入 `/workspace/billing?plan={套餐 id}`。账单页展示该档月费、平台抽成和卖家留存，并给出微信支付、支付宝。下单仍是 `POST /payments/checkout`，正文 `{plan_id, kind:"subscription", provider, scene, idempotency_key}`。
+
+免费档不跳转，停在当前页，抽成按 90%。待支付、失败、退款都不改变抽成。只有签名回调或查单结果为 `succeeded` 之后，新的 `r` 才对之后的赢单生效。已经入账的成交不随升级或降级重算。
+
+账单页需要把六档和 `r` 一起返回。现有 `GET /billing/summary` 的 `plans` 在实现时带上 `platform_take` 与 `seller_keep`。支付测试金额只替换实付，不替换展示用的抽成比例。
+
+### 完成标准
+
+`G = 7000`、免费、非代理线索：卖家留存 700，一条 `raas_commission` 6300，没有代理账。同一成交再结算一次，不新增行。
+
+同一笔改成 `agent_3` 且有上级：代理账 3150 与 1260，RAAS 1890，三笔加卖家留存等于 7000。
+
+`op_100` 在支付仍是 `pending` 时，赢单仍按 0.9000。回调成功之后的新赢单按 0.7000。
+
+`op_1000000` 的赢单不写佣金行。该会员若由 `agent_3` 介绍且实付 100000000 分，代理账为 10000000 与 5000000，只写这两笔。
+
+点会员 1000 后，页面位于 `/workspace/billing?plan=op_1000`，能发起微信或支付宝下单。免费档不产生支付单。
 
 ---
 

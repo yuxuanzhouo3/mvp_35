@@ -23,7 +23,7 @@ const marketData = [
 const faqs = [
   ['PickGlobal 适合哪些企业？', '适合中国制造商、出口商、独立卖家和跨境电商团队。工作台只做两件事：选品分析报告，以及九路获客成交召回。'],
   ['可以分析自有商品吗？', '可以。手动录入、CSV 或国内货源目录会进入同一个商品库，不绑定外部电商选品主库。'],
-  ['首期支持哪些市场？', '默认货源中国、目标美国，税务按中美口径。路线可以扩展到香港、澳大利亚和一部分内陆市场。'],
+  ['首期支持哪些市场？', '默认国内销售。也可以选中国到美国、香港或澳大利亚，或把路线倒过来，从美国到中国。'],
   ['如何获取潜在客户？', '电商、社交、展会、代理和大数据是主获客；GEO/SEO、内容与跨境元素用于优化；RaaS 用来销售 PickGlobal 本身。冷启和召回属于获客路径，不是第三条产品线。'],
   ['AI 会自动发送邮件吗？', '不会。文案生成后必须人工批准才发送。利润、税费和评分由规则引擎计算，模型不能改这些数字。'],
   ['是否支持多端使用？', '手机、iPad、微信小程序、Web、Mac、Windows 和 Linux 共用同一套选品与获客。手机上直接开始分析，不必先装客户端。'],
@@ -191,7 +191,7 @@ export default function Page() {
                 <div key={label} className="rounded-xl border border-border bg-card px-2 py-2.5"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>
               ))}
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="size-3.5 shrink-0 text-emerald-600" /> 首期支持中国与美国市场</div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="size-3.5 shrink-0 text-emerald-600" /> 默认国内，也可从美国到中国</div>
           </div>
           <div className="dashboard-shell animate-float hidden md:block" aria-label="PickGlobal 工作台演示">
             <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 md:px-5">
