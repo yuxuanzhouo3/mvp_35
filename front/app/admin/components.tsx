@@ -3,12 +3,13 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { type ComponentType, type ReactNode, useEffect, useState } from 'react'
-import { AdminSession, adminApi, adminToken, clearAdminToken } from '@/lib/admin-session'
+import { AdminSession, adminApi, adminToken, clearAdminToken, downloadText } from '@/lib/admin-session'
 import { GuideVideo } from '@/components/guide-video'
 import {
   BarChart3,
   Bell,
   ChevronDown,
+  Download,
   Globe2,
   LayoutDashboard,
   MailCheck,
@@ -25,35 +26,47 @@ type Icon = ComponentType<{ className?: string }>
 type Tone = 'blue' | 'green' | 'emerald' | 'amber' | 'red' | 'violet' | 'slate'
 
 const nav = [
-  { href: '/admin', label: '运营总览', icon: LayoutDashboard },
-  { href: '/admin/ads', label: '广告管理', icon: Megaphone },
-  { href: '/admin/users', label: '用户数据', icon: Users },
-  { href: '/admin/analytics', label: '行为分析', icon: BarChart3 },
-  { href: '/admin/invitations', label: '用户邀请', icon: UserPlus },
-  { href: '/admin/recall', label: '用户召回', icon: MailCheck },
+  { href: '/admin', label: '运营总览', icon: LayoutDashboard, kind: 'overview' },
+  { href: '/admin/ads', label: '广告管理', icon: Megaphone, kind: 'ads' },
+  { href: '/admin/users', label: '用户数据', icon: Users, kind: 'users' },
+  { href: '/admin/analytics', label: '行为分析', icon: BarChart3, kind: 'analytics' },
+  { href: '/admin/invitations', label: '用户邀请', icon: UserPlus, kind: 'invitations' },
+  { href: '/admin/recall', label: '用户召回', icon: MailCheck, kind: 'recall' },
 ]
 
 const governance = [
-  { href: '/admin/audit', label: '审计日志', icon: ShieldCheck },
-  { href: '/admin/settings', label: '平台设置', icon: Settings },
+  { href: '/admin/audit', label: '审计日志', icon: ShieldCheck, kind: 'audit' },
+  { href: '/admin/settings', label: '平台设置', icon: Settings, kind: 'settings' },
 ]
 
-function NavLinks({ items, close, pathname }: { items: typeof nav; close?: () => void; pathname: string }) {
+function NavLinks({ items, close, pathname, onExport }: { items: typeof nav; close?: () => void; pathname: string; onExport: (kind: string, label: string) => void }) {
   return (
     <>
-      {items.map(({ href, label, icon: NavIcon }) => {
+      {items.map(({ href, label, icon: NavIcon, kind }) => {
         const active = href === '/admin' ? pathname === href : pathname.startsWith(href)
         return (
-          <Link key={href} href={href} onClick={close} className={`admin-focus flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${active ? 'bg-blue-500 text-white shadow-md shadow-blue-950/25' : 'text-slate-300 hover:bg-white/8 hover:text-white'}`}>
-            <NavIcon className="size-[18px]" />{label}
-          </Link>
+          <div key={href} className={`flex items-center rounded-xl pr-1.5 ${active ? 'bg-blue-500 text-white shadow-md shadow-blue-950/25' : 'text-slate-300 hover:bg-white/8 hover:text-white'}`}>
+            <Link href={href} onClick={close} className="admin-focus flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-3 text-sm">
+              <NavIcon className="size-[18px] shrink-0" />
+              <span className="truncate">{label}</span>
+            </Link>
+            <button
+              type="button"
+              aria-label={`导出${label}`}
+              className={`admin-focus inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${active ? 'bg-white/15 text-white' : 'bg-white/8 text-slate-200 hover:bg-white/15 hover:text-white'}`}
+              onClick={() => onExport(kind, label)}
+            >
+              <Download className="size-3" />
+              导出
+            </button>
+          </div>
         )
       })}
     </>
   )
 }
 
-function Sidebar({ close, session, onLogout }: { close?: () => void; session: AdminSession | null; onLogout: () => void }) {
+function Sidebar({ close, session, onLogout, onExport }: { close?: () => void; session: AdminSession | null; onLogout: () => void; onExport: (kind: string, label: string) => void }) {
   const pathname = usePathname()
   const [accountOpen, setAccountOpen] = useState(false)
   const name = session?.user.display_name || '平台管理员'
@@ -65,9 +78,9 @@ function Sidebar({ close, session, onLogout }: { close?: () => void; session: Ad
       </Link>
       <nav className="admin-scrollbar flex-1 space-y-1 overflow-y-auto p-4" aria-label="管理后台导航">
         <div className="px-3 pb-2 pt-2 text-[10px] font-bold uppercase tracking-[.18em] text-slate-400">Growth operations</div>
-        <NavLinks items={nav} close={close} pathname={pathname} />
+        <NavLinks items={nav} close={close} pathname={pathname} onExport={onExport} />
         <div className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[.18em] text-slate-400">Governance</div>
-        <NavLinks items={governance} close={close} pathname={pathname} />
+        <NavLinks items={governance} close={close} pathname={pathname} onExport={onExport} />
       </nav>
       <div className="relative border-t border-white/10 p-4">
         {accountOpen && (
@@ -97,6 +110,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [query, setQuery] = useState('')
   const [notesOpen, setNotesOpen] = useState(false)
   const [notes, setNotes] = useState<Array<{ id: string; action: string; created_at?: string }>>([])
+  const [exportNote, setExportNote] = useState('')
 
   useEffect(() => {
     setMounted(true)
@@ -121,6 +135,19 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   if (!mounted || pathname === '/admin/login') return <>{children}</>
 
+  async function exportNav(kind: string, label: string) {
+    setExportNote('')
+    try {
+      const file = await adminApi<{ filename: string; body: string | object }>(`/admin/exports/${kind}`, { method: 'POST' })
+      const text = typeof file.body === 'string' ? file.body : JSON.stringify(file.body, null, 2)
+      const type = file.filename.endsWith('.json') ? 'application/json' : 'text/csv;charset=utf-8'
+      downloadText(file.filename, text, type)
+      setExportNote(`${label}已导出`)
+    } catch (reason) {
+      setExportNote(reason instanceof Error ? reason.message : '导出失败')
+    }
+  }
+
   async function logout() {
     try {
       await adminApi('/auth/logout', { method: 'POST' })
@@ -142,14 +169,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#f5f7fb]">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block"><Sidebar session={session} onLogout={logout} /></aside>
-      {open && <div className="fixed inset-0 z-50 lg:hidden"><button aria-label="关闭菜单" className="absolute inset-0 bg-slate-950/50" onClick={() => setOpen(false)} /><aside className="relative h-full w-72 shadow-2xl"><Sidebar close={() => setOpen(false)} session={session} onLogout={logout} /></aside></div>}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block"><Sidebar session={session} onLogout={logout} onExport={(kind, label) => void exportNav(kind, label)} /></aside>
+      {open && <div className="fixed inset-0 z-50 lg:hidden"><button aria-label="关闭菜单" className="absolute inset-0 bg-slate-950/50" onClick={() => setOpen(false)} /><aside className="relative h-full w-72 shadow-2xl"><Sidebar close={() => setOpen(false)} session={session} onLogout={logout} onExport={(kind, label) => void exportNav(kind, label)} /></aside></div>}
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 flex h-20 items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <button className="admin-focus rounded-xl border border-slate-200 p-2.5 text-slate-600 lg:hidden" onClick={() => setOpen(true)} aria-label="打开菜单"><Menu className="size-5" /></button>
           <form className="relative hidden max-w-xl flex-1 sm:block" onSubmit={(event) => { event.preventDefault(); router.push(`/admin/search?q=${encodeURIComponent(query.trim())}`) }}>
             <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} className="admin-focus w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-20 text-sm" placeholder="搜索用户、活动、广告或邀请码" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} className="admin-focus w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-20 text-sm" placeholder="搜索用户、活动、广告、邀请码或页面停留" />
             <button className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white" type="submit">搜索</button>
           </form>
           <div className="relative ml-auto flex items-center gap-2">
@@ -169,6 +196,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             )}
           </div>
         </header>
+        {exportNote && <p className="border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 sm:px-6 lg:px-8">{exportNote}</p>}
         <main className="p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>

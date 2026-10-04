@@ -8,6 +8,7 @@ import { EmptyState, Notice, PageHeader, Panel, chartTooltipStyle, secondaryButt
 type SectionStat = {
   section: string
   label: string
+  path?: string
   dwells: number
   dwell_ms: number
   avg_dwell_ms: number
@@ -49,6 +50,14 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<Analytics | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [draft, setDraft] = useState('')
+  const [filter, setFilter] = useState('')
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search).get('q') || ''
+    setDraft(query)
+    setFilter(query)
+  }, [])
 
   useEffect(() => {
     adminApi<Analytics>(`/admin/analytics?window_days=${windowDays}`).then(setData).catch((reason: Error) => setError(reason.message))
@@ -67,10 +76,12 @@ export default function AnalyticsPage() {
   const events = data?.events ?? []
   const funnel = data?.funnel ?? []
   const first = funnel[0]?.value || 0
+  const needle = filter.trim().toLowerCase()
+  const sections = (data?.behavior?.sections ?? []).filter((row) => !needle || `${row.label} ${row.section} ${row.path || ''}`.toLowerCase().includes(needle))
 
   return (
     <div className="mx-auto max-w-[1500px]">
-      <PageHeader eyebrow="Behavior analytics" title="行为分析" description="记录访客在各区块的停留、连续点击和关闭。停留久、连续点击多的是更好的设计；很快关掉的是更差的设计，供下一版改版。" action={<div className="flex gap-2"><select className={selectClass} aria-label="时间范围" value={windowDays} onChange={(event) => setWindowDays(event.target.value)}><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">本季度</option></select><button className={secondaryButton} onClick={() => void exportAnalytics()}>导出分析</button></div>} />
+      <PageHeader eyebrow="Behavior analytics" title="行为分析" description="主页面和子页面都会记停留、连续点击和关闭。用搜索找出某一页的时间，停留久、连续点击多的是更好的设计，很快关掉的是更差的设计。" action={<div className="flex gap-2"><select className={selectClass} aria-label="时间范围" value={windowDays} onChange={(event) => setWindowDays(event.target.value)}><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">本季度</option></select><button className={secondaryButton} onClick={() => void exportAnalytics()}>导出分析</button></div>} />
       <Notice message={notice} />
       <Notice message={error} tone="red" />
       <div className="page-grid">
@@ -88,8 +99,13 @@ export default function AnalyticsPage() {
           )}
         </Panel>
       </div>
-      <Panel title="页面区块" description="停留和连续点击加总为关注时长。关闭次数高、停留短的区块优先改版。" className="mt-5">
-        {!data?.behavior?.sections.length ? <EmptyState query="页面停留" /> : (
+      <Panel title="页面停留" description="每一条主页面和子页面都在表里。没有访客时时间为 0。搜索后只留下匹配的页面。" className="mt-5" action={
+        <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); setFilter(draft.trim()) }}>
+          <input value={draft} onChange={(event) => setDraft(event.target.value)} aria-label="搜索页面" placeholder="搜索页面或区块" className="admin-focus w-40 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:w-56" />
+          <button className={secondaryButton} type="submit">搜索</button>
+        </form>
+      }>
+        {sections.length === 0 ? <EmptyState query={filter || '页面停留'} /> : (
           <div className="space-y-4 p-5">
             <div className="grid gap-3 md:grid-cols-2">
               <article className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
@@ -107,7 +123,8 @@ export default function AnalyticsPage() {
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="text-xs text-slate-500">
                   <tr>
-                    <th className="py-2 pr-3 font-medium">区块</th>
+                    <th className="py-2 pr-3 font-medium">页面</th>
+                    <th className="py-2 pr-3 font-medium">路径</th>
                     <th className="py-2 pr-3 font-medium">停留次数</th>
                     <th className="py-2 pr-3 font-medium">平均停留</th>
                     <th className="py-2 pr-3 font-medium">连续点击</th>
@@ -117,9 +134,10 @@ export default function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.behavior.sections.map((row) => (
+                  {sections.map((row) => (
                     <tr key={row.section} className="border-t border-slate-100">
                       <td className="py-2 pr-3 font-medium text-slate-900">{row.label}</td>
+                      <td className="py-2 pr-3 font-mono text-xs text-slate-500">{row.path || '—'}</td>
                       <td className="py-2 pr-3">{row.dwells}</td>
                       <td className="py-2 pr-3">{stay(row.avg_dwell_ms)}</td>
                       <td className="py-2 pr-3">{row.click_runs} 次 · {row.clicks} 下</td>
