@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useRouter } from 'next/navigation'
 import { Play, X } from 'lucide-react'
 
 const SRC = '/guides/yunjian.mp4'
@@ -12,7 +11,6 @@ export function GuideVideo({ className = '', onDark = false }: { className?: str
   const [mounted, setMounted] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const titleId = useId()
-  const router = useRouter()
 
   useEffect(() => {
     setMounted(true)
@@ -21,7 +19,6 @@ export function GuideVideo({ className = '', onDark = false }: { className?: str
   function close() {
     videoRef.current?.pause()
     setOpen(false)
-    if (window.location.pathname !== '/') router.push('/')
   }
 
   useEffect(() => {
@@ -50,7 +47,7 @@ export function GuideVideo({ className = '', onDark = false }: { className?: str
         操作演示
       </button>
       {mounted && open && createPortal(
-        <div className="fixed inset-0 z-[200] grid place-items-center bg-slate-950/70 p-4 sm:p-8" onClick={close}>
+        <div className="fixed inset-0 z-[200] grid place-items-center bg-slate-950/70 p-4 sm:p-8">
           <div
             role="dialog"
             aria-modal="true"

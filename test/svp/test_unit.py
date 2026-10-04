@@ -202,3 +202,29 @@ def test_login_code_is_single_use(tmp_path):
     with pytest.raises(AppError) as caught:
         login_with_code(store, settings, email="seller@example.com", phone=None, code=sent["code"])
     assert caught.value.status_code == 401
+
+
+def test_sms_quota_warns_after_five_sends(tmp_path, monkeypatch):
+    store = DocumentStore(tmp_path / "store.json")
+    settings = Settings(auth_mode="demo", session_secret="test-secret", data_path=str(tmp_path / "store.json"))
+    register(store, email="sms-quota@example.com", phone=None, password="secret-pass", display_name="甲")
+    user = store.find_global("users", email="sms-quota@example.com")
+    store.touch("users", user["id"], {"phone": "+8618800001111"})
+    monkeypatch.setattr("app.modules.messages.deliver_code", lambda *args, **kwargs: "sms")
+    last = {}
+    for _ in range(5):
+        last = send_login_code(store, settings, email=None, phone="18800001111")
+        assert last["sms_quota_warning"] is False
+    assert last["sms_sent_today"] == 5
+    sixth = send_login_code(store, settings, email=None, phone="18800001111")
+    assert sixth["sms_sent_today"] == 6
+    assert sixth["sms_daily_cap"] == 10
+    assert sixth["sms_quota_warning"] is True
+
+
+def test_sms_daily_limit_is_explained():
+    from app.modules.messages import sms_failure_message
+
+    assert "今天的短信次数已用完" in sms_failure_message("LimitExceeded.PhoneNumberDailyLimit")
+    assert sms_failure_message("LimitExceeded.PhoneNumberThirtySecondLimit").startswith("短信发送太频繁")
+    assert sms_failure_message("FailedOperation.SignatureIncorrectOrUnapproved") == "验证码短信没有发出"

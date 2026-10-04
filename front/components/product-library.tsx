@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import { api, waitJob } from '@/lib/api'
+import { ResultDesk } from '@/components/result-desk'
 
 type Product = {
   id: string
@@ -11,10 +13,12 @@ type Product = {
   origin_country?: string
   target_market?: string
   target_price_usd?: string
+  created_at?: string
 }
 
 export function ProductLibrary() {
   const router = useRouter()
+  const pathname = usePathname()
   const [q, setQ] = useState('')
   const [items, setItems] = useState<Product[]>([])
   const [error, setError] = useState('')
@@ -46,31 +50,33 @@ export function ProductLibrary() {
 
   return (
     <div className="flex flex-col gap-4">
-      <form
-        className="flex flex-col gap-2 sm:flex-row"
-        onSubmit={(event) => {
-          event.preventDefault()
+      {error === '需要登录' ? (
+        <Link href={`/login?next=${encodeURIComponent(pathname || '/')}`} className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive underline">
+          需要登录
+        </Link>
+      ) : error ? (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>
+      ) : null}
+      {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>}
+      <ResultDesk
+        items={items}
+        placeholder="按名称或 SKU 搜索"
+        keywords={(product) => `${product.name} ${product.sku} ${product.origin_country || ''} ${product.target_market || ''}`}
+        onSearch={(next) => {
+          setQ(next)
           void run(async () => {
-            await load(q)
+            await load(next)
           })
         }}
-      >
-        <input
-          className="min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base"
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          placeholder="按名称或 SKU 搜索"
-          aria-label="搜索商品"
-        />
-        <button disabled={busy} className="min-h-12 rounded-xl bg-primary px-5 text-base text-primary-foreground disabled:opacity-50">
-          搜索
-        </button>
-      </form>
-      {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
-      {message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>}
-      <div className="grid gap-3">
-        {items.map((product) => (
-          <article key={product.id} className="rounded-2xl border border-border bg-card p-4">
+        filters={[{ key: 'market', label: '目标市场', value: (product) => product.target_market || '' }]}
+        sorts={[
+          { id: 'new', label: '时间新到旧', compare: (left, right) => (right.created_at || '').localeCompare(left.created_at || '') },
+          { id: 'old', label: '时间旧到新', compare: (left, right) => (left.created_at || '').localeCompare(right.created_at || '') },
+          { id: 'name', label: '名称', compare: (left, right) => left.name.localeCompare(right.name, 'zh') },
+        ]}
+        empty="没有匹配的商品。"
+        render={(product) => (
+          <article className="rounded-2xl border border-border bg-card p-4">
             <h3 className="text-base font-semibold">{product.name}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {product.sku}
@@ -112,9 +118,8 @@ export function ProductLibrary() {
               </button>
             </div>
           </article>
-        ))}
-        {items.length === 0 && <p className="rounded-2xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">没有匹配的商品。</p>}
-      </div>
+        )}
+      />
     </div>
   )
 }

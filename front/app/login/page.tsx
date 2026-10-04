@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { AuthShell, authButton, authInput } from '@/components/auth-shell'
+import { SmsQuotaDialog } from '@/components/sms-quota-dialog'
 import { readClient } from '@/lib/client-adapter'
 import { loginAccount, loginWithCode, safeNext, sendLoginCode, wechatAuthorizeUrl } from '@/lib/session'
 
@@ -14,7 +15,9 @@ export default function LoginPage() {
 
 function LoginForm() {
   const router = useRouter()
-  const next = safeNext(useSearchParams().get('next'))
+  const params = useSearchParams()
+  const next = safeNext(params.get('next'))
+  const recall = params.get('recall') || ''
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -25,6 +28,7 @@ function LoginForm() {
   const [pending, setPending] = useState(false)
   const [sending, setSending] = useState(false)
   const [miniprogram, setMiniprogram] = useState(false)
+  const [quota, setQuota] = useState<{ count: number; cap: number } | null>(null)
 
   useEffect(() => {
     setMiniprogram(readClient()?.shell === 'miniprogram')
@@ -35,8 +39,8 @@ function LoginForm() {
     setPending(true)
     setError('')
     try {
-      if (mode === 'code') await loginWithCode(account, code)
-      else await loginAccount(account, password)
+      if (mode === 'code') await loginWithCode(account, code, recall)
+      else await loginAccount(account, password, recall)
       router.replace(next)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '登录失败')
@@ -68,6 +72,7 @@ function LoginForm() {
               setSending(true)
               void sendLoginCode(account).then((result) => {
                 setSentCode(result.code || '')
+                if (result.sms_quota_warning) setQuota({ count: result.sms_sent_today || 0, cap: result.sms_daily_cap || 10 })
                 setSentNote(
                   result.channel === 'sms'
                     ? '验证码已发到手机，5 分钟内有效。'
@@ -104,6 +109,7 @@ function LoginForm() {
           微信登录
         </button>
       )}
+      {quota && <SmsQuotaDialog count={quota.count} cap={quota.cap} onClose={() => setQuota(null)} />}
       <div className="mt-4 flex justify-between text-sm text-muted-foreground">
         <Link href="/forgot" className="hover:text-foreground">忘记密码</Link>
         <Link href="/register" className="hover:text-foreground">注册账号</Link>

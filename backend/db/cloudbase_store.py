@@ -4,12 +4,35 @@ The method names match DocumentStore. Tests keep STORAGE_ENGINE=json.
 """
 
 import json
+import threading
+import time
 from typing import Any, Callable
 
 from app.core.timeutil import iso
 
 from db.cloudbase_sql import execute_pg_sql
 from db.store import matches_text
+
+# Auth and billing read these on every page. The rest of the table stays out of that query.
+_HOT = (
+    "sessions",
+    "users",
+    "tenants",
+    "tenant_members",
+    "entitlements",
+    "quota_balances",
+    "roles",
+    "user_roles",
+    "permissions",
+    "platform_settings",
+    "verification_codes",
+    "password_resets",
+    "subscriptions",
+    "payments",
+    "invoices",
+    "payment_orders",
+    "payment_events",
+)
 
 
 class CloudBaseStore:
@@ -18,15 +41,39 @@ class CloudBaseStore:
         self.region = region
         self._execute = execute
         self._data: dict | None = None
+        self._complete = False
+        self._loaded_at = 0.0
+        self._lock = threading.Lock()
+
+    def read(self, fn: Callable[[dict], Any], *, full: bool = False) -> Any:
+        with self._lock:
+            return fn(self._ensure(full=full))
 
     def transaction(self, fn: Callable[[dict], Any]) -> Any:
-        data = self._load()
-        before = json.dumps(data, ensure_ascii=False, sort_keys=True)
-        result = fn(data)
-        after = json.dumps(data, ensure_ascii=False, sort_keys=True)
-        if before != after:
-            self._flush(json.loads(before), data)
-        return result
+        with self._lock:
+            data = self._ensure(full=True)
+            before = json.dumps(data, ensure_ascii=False, sort_keys=True)
+            try:
+                result = fn(data)
+            except Exception:
+                self._data = json.loads(before)
+                raise
+            after = json.dumps(data, ensure_ascii=False, sort_keys=True)
+            if before != after:
+                self._flush(json.loads(before), data)
+            self._loaded_at = time.time()
+            return result
+
+    def _ensure(self, *, full: bool) -> dict:
+        expired = self._data is None or time.time() - self._loaded_at >= 30
+        if expired:
+            self._data = self._load() if full else self._load_named(_HOT)
+            self._complete = full
+            self._loaded_at = time.time()
+        elif full and not self._complete:
+            self._merge(self._load_except(_HOT))
+            self._complete = True
+        return self._data
 
     def insert(self, collection: str, doc: dict) -> dict:
         def op(data: dict) -> dict:
@@ -54,7 +101,7 @@ class CloudBaseStore:
                 return None
             return doc
 
-        return self.transaction(op)
+        return self.read(op, full=collection not in _HOT)
 
     def find_global(self, collection: str, **filters: Any) -> dict | None:
         def op(data: dict) -> dict | None:
@@ -65,7 +112,7 @@ class CloudBaseStore:
                     return doc
             return None
 
-        return self.transaction(op)
+        return self.read(op, full=collection not in _HOT)
 
     def query(
         self,
@@ -98,7 +145,7 @@ class CloudBaseStore:
             next_cursor = page[-1]["id"] if len(rows) > limit and page else None
             return {"items": page, "next_cursor": next_cursor}
 
-        return self.transaction(op)
+        return self.read(op, full=collection not in _HOT)
 
     def touch(self, collection: str, doc_id: str, patch: dict) -> dict | None:
         def op(data: dict) -> dict | None:
@@ -113,7 +160,17 @@ class CloudBaseStore:
         return self.transaction(op)
 
     def _load(self) -> dict:
-        result = self._sql("SELECT collection, id, body::text FROM documents")
+        return self._rows(self._sql("SELECT collection, id, body::text FROM documents"))
+
+    def _load_named(self, names: tuple[str, ...]) -> dict:
+        listed = ", ".join(_quote(name) for name in names)
+        return self._rows(self._sql(f"SELECT collection, id, body::text FROM documents WHERE collection IN ({listed})"))
+
+    def _load_except(self, names: tuple[str, ...]) -> dict:
+        listed = ", ".join(_quote(name) for name in names)
+        return self._rows(self._sql(f"SELECT collection, id, body::text FROM documents WHERE collection NOT IN ({listed})"))
+
+    def _rows(self, result: dict) -> dict:
         columns = result["columns"]
         data: dict = {"collections": {}}
         for row in result["rows"]:
@@ -123,6 +180,10 @@ class CloudBaseStore:
                 body = json.loads(body)
             _col(data, record["collection"])[record["id"]] = body
         return data
+
+    def _merge(self, extra: dict) -> None:
+        for name, rows in extra.get("collections", {}).items():
+            _col(self._data, name).update(rows)
 
     def _flush(self, before: dict, after: dict) -> None:
         previous = _index(before)

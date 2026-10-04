@@ -22,9 +22,18 @@ type Ad = {
   placement: string
   media_type: string
   status: string
+  link_url?: string
   ctr: string
   conversions: number
 }
+
+const placements = [
+  ['home_mid_banner', '官网中部'],
+  ['pricing_banner', '官网底部'],
+  ['dashboard_top', '工作台顶部'],
+  ['report_footer', '报告页底部'],
+  ['copilot_sidebar', '对话侧栏'],
+]
 
 const labelFor: Record<string, string> = { draft: '草稿', active: '投放中', paused: '已暂停', ended: '已结束' }
 const toneFor = (status: string) => {
@@ -46,8 +55,10 @@ export default function AdsPage() {
   const [preview, setPreview] = useState<Ad | null>(null)
   const [menuId, setMenuId] = useState('')
   const [title, setTitle] = useState('')
-  const [placement, setPlacement] = useState('dashboard_top')
+  const [placement, setPlacement] = useState('home_mid_banner')
   const [mediaType, setMediaType] = useState('image')
+  const [publishAd, setPublishAd] = useState<Ad | null>(null)
+  const [publishLink, setPublishLink] = useState('')
 
   async function load() {
     const page = await adminApi<{ items: Ad[] }>('/admin/ads')
@@ -88,9 +99,24 @@ export default function AdsPage() {
     }
   }
 
+  async function publishAdLive(event: FormEvent) {
+    event.preventDefault()
+    if (!publishAd) return
+    setError('')
+    try {
+      await adminApi(`/admin/ads/${publishAd.id}/status`, { method: 'POST', body: JSON.stringify({ status: 'active', link_url: publishLink }) })
+      setNotice(`${publishAd.title} 已上架，点击后打开客户网站`)
+      setPublishAd(null)
+      setPublishLink('')
+      await load()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '上架失败')
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1500px]">
-      <PageHeader eyebrow="Ad operations" title="广告管理" description="管理 PickGlobal 自有流量广告位、素材、定向和增量转化。" action={<button className={primaryButton} onClick={() => setCreating(true)}><Plus className="size-4" /> 新建广告活动</button>} />
+      <PageHeader eyebrow="Ad operations" title="广告管理" description="选择广告位后，在广告投放上架里填写客户的广告网站链接，再点击上架。官网、工作台和报告页都会显示，手机同样可见。" action={<button className={primaryButton} onClick={() => setCreating(true)}><Plus className="size-4" /> 新建广告活动</button>} />
       <Notice message={notice} />
       <Notice message={error} tone="red" />
       <FilterBar search={search} onSearch={setSearch} placeholder="搜索广告名称、ID 或广告位">
@@ -133,7 +159,7 @@ export default function AdsPage() {
                         <div><div className="font-medium text-slate-900">{ad.title}</div><div className="mt-0.5 text-xs text-slate-400">{ad.id}</div></div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 font-mono text-xs text-slate-600">{ad.placement}</td>
+                    <td className="px-4 py-4 text-xs text-slate-600">{placements.find(([value]) => value === ad.placement)?.[1] || ad.placement}</td>
                     <td className="px-4 py-4"><StatusBadge tone={toneFor(ad.status)}>{labelFor[ad.status] || ad.status}</StatusBadge></td>
                     <td className="px-4 py-4 font-medium text-slate-800">{ad.ctr}</td>
                     <td className="px-4 py-4 text-slate-600">{ad.conversions.toLocaleString()}</td>
@@ -144,7 +170,7 @@ export default function AdsPage() {
                       </div>
                       {menuId === ad.id && (
                         <div className="absolute right-4 z-10 mt-1 w-36 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-                          <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => void setAdStatus(ad, 'active')}>上架</button>
+                          <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuId(''); setPublishAd(ad); setPublishLink(ad.link_url || '') }}>上架</button>
                           <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => void setAdStatus(ad, 'paused')}>暂停</button>
                           <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => void setAdStatus(ad, 'ended')}>结束</button>
                         </div>
@@ -162,7 +188,7 @@ export default function AdsPage() {
           <form onSubmit={createAd} className="space-y-3">
             <input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="广告名称" className="admin-focus w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
             <Select value={placement} onChange={setPlacement} label="广告位">
-              {['dashboard_top', 'pricing_banner', 'copilot_sidebar', 'home_mid_banner', 'report_footer'].map((item) => <option key={item}>{item}</option>)}
+              {placements.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </Select>
             <Select value={mediaType} onChange={setMediaType} label="素材类型">
               <option value="image">图片</option>
@@ -175,8 +201,20 @@ export default function AdsPage() {
       {preview && (
         <Dialog title="广告预览" onClose={() => setPreview(null)}>
           <p className="text-lg font-semibold text-slate-950">{preview.title}</p>
-          <p className="mt-2 text-sm text-slate-500">{preview.placement} · {preview.media_type === 'video' ? '视频' : '图片'} · {labelFor[preview.status] || preview.status}</p>
+          <p className="mt-2 text-sm text-slate-500">{placements.find(([value]) => value === preview.placement)?.[1] || preview.placement} · {preview.media_type === 'video' ? '视频' : '图片'} · {labelFor[preview.status] || preview.status}</p>
           <p className="mt-4 text-sm text-slate-600">CTR {preview.ctr} · 目标转化 {preview.conversions}</p>
+          {preview.link_url && <p className="mt-2 break-all text-sm text-slate-500">{preview.link_url}</p>}
+        </Dialog>
+      )}
+      {publishAd && (
+        <Dialog title="广告投放上架" onClose={() => setPublishAd(null)}>
+          <form onSubmit={publishAdLive} className="space-y-3">
+            <p className="text-sm text-slate-600">{publishAd.title} 将出现在{placements.find(([value]) => value === publishAd.placement)?.[1] || '所选位置'}。手机和电脑都使用这个位置。</p>
+            <label className="block text-sm font-medium text-slate-700" htmlFor="ad-website">广告网站链接</label>
+            <input id="ad-website" value={publishLink} onChange={(event) => setPublishLink(event.target.value)} required placeholder="https://customer.com" className="admin-focus w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+            <p className="text-xs text-slate-500">填写客户的广告网站。点击广告会打开这个网址，不会打开本站登录页。</p>
+            <button className={primaryButton} type="submit">上架</button>
+          </form>
         </Dialog>
       )}
     </div>

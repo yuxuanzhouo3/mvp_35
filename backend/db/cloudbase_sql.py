@@ -127,6 +127,7 @@ def _refresh_file(data: dict) -> dict:
     except json.JSONDecodeError as exc:
         raise CloudBaseSqlError("CloudBase temporary secret expired. Run tcb login.") from exc
     if body.get("code") != 0 or not isinstance(body.get("data"), dict):
+        _log.warning("CloudBase credential refresh failed: %s", body.get("code"))
         raise CloudBaseSqlError("CloudBase temporary secret expired. Run tcb login.")
     fresh = body["data"]
     if not (fresh.get("tmpSecretId") or fresh.get("secretId")):

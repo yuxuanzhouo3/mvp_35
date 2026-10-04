@@ -10,12 +10,15 @@ mvp_35/
 ├── docs/
 │   ├── architecture.md        本文件
 │   ├── pickglobal-placeholders.pdf
-│   └── demo1/
-│       ├── pickglobal-user-guide.mp4            Eddy
-│       ├── pickglobal-user-guide-xiaoxiao.mp4   晓晓
-│       ├── pickglobal-user-guide-yunxi.mp4      云希
-│       ├── pickglobal-user-guide-yunjian.mp4    云健；站上拷贝在 public/guides
-│       └── frames/                              官网到看板的教程截图，不含后台
+│   ├── demo1/
+│   │   ├── pickglobal-user-guide.mp4            Eddy，上一版
+│   │   ├── pickglobal-user-guide-xiaoxiao.mp4   晓晓，上一版
+│   │   ├── pickglobal-user-guide-yunxi.mp4      云希，上一版
+│   │   ├── pickglobal-user-guide-yunjian.mp4    云健；与 demo2 相同，站上拷贝在 public/guides
+│   │   └── frames/                              上一版截图，不含后台
+│   └── demo2/
+│       ├── pickglobal-user-guide-yunjian.mp4    云健，当前产品：国内默认、报告弹层、九路分页
+│       └── frames/                              官网到看板，不含后台
 ├── front/                     Next.js 16 · :3000 · pickglobal-web
 │   ├── app/
 │   │   ├── layout.tsx · globals.css             全站壳与样式

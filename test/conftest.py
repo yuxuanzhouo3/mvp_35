@@ -43,7 +43,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("HUNYUAN_ENABLED", "false")
     monkeypatch.setenv("TONGYI_ENABLED", "false")
     monkeypatch.setenv("WECHAT_PAY_MODE", "disabled")
+    monkeypatch.setenv("PAYMENT_TEST_AMOUNT_FEN", "0")
     monkeypatch.setenv("DEMO_SIGNING_HELPER", "false")
+    monkeypatch.setenv("FX_API_URL", "")
+    monkeypatch.setenv("PRICER_API_URL", "")
+    monkeypatch.setenv("PRICER_API_KEY", "")
     from app.main import app
 
     with TestClient(app) as test_client:

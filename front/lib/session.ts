@@ -52,18 +52,18 @@ async function readError(response: Response) {
   return body.data
 }
 
-export async function loginAccount(account: string, password: string) {
+export async function loginAccount(account: string, password: string, recall?: string) {
   const response = await fetch('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...accountBody(account), password }),
+    body: JSON.stringify({ ...accountBody(account), password, recall: recall || undefined }),
   })
   const data = (await readError(response)) as SessionTokens
   writeSession(data)
   return data
 }
 
-export async function registerAccount(input: { account: string; password: string; displayName: string; code?: string }) {
+export async function registerAccount(input: { account: string; password: string; displayName: string; code?: string; inviteCode?: string }) {
   const response = await fetch('/api/v1/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -72,6 +72,7 @@ export async function registerAccount(input: { account: string; password: string
       password: input.password,
       display_name: input.displayName || null,
       code: input.code || null,
+      invite_code: input.inviteCode || null,
     }),
   })
   await readError(response)
@@ -84,7 +85,7 @@ export async function forgotAccount(account: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(accountBody(account)),
   })
-  return (await readError(response)) as { accepted: boolean; reset_token?: string; channel?: string }
+  return (await readError(response)) as { accepted: boolean; reset_token?: string; channel?: string; sms_sent_today?: number; sms_daily_cap?: number; sms_quota_warning?: boolean }
 }
 
 export async function resetWithSms(phone: string, code: string, password: string) {
@@ -111,7 +112,7 @@ export async function sendLoginCode(account: string, purpose: 'login' | 'registe
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...accountBody(account), purpose }),
   })
-  return (await readError(response)) as { sent: boolean; code?: string; channel?: string; purpose?: string }
+  return (await readError(response)) as { sent: boolean; code?: string; channel?: string; purpose?: string; sms_sent_today?: number; sms_daily_cap?: number; sms_quota_warning?: boolean }
 }
 
 export async function wechatAuthorizeUrl() {
@@ -130,11 +131,11 @@ export async function completeWechatLogin(code: string, state: string) {
   return data
 }
 
-export async function loginWithCode(account: string, code: string) {
+export async function loginWithCode(account: string, code: string, recall?: string) {
   const response = await fetch('/api/v1/auth/code/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...accountBody(account), code }),
+    body: JSON.stringify({ ...accountBody(account), code, recall: recall || undefined }),
   })
   const data = (await readError(response)) as SessionTokens
   writeSession(data)

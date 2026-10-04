@@ -31,6 +31,7 @@ Add a row when a merge lands. Newest row first.
 
 | Day | Step | Pull request | Result |
 | --- | --- | --- | --- |
+| 3 Oct 2026 | `yzcmf` → `test` | [#10](https://github.com/yuxuanzhouo3/mvp_35/pull/10) | `1.5` on `test` (`1698cc7`). Tip `6704ca4`. `pro` stays `1.2`. |
 | 2 Oct 2026 | `yzcmf` → `test` | [#9](https://github.com/yuxuanzhouo3/mvp_35/pull/9) | `1.4` on `test` (`951b554`). Tip `e31c5d7`. `pro` stays `1.2`. |
 | 1 Oct 2026 | `yzcmf` → `test` | [#8](https://github.com/yuxuanzhouo3/mvp_35/pull/8) | `1.3` on `test` (`02915cc`). Commit `8d47ec8`. `pro` stays `1.2`. |
 | 30 Sep 2026 | `test` → `pro` | [#7](https://github.com/yuxuanzhouo3/mvp_35/pull/7) | `1.2` on `pro` (`32b3707`) |
@@ -40,6 +41,10 @@ Add a row when a merge lands. Newest row first.
 ## Pace
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
+
+### 3 October 2026
+
+`yzcmf` through `6704ca4` is on `test` as `1.5` ([#10](https://github.com/yuxuanzhouo3/mvp_35/pull/10), `1698cc7`). `pro` stays `1.2`. Test now has tenant sign-in, billing, email and SMS codes, WeChat and Alipay checkout, a WeChat QR on the web, and JSAPI pay in the mini program. Alipay and WeChat pay succeeded. Commit `85653b0` is on `yzcmf` only. It adds ad slots on the homepage, workspace, and reports; an admin user list with masked email and phone; ads that require an external customer URL before they go live; a 10-fen payment test amount when configured; Alipay AES page pay; and a 30-second CloudBase document cache. Dashboard rates fall back to sample numbers when the tenant has no deals. Commit `50968b3` is on `yzcmf` only. It adds `product-pricer` and `selection-assist`, optional FX and shelf-price feeds, spreadsheet import, a report dialog, and one acquire desk per channel. `algorithm.md` records those rules. Commit `e885cd3` is on `yzcmf` only. It records the `pg-share-1.0` profit-share plans, two-level agents, a domestic CN→CN default, and one acquire page per channel. Commit `51fa3eb` shows one acquire step at a time. The homepage states China to the US as the first market. Next: CloudBase `tcb` with git. A `test` → `pro` merge waits until you agree. Hunyuan and live SES stay unwired.
 
 ### 2 October 2026
 

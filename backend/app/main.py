@@ -11,6 +11,7 @@ from app.api.v1.router import create_router
 from app.core.errors import AppError
 from app.services.identity import ensure_platform_admin
 from config.settings import Settings
+from db.cloudbase_sql import CloudBaseSqlError
 from db.store import open_store
 
 
@@ -38,6 +39,18 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         response.headers["X-Request-Id"] = request.state.request_id
         return response
+
+    @app.exception_handler(CloudBaseSqlError)
+    async def handle_store_error(request: Request, exc: CloudBaseSqlError):
+        del exc
+        request_id = getattr(request.state, "request_id", "req_unknown")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {"code": "STORE_UNAVAILABLE", "message": "登录数据暂时不可用，请稍后再试", "details": {}},
+                "request_id": request_id,
+            },
+        )
 
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError):

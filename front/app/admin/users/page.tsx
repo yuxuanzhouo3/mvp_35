@@ -9,6 +9,8 @@ type UserRow = {
   id: string
   display_name: string | null
   email_masked: string | null
+  phone_masked?: string | null
+  tenant_name?: string | null
   plan_id?: string
   status: string
   role?: string
@@ -35,13 +37,17 @@ export default function UsersPage() {
   const [segmentName, setSegmentName] = useState('')
 
   async function load() {
-    const [list, counts, saved] = await Promise.all([
+    const [list, saved] = await Promise.all([
       adminApi<{ items: UserRow[] }>('/admin/users'),
-      adminApi<typeof summary>('/admin/users/summary'),
       adminApi<{ items: Segment[] }>('/admin/segments'),
     ])
-    setUsers(list.items)
-    setSummary(counts)
+    const items = list.items
+    setUsers(items)
+    setSummary({
+      users: items.length,
+      suspended: items.filter((user) => user.status === 'suspended').length,
+      active: items.filter((user) => (user.status || 'active') === 'active').length,
+    })
     setSegments(saved.items)
   }
 
@@ -52,7 +58,7 @@ export default function UsersPage() {
   const filtered = useMemo(() => users.filter((user) => {
     const stageOk = stage === '全部阶段' || (stage === '已停用' ? user.status === 'suspended' : user.status !== 'suspended')
     const planOk = plan === '全部套餐' || user.plan_id === plan
-    const text = `${user.id} ${user.display_name || ''} ${user.email_masked || ''}`.toLowerCase()
+    const text = `${user.id} ${user.display_name || ''} ${user.email_masked || ''} ${user.phone_masked || ''} ${user.tenant_name || ''}`.toLowerCase()
     return stageOk && planOk && text.includes(query.toLowerCase())
   }), [users, query, stage, plan])
 
@@ -99,7 +105,7 @@ export default function UsersPage() {
 
   return (
     <div className="mx-auto max-w-[1500px]">
-      <PageHeader eyebrow="User intelligence" title="用户数据管理" description="当前租户的账号、状态和最近操作。敏感邮箱默认脱敏。" action={<button className={secondaryButton} onClick={() => void exportUsers()}><Download className="size-4" /> 安全导出</button>} />
+      <PageHeader eyebrow="User intelligence" title="用户数据管理" description="全部注册账号，包括邮箱和手机。敏感联系方式默认脱敏。" action={<button className={secondaryButton} onClick={() => void exportUsers()}><Download className="size-4" /> 安全导出</button>} />
       <Notice message={notice} />
       <Notice message={error} tone="red" />
       <div className="metric-grid mb-5">
@@ -108,7 +114,7 @@ export default function UsersPage() {
         <MetricCard label="已停用" value={String(summary.suspended)} icon={Clock3} tone="amber" />
         <MetricCard label="已保存分群" value={String(segments.length)} icon={ShieldAlert} tone="violet" />
       </div>
-      <FilterBar value={query} onChange={setQuery} placeholder="搜索用户 ID、名称或脱敏邮箱">
+      <FilterBar value={query} onChange={setQuery} placeholder="搜索用户 ID、名称、脱敏邮箱或手机">
         <select className={selectClass} value={stage} onChange={(event) => setStage(event.target.value)} aria-label="生命周期阶段">{['全部阶段', '活跃', '已停用'].map((item) => <option key={item}>{item}</option>)}</select>
         <select className={selectClass} value={plan} onChange={(event) => setPlan(event.target.value)} aria-label="套餐"><option>全部套餐</option>{[...new Set(users.map((user) => user.plan_id).filter(Boolean))].map((item) => <option key={item}>{item}</option>)}</select>
         <button className={secondaryButton} onClick={() => setSegmentOpen(true)}>保存为分群</button>
@@ -121,7 +127,7 @@ export default function UsersPage() {
               <thead><tr><th>用户</th><th>套餐</th><th>角色</th><th>状态</th><th>最近更新</th><th>操作</th></tr></thead>
               <tbody>{filtered.map((user) => (
                 <tr key={user.id}>
-                  <td><div className="font-medium text-slate-900">{user.display_name || user.id}</div><div className="mt-0.5 text-xs text-slate-400">{user.email_masked || '—'} · {user.id}</div></td>
+                  <td><div className="font-medium text-slate-900">{user.display_name || user.id}</div><div className="mt-0.5 text-xs text-slate-400">{user.email_masked || '无邮箱'} · {user.phone_masked || '无手机'} · {user.id}</div></td>
                   <td><StatusBadge>{user.plan_id || '—'}</StatusBadge></td>
                   <td className="text-slate-600">{user.role}</td>
                   <td><StatusBadge tone={user.status === 'suspended' ? 'red' : 'green'}>{user.status === 'suspended' ? '已停用' : '活跃'}</StatusBadge></td>
@@ -140,7 +146,8 @@ export default function UsersPage() {
       {detail && (
         <Dialog title="用户 360°" onClose={() => setDetail(null)}>
           <p className="text-lg font-semibold">{detail.display_name}</p>
-          <p className="mt-1 text-sm text-slate-500">{detail.email_masked || '无邮箱'} · {detail.username || '无用户名'} · {detail.role}</p>
+          <p className="mt-1 text-sm text-slate-500">{detail.email_masked || '无邮箱'} · {detail.phone_masked || '无手机'} · {detail.username || '无用户名'} · {detail.role}</p>
+          {detail.tenant_name && <p className="mt-1 text-sm text-slate-500">{detail.tenant_name}</p>}
           <p className="mt-3 text-sm text-slate-600">状态 {detail.status === 'suspended' ? '已停用' : '活跃'} · 套餐 {detail.plan_id || '—'}</p>
           <ul className="mt-4 space-y-2 text-sm text-slate-600">{detail.recent_audit.length === 0 ? <li>暂无相关审计</li> : detail.recent_audit.map((item) => <li key={`${item.action}-${item.created_at}`}>{item.created_at} · {item.action}</li>)}</ul>
         </Dialog>

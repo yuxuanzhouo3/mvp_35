@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   ArrowRight, BarChart3, Check, ChevronDown, ChevronRight, Globe2, Laptop, Menu, MapPin,
@@ -12,6 +13,9 @@ import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import { readClient, type ClientInfo } from '@/lib/client-adapter'
 import { ProductLibrary } from '@/components/product-library'
 import { GuideVideo } from '@/components/guide-video'
+import { AdSlot } from '@/components/ad-slot'
+import { api } from '@/lib/api'
+import { accessToken, logoutSession } from '@/lib/session'
 
 const marketData = [
   { name: '利润', value: 50 }, { name: '税费', value: 18 }, { name: '物流', value: 32 }, { name: '风险', value: 24 },
@@ -34,25 +38,25 @@ const channelGroups = [
   {
     title: '主获客 1–5',
     items: [
-      ['B1', '电商平台', 'Amazon、Temu、Walmart、淘宝、拼多多。访客、询盘和买家进入同一线索池。'],
-      ['B2', '社交平台', 'LinkedIn、Facebook、微信小程序、抖音、小红书、快手。'],
-      ['B3', '线上展会', '会期集中发现，会后进入冷启或召回。'],
-      ['B4', '12 代理渠道', '渠道子账户获客，分成与线索账分开。'],
-      ['B5', '智慧大脑大数据', '企查查、天眼查等来源去重、打分并留痕。'],
+      ['B1', 'ecommerce', '电商平台', 'Amazon、Temu、Walmart、淘宝、拼多多。访客、询盘和买家进入同一线索池。'],
+      ['B2', 'social', '社交平台', 'LinkedIn、Facebook、微信小程序、抖音、小红书、快手。'],
+      ['B3', 'expo', '线上展会', '会期集中发现，会后进入冷启或召回。'],
+      ['B4', 'agency', '12 代理渠道', '渠道子账户获客，分成与线索账分开。'],
+      ['B5', 'enrichment', '智慧大脑大数据', '企查查、天眼查等来源去重、打分并留痕。'],
     ],
   },
   {
     title: '优化 6–8，也可用于销售本品',
     items: [
-      ['B6', 'GEO / SEO', '给前五路补充落地页归因，不另开线索主表。'],
-      ['B7', '内容、数智人、线下', '内容任务和扫码获客。数智人 DEMO 为占位演示。'],
-      ['B8', '跨境元素复现', '约 80% 覆盖中美、中港、中澳，20% 覆盖内陆。'],
+      ['B6', 'geo_seo', 'GEO / SEO', '给前五路补充落地页归因，不另开线索主表。'],
+      ['B7', 'content_dh', '内容、数智人、线下', '内容任务和扫码获客。数智人 DEMO 为占位演示。'],
+      ['B8', 'cross_border', '跨境元素复现', '约 80% 覆盖中美、中港、中澳，20% 覆盖内陆。'],
     ],
   },
   {
     title: '本品销售',
     items: [
-      ['B9', 'RaaS', '官网成功抽成和 APP 账户销售。抽成账本与普通获客率分开。'],
+      ['B9', 'raas', 'RaaS', '官网成功抽成和 APP 账户销售。抽成账本与普通获客率分开。'],
     ],
   },
 ]
@@ -68,15 +72,44 @@ function SectionTitle({ eyebrow, title, copy }: { eyebrow: string; title: string
 }
 
 export default function Page() {
+  const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('市场机会')
   const [openFaq, setOpenFaq] = useState<number | null>(0)
   const [chartReady, setChartReady] = useState(false)
   const [client, setClient] = useState<ClientInfo | null>(null)
+  const [signedIn, setSignedIn] = useState(false)
+  const [accountName, setAccountName] = useState('')
+  const [loginHint, setLoginHint] = useState('')
+  const [loginNext, setLoginNext] = useState('/workspace/acquire')
   useEffect(() => {
     setChartReady(true)
     setClient(readClient())
+    if (!accessToken()) return
+    setSignedIn(true)
+    api<{ user: { display_name?: string; username?: string; email?: string } }>('/users/me')
+      .then((me) => setAccountName(me.user.display_name || me.user.username || me.user.email || '已登录'))
+      .catch(() => {
+        setSignedIn(Boolean(accessToken()))
+        setAccountName((current) => current || '已登录')
+      })
   }, [])
+  function openChannel(code: string, id: string) {
+    const next = `/workspace/acquire/${id}`
+    if (accessToken()) {
+      router.push(next)
+      return
+    }
+    setLoginNext(next)
+    setLoginHint(`请先登录。登录后会进入 ${code}。`)
+    document.getElementById('path-b')?.scrollIntoView({ behavior: 'smooth' })
+  }
+  function signOut() {
+    void logoutSession().then(() => {
+      setSignedIn(false)
+      setAccountName('')
+    })
+  }
   const scrollTo = (id: string) => {
     setMenuOpen(false)
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
@@ -97,8 +130,18 @@ export default function Page() {
             <button onClick={() => scrollTo('faq')}>常见问题</button>
           </nav>
           <div className="hidden items-center gap-3 md:flex">
-            <Link href="/login" className={buttonVariants({ variant: 'ghost' })}>登录</Link>
-            <Link href="/register" className={buttonVariants()}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
+            {signedIn ? (
+              <>
+                <Link href="/workspace" className={buttonVariants({ variant: 'ghost' })}>工作台</Link>
+                {accountName && <span className="max-w-28 truncate text-sm text-muted-foreground">{accountName}</span>}
+                <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={signOut}>退出</button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className={buttonVariants({ variant: 'ghost' })}>登录</Link>
+                <Link href="/register" className={buttonVariants()}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
+              </>
+            )}
             <GuideVideo />
           </div>
           <div className="flex items-center gap-2 md:hidden">
@@ -113,8 +156,18 @@ export default function Page() {
               <button className="min-h-11 text-left" onClick={() => scrollTo('path-b')}>获客九路</button>
               <button className="min-h-11 text-left" onClick={() => scrollTo('scenes')}>应用场景</button>
               <button className="min-h-11 text-left" onClick={() => scrollTo('faq')}>常见问题</button>
-              <Link href="/login" className="min-h-11 text-left">登录</Link>
-              <Link href="/register" className={buttonVariants({ className: 'mt-2 min-h-12' })}>免费体验</Link>
+              {signedIn ? (
+                <>
+                  {accountName && <p className="min-h-11 text-left text-muted-foreground">{accountName}</p>}
+                  <Link href="/workspace" className="min-h-11 text-left">工作台</Link>
+                  <button type="button" className="min-h-11 text-left" onClick={signOut}>退出</button>
+                </>
+              ) : (
+                <>
+                  <Link href="/login" className="min-h-11 text-left">登录</Link>
+                  <Link href="/register" className={buttonVariants({ className: 'mt-2 min-h-12' })}>免费体验</Link>
+                </>
+              )}
             </nav>
           </div>
         )}
@@ -157,6 +210,8 @@ export default function Page() {
           </div>
         </div>
       </section>
+
+      <AdSlot placement="home_mid_banner" className="container my-4 max-md:my-3" />
 
       <section id="library" className="section-padding border-t border-border bg-muted/30">
         <div className="container max-w-3xl">
@@ -223,19 +278,25 @@ export default function Page() {
 
       <section id="path-b" className="section-padding">
         <div className="container">
-          <SectionTitle eyebrow="Path B" title="九路获客，同一条成交与召回闭环" copy="1–5 负责把客户找来，6–8 用来优化这些通道，也可以销售 PickGlobal，9 是结果抽成。" />
+          <SectionTitle eyebrow="Path B" title="九路获客，同一条成交与召回闭环" copy="1–5 负责把客户找来，6–8 用来优化这些通道，也可以销售 PickGlobal，9 是结果抽成。登录后点开一路，进入对应获客页。" />
+          {loginHint && (
+            <div className="mx-auto mt-8 flex max-w-2xl flex-wrap items-center justify-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-5 py-4 text-sm">
+              <p>{loginHint}</p>
+              <Link href={`/login?next=${encodeURIComponent(loginNext)}`} className={buttonVariants()}>去登录</Link>
+            </div>
+          )}
           <div className="mt-14 flex flex-col gap-10">
             {channelGroups.map((group) => (
               <div key={group.title}>
                 <h3 className="text-sm font-semibold text-primary">{group.title}</h3>
                 <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {group.items.map(([code, title, copy]) => (
-                    <article key={code} className="feature-card">
-                      <span className="text-xs font-semibold text-primary">{code}</span>
-                      <h3 className="mt-4 text-lg font-semibold">{title}</h3>
-                      <p className="mt-3 text-sm leading-6 text-muted-foreground">{copy}</p>
-                      <p className="mt-5 text-xs font-medium text-foreground">线索获客 → 成交 → 召回</p>
-                    </article>
+                  {group.items.map(([code, id, title, copy]) => (
+                    <button key={code} type="button" className="feature-card !min-h-56 !w-full cursor-pointer !p-7 text-left" onClick={() => openChannel(code, id)}>
+                      <span className="text-sm font-semibold text-primary">{code}</span>
+                      <h3 className="mt-4 text-xl font-semibold">{title}</h3>
+                      <p className="mt-3 text-sm leading-7 text-muted-foreground">{copy}</p>
+                      <p className="mt-5 text-sm font-medium text-primary">{signedIn ? '进入这一路' : '登录后进入'}</p>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -303,6 +364,8 @@ export default function Page() {
         </div>
       </section>
 
+      <AdSlot placement="pricing_banner" className="container mb-2 max-md:mb-4" />
+
       <section id="contact" className="section-padding">
         <div className="container">
           <div className="cta-panel">
@@ -311,8 +374,8 @@ export default function Page() {
               <h2 className="text-balance text-3xl font-semibold tracking-tight text-white md:text-5xl">让每一个商品，都找到更合适的海外市场</h2>
               <p className="text-slate-300">从第一次分析到客户召回，在一个工作台完成。</p>
               <div className="flex flex-wrap justify-center gap-3">
-                <Link href="/register" className={buttonVariants({ size: 'lg', className: 'bg-white text-primary hover:bg-white/90' })}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
-                <Link href="/workspace" className={buttonVariants({ size: 'lg', variant: 'outline', className: 'border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white' })}>预约演示</Link>
+                <Link href={signedIn ? '/workspace' : '/register'} className={buttonVariants({ size: 'lg', className: '!h-11 !border-transparent !bg-white !px-5 !text-slate-950 hover:!bg-slate-100' })}>{signedIn ? '进入工作台' : '免费体验'} <ArrowRight data-icon="inline-end" /></Link>
+                <Link href="/workspace/acquire" className={buttonVariants({ size: 'lg', variant: 'outline', className: '!h-11 !border-cyan-200 !bg-cyan-400/15 !px-5 !text-cyan-50 hover:!bg-cyan-300/25 hover:!text-white' })}>预约演示</Link>
               </div>
             </div>
           </div>
@@ -327,7 +390,7 @@ export default function Page() {
           </div>
           <div><h3 className="text-sm font-semibold">产品</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><button className="text-left hover:text-foreground" onClick={() => scrollTo('path-a')}>选品分析</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('path-b')}>获客九路</button><Link href="/workspace" className="text-left hover:text-foreground">工作台</Link></div></div>
           <div><h3 className="text-sm font-semibold">资源</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><button className="text-left hover:text-foreground" onClick={() => scrollTo('faq')}>常见问题</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('scenes')}>应用场景</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('contact')}>预约演示</button></div></div>
-          <div><h3 className="text-sm font-semibold">公司</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><span>pickgrobal.mornscience.top</span><span>hello@pickglobal.example</span><span>中国 · 美国</span></div></div>
+          <div><h3 className="text-sm font-semibold">公司</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><a href="https://pickglobal.mornscience.top" className="hover:text-foreground">pickglobal.mornscience.top</a><a href="mailto:pickglobal@yeah.net" className="hover:text-foreground">pickglobal@yeah.net</a><a href="mailto:mornscience@sina.cn" className="hover:text-foreground">mornscience@sina.cn</a><span>中国 · 美国</span></div></div>
         </div>
         <div className="container flex flex-col gap-2 border-t border-border py-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between"><span>© 2026 PickGlobal. 保留所有权利。</span><span>首页展示数据均为样例数据</span></div>
       </footer>
