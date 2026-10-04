@@ -39,6 +39,14 @@ class AdLinkIn(BaseModel):
     link_url: str
 
 
+class BehaviorIn(BaseModel):
+    path: str = "/"
+    section: str
+    kind: str
+    duration_ms: int = 0
+    clicks: int = 0
+
+
 class InvitationIn(BaseModel):
     name: str
 
@@ -324,8 +332,25 @@ def admin_invitation_payout_paid(payout_id: str, request: Request, authorization
     return respond(request, updated)
 
 
+@router.post("/behavior")
+def record_page_behavior(request: Request, body: BehaviorIn):
+    from app.modules.page_behavior import record_behavior
+
+    row = record_behavior(
+        request.app.state.store,
+        path=body.path,
+        section=body.section,
+        kind=body.kind,
+        duration_ms=body.duration_ms,
+        clicks=body.clicks,
+    )
+    return respond(request, {"id": row["id"]})
+
+
 @router.get("/admin/analytics")
 def admin_analytics(request: Request, window_days: int | None = None, authorization: str | None = Header(default=None)):
+    from app.modules.page_behavior import behavior_summary
+
     store, prof = _admin_read(request, authorization)
     tenant_id = prof["tenant"]["id"]
     events = [row for row in store.query("events", tenant_id=tenant_id, limit=200)["items"] if _in_window(row, window_days)]
@@ -348,6 +373,7 @@ def admin_analytics(request: Request, window_days: int | None = None, authorizat
                 {"label": "发现客户", "value": len(leads)},
             ],
             "retention": [],
+            "behavior": behavior_summary(store, window_days),
             "window_days": window_days,
         },
     )
@@ -674,6 +700,14 @@ def admin_settings_password(request: Request, body: PasswordIn, authorization: s
     store.touch("users", user["id"], {"password_hash": hash_password(body.new_password, min_length=4)})
     _audit(store, prof, "settings.password", user["id"])
     return respond(request, {"updated": True})
+
+
+@router.get("/admin/metrics/cohort")
+def admin_metrics_cohort(request: Request, window_days: int = 30, authorization: str | None = Header(default=None)):
+    from app.services.metrics import cohort_average
+
+    store, _prof = _admin_read(request, authorization)
+    return respond(request, cohort_average(store, request.app.state.settings, window_days))
 
 
 @router.get("/admin/search")

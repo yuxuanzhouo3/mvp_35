@@ -1,0 +1,6 @@
+<view class="page">
+  <view class="h1">微信支付</view>
+  <view class="copy" wx:if="{{pending}}">正在拉起微信支付。</view>
+  <view class="err" wx:if="{{error}}">{{error}}</view>
+  <button class="btn-line" wx:if="{{error}}" bindtap="back">返回账单</button>
+</view>

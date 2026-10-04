@@ -13,6 +13,7 @@ import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import { readClient, type ClientInfo } from '@/lib/client-adapter'
 import { ProductLibrary } from '@/components/product-library'
 import { GuideVideo } from '@/components/guide-video'
+import { UserMenu } from '@/components/user-menu'
 import { AdSlot } from '@/components/ad-slot'
 import { api } from '@/lib/api'
 import { accessToken, logoutSession } from '@/lib/session'
@@ -116,7 +117,7 @@ export default function Page() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden pb-24 md:pb-0">
+    <main className="min-h-screen overflow-x-clip pb-24 md:pb-0">
       <header className="site-header sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-md">
         <div className="container flex h-14 items-center justify-between md:h-16">
           <a href="#top" className="flex items-center gap-2" aria-label="PickGlobal 首页">
@@ -133,8 +134,7 @@ export default function Page() {
             {signedIn ? (
               <>
                 <Link href="/workspace" className={buttonVariants({ variant: 'ghost' })}>工作台</Link>
-                {accountName && <span className="max-w-28 truncate text-sm text-muted-foreground">{accountName}</span>}
-                <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={signOut}>退出</button>
+                <UserMenu name={accountName || '账号'} onLogout={signOut} />
               </>
             ) : (
               <>
@@ -180,7 +180,7 @@ export default function Page() {
             <h1 className="max-w-xl text-balance text-[1.7rem] font-semibold leading-[1.15] tracking-[-.03em] md:text-6xl md:leading-[1.1] md:tracking-[-.04em]">两条路径：先算清货，再帮你把客户找回来</h1>
             <p className="max-w-lg text-pretty text-[15px] leading-6 text-muted-foreground md:text-lg md:leading-7">
               <span className="md:hidden">先看清利润和风险，再把客户找回来。</span>
-              <span className="hidden md:inline">PickGlobal 把选品分析报告，与电商、社交、展会、代理、大数据等九路获客成交召回，放进同一个工作台。</span>
+              <span className="hidden md:inline">选品报告和九路获客，放在同一个工作台。</span>
             </p>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
               <Link href="/workspace/products" className={buttonVariants({ size: 'lg', className: 'min-h-12 w-full text-base sm:w-auto' })}>开始分析商品 <ArrowRight data-icon="inline-end" /></Link>
@@ -188,7 +188,7 @@ export default function Page() {
             </div>
             <div className="grid w-full grid-cols-2 gap-2 md:hidden" aria-label="样例指标">
               {[['机会分', '80'], ['利润率', '49.9%'], ['税费', '可复核'], ['风险', '低']].map(([label, value]) => (
-                <div key={label} className="rounded-xl border border-border bg-card px-2 py-2.5"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>
+                <div key={label} className="soft-card px-2 py-2.5"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>
               ))}
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="size-3.5 shrink-0 text-emerald-600" /> 首期支持中国与美国市场</div>
@@ -200,9 +200,9 @@ export default function Page() {
             </div>
             <div className="grid gap-3 p-4 md:grid-cols-2 md:p-5">
               {[['机会分', '80'], ['利润率', '49.9%'], ['税费', '可复核'], ['风险', '低']].map(([label, value]) => (
-                <div key={label} className="rounded-xl border border-border bg-card p-3"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>
+                <div key={label} className="rounded-xl bg-muted/50 p-3"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>
               ))}
-              <div className="rounded-xl border border-border bg-card p-3 md:col-span-2">
+              <div className="rounded-xl bg-muted/50 p-3 md:col-span-2">
                 <p className="text-xs font-semibold">九路线索与成交</p>
                 <p className="mt-2 text-[11px] leading-5 text-muted-foreground">电商 · 社交 · 展会 · 代理 · 大数据 · GEO · 内容 · 跨境 · RaaS。成交和召回都回到同一条获客路径。</p>
               </div>
@@ -224,7 +224,7 @@ export default function Page() {
 
       <section id="path-a" className="section-padding">
         <div className="container">
-          <SectionTitle eyebrow="Path A" title="选品与分析报告" copy="双向入口汇入同一商品库，算清利润和风险之后，再进入获客。" />
+          <SectionTitle eyebrow="Path A" title="选品与分析报告" copy="先算清利润和风险，再去获客。" />
           <div className="mt-14 grid gap-4 md:grid-cols-4">
             {pathA.map(([num, title, copy, Icon], index) => (
               <div key={num as string} className="step-card relative">
@@ -278,7 +278,7 @@ export default function Page() {
 
       <section id="path-b" className="section-padding">
         <div className="container">
-          <SectionTitle eyebrow="Path B" title="九路获客，同一条成交与召回闭环" copy="1–5 负责把客户找来，6–8 用来优化这些通道，也可以销售 PickGlobal，9 是结果抽成。登录后点开一路，进入对应获客页。" />
+          <SectionTitle eyebrow="Path B" title="九路获客，同一条成交与召回" copy="1–5 找客户，6–8 优化，9 是结果抽成。登录后进入对应一路。" />
           {loginHint && (
             <div className="mx-auto mt-8 flex max-w-2xl flex-wrap items-center justify-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-5 py-4 text-sm">
               <p>{loginHint}</p>
@@ -317,7 +317,7 @@ export default function Page() {
         </div>
       </section>
 
-      <section className="section-padding">
+      <section id="devices" className="section-padding">
         <div className="container">
           <div className="platform-panel">
             <div className="max-w-xl">
@@ -335,7 +335,7 @@ export default function Page() {
         </div>
       </section>
 
-      <section className="border-y border-border bg-muted/30">
+      <section id="trust" className="border-y border-border bg-muted/30">
         <div className="container grid gap-4 py-8 sm:grid-cols-2 lg:grid-cols-4">
           {[['国内云基础设施', ShieldCheck], ['数据集中管理', Radar], ['操作记录可追溯', RefreshCw], ['AI 分析与文案生成', Sparkles]].map(([text, Icon]) => (
             <div key={text as string} className="flex items-center gap-3 text-sm font-medium"><Icon className="size-4 text-primary" />{text as string}</div>
@@ -350,14 +350,14 @@ export default function Page() {
             <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">还有问题？<br />我们来回答。</h2>
             <Button className="mt-7" variant="outline" onClick={() => scrollTo('contact')}>预约演示 <ArrowRight data-icon="inline-end" /></Button>
           </div>
-          <div className="flex flex-col border-t border-border">
+          <div className="soft-card overflow-hidden px-4">
             {faqs.map(([question, answer], index) => (
-              <div key={question} className="border-b border-border">
-                <button className="flex w-full items-center justify-between gap-4 py-5 text-left text-sm font-medium" onClick={() => setOpenFaq(openFaq === index ? null : index)} aria-expanded={openFaq === index}>
+              <div key={question} className={index > 0 ? 'border-t border-border' : ''}>
+                <button className="flex w-full items-center justify-between gap-4 py-4 text-left text-sm font-medium" onClick={() => setOpenFaq(openFaq === index ? null : index)} aria-expanded={openFaq === index}>
                   <span>{question}</span>
                   <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${openFaq === index ? 'rotate-180' : ''}`} />
                 </button>
-                {openFaq === index && <p className="pb-5 pr-8 text-sm leading-6 text-muted-foreground">{answer}</p>}
+                {openFaq === index && <p className="pb-4 text-sm leading-6 text-muted-foreground">{answer}</p>}
               </div>
             ))}
           </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { readClient } from '@/lib/client-adapter'
+import { ResultDesk } from '@/components/result-desk'
 import { sharePlan } from '../acquire/share-plans'
 
 type Plan = { id: string; name: string; amount_fen: number; period: string }
@@ -79,6 +80,8 @@ export default function BillingPage() {
   const [qr, setQr] = useState('')
   const [qrImage, setQrImage] = useState('')
   const [pickedPlan, setPickedPlan] = useState('')
+  const [ordersOpen, setOrdersOpen] = useState(false)
+  const [invoicesOpen, setInvoicesOpen] = useState(false)
 
   async function load() {
     const data = await api<Summary>('/billing/summary')
@@ -160,13 +163,16 @@ export default function BillingPage() {
 
   const active = summary?.subscription.items.find((item) => item.status === 'active')
   const picked = sharePlan(pickedPlan)
+  const payments = summary?.payments.items || []
+  const invoices = summary?.invoices.items || []
+  const pendingCount = payments.filter((item) => item.status === 'pending').length
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <span className="eyebrow">账单</span>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">套餐与支付</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">下单后状态是待支付。微信支付和支付宝只在商户配置完整后给出付款地址。浏览器不调用支付回调，也不把待支付显示成成功。</p>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">下单后是待支付。商户配置完整后才会给出付款地址。</p>
         {summary?.payment_testing && <p className="mt-2 text-sm text-muted-foreground">当前是支付测试，付费套餐实付 0.10 元。</p>}
         {picked && (
           <p className="mt-3 max-w-3xl rounded-xl border border-border bg-card px-4 py-3 text-sm leading-6">
@@ -189,7 +195,7 @@ export default function BillingPage() {
       <section className="grid gap-4 md:grid-cols-3">
         {picked && <h2 className="md:col-span-3 font-semibold">已接通的支付套餐</h2>}
         {(summary?.plans || []).map((plan) => (
-          <article key={plan.id} className="rounded-2xl border border-border bg-card p-5">
+          <article key={plan.id} className="soft-card p-5">
             <h2 className="font-semibold">{plan.name}</h2>
             <p className="mt-2 text-2xl font-semibold">{yuan(plan.amount_fen)}<span className="text-sm font-normal text-muted-foreground"> / {plan.period === 'year' ? '年' : '月'}</span></p>
             {plan.amount_fen > 0 ? (
@@ -207,30 +213,58 @@ export default function BillingPage() {
         <h2 className="font-semibold">订阅</h2>
         <p className="mt-2 text-sm text-muted-foreground">{active ? `${active.plan_id || active.plan} · ${statusLabel[active.status] || active.status}` : '还没有生效中的付费订阅。'}</p>
       </section>
-      <section className="overflow-hidden rounded-2xl border border-border bg-card">
-        <table className="data-table">
-          <thead><tr><th>支付单</th><th>金额</th><th>状态</th><th></th></tr></thead>
-          <tbody>
-            {(summary?.payments.items || []).map((payment) => (
-              <tr key={payment.id}>
-                <td>{payment.id}<div className="text-xs text-muted-foreground">{payment.kind || 'subscription'} {payment.plan_id || ''}</div></td>
-                <td>{yuan(payment.amount)}</td>
-                <td>{statusLabel[payment.status] || payment.status}</td>
-                <td>{payment.status === 'pending' && <button className="text-sm text-primary" disabled={busy} onClick={() => void query(payment.id)}>查询</button>}</td>
-              </tr>
-            ))}
-            {summary && summary.payments.items.length === 0 && <tr><td colSpan={4} className="text-muted-foreground">还没有支付单。</td></tr>}
-          </tbody>
-        </table>
+      <section className="rounded-2xl border border-border bg-card p-5">
+        <button type="button" className="flex w-full items-center justify-between gap-3 text-left" aria-expanded={ordersOpen} onClick={() => setOrdersOpen((open) => !open)}>
+          <span>
+            <span className="font-semibold">支付单</span>
+            <span className="mt-1 block text-sm text-muted-foreground">{payments.length} 笔{pendingCount > 0 ? ` · 待支付 ${pendingCount}` : ''}</span>
+          </span>
+          <span className="text-sm text-primary">{ordersOpen ? '收起' : '展开'}</span>
+        </button>
+        {ordersOpen && (
+          <div className="mt-4">
+            <ResultDesk
+              items={payments}
+              placeholder="搜索支付单、套餐或状态"
+              keywords={(payment) => `${payment.id} ${payment.plan_id || ''} ${payment.kind || ''} ${statusLabel[payment.status] || payment.status}`}
+              filters={[{ key: 'status', label: '状态', value: (payment) => payment.status, labels: statusLabel }]}
+              sorts={[
+                { id: 'amount-desc', label: '金额高到低', compare: (left, right) => right.amount - left.amount },
+                { id: 'amount-asc', label: '金额低到高', compare: (left, right) => left.amount - right.amount },
+              ]}
+              pageSize={5}
+              empty="没有符合条件的支付单。"
+              render={(payment) => (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">{payment.id}</p>
+                    <p className="text-xs text-muted-foreground">{payment.kind || 'subscription'} {payment.plan_id || ''}</p>
+                  </div>
+                  <p className="text-sm">{yuan(payment.amount)}</p>
+                  <p className="text-sm">{statusLabel[payment.status] || payment.status}</p>
+                  {payment.status === 'pending' && <button type="button" className="text-sm text-primary disabled:opacity-50" disabled={busy} onClick={() => void query(payment.id)}>查询</button>}
+                </div>
+              )}
+            />
+          </div>
+        )}
       </section>
       <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="font-semibold">发票</h2>
-        <ul className="mt-3 flex flex-col gap-2 text-sm">
-          {(summary?.invoices.items || []).map((invoice) => (
-            <li key={invoice.id}>{invoice.id} · {yuan(invoice.amount)} · {statusLabel[invoice.status] || invoice.status}</li>
-          ))}
-          {summary && summary.invoices.items.length === 0 && <li className="text-muted-foreground">入账后才会开票。</li>}
-        </ul>
+        <button type="button" className="flex w-full items-center justify-between gap-3 text-left" aria-expanded={invoicesOpen} onClick={() => setInvoicesOpen((open) => !open)}>
+          <span>
+            <span className="font-semibold">发票</span>
+            <span className="mt-1 block text-sm text-muted-foreground">{invoices.length > 0 ? `${invoices.length} 张` : '入账后才会开票'}</span>
+          </span>
+          <span className="text-sm text-primary">{invoicesOpen ? '收起' : '展开'}</span>
+        </button>
+        {invoicesOpen && (
+          <ul className="mt-3 flex flex-col gap-2 text-sm">
+            {invoices.map((invoice) => (
+              <li key={invoice.id}>{invoice.id} · {yuan(invoice.amount)} · {statusLabel[invoice.status] || invoice.status}</li>
+            ))}
+            {summary && invoices.length === 0 && <li className="text-muted-foreground">入账后才会开票。</li>}
+          </ul>
+        )}
       </section>
     </div>
   )

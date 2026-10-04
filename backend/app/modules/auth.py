@@ -386,7 +386,7 @@ def sms_quota(store: DocumentStore, phone: str) -> dict:
     return {
         "sms_sent_today": count,
         "sms_daily_cap": SMS_DAILY_CAP,
-        "sms_quota_warning": count > 5,
+        "sms_quota_warning": count >= SMS_DAILY_CAP,
     }
 
 

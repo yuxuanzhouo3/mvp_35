@@ -1,0 +1,19 @@
+<view class="page">
+  <view class="h1">找回密码</view>
+  <view class="copy">邮箱收到重置链接。手机收到 5 分钟内有效的验证码，填在本页即可设置新密码。</view>
+  <text class="label">邮箱或手机号</text>
+  <input class="input" value="{{account}}" bindinput="onAccount" />
+  <view class="err" wx:if="{{error}}">{{error}}</view>
+  <button class="btn" disabled="{{pending}}" bindtap="onSend">{{pending ? '正在发送' : '发送重置验证'}}</button>
+  <view class="ok" wx:if="{{token}}">重置凭证已生成，可以在下方设置新密码。</view>
+  <view class="muted" wx:if="{{emailed}}">若账号存在，重置链接已发到邮箱，1 小时内有效。</view>
+  <block wx:if="{{smsSent || token}}">
+    <text class="label">{{smsSent ? '短信验证码' : '重置凭证'}}</text>
+    <input class="input" wx:if="{{smsSent}}" type="number" value="{{smsCode}}" bindinput="onSms" />
+    <input class="input" wx:else value="{{token}}" disabled />
+    <text class="label">新密码</text>
+    <input class="input" password value="{{password}}" bindinput="onPassword" />
+    <button class="btn" disabled="{{pending}}" bindtap="onReset">设置新密码</button>
+  </block>
+  <view class="links"><text class="link" bindtap="goLogin">返回登录</text></view>
+</view>

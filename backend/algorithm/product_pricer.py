@@ -162,13 +162,13 @@ def compare_product(
     }
 
 
-def compare_csv(csv_text: str, rules_version: str = RULES_VERSION, settings=None) -> dict:
+def compare_csv(csv_text: str, rules_version: str = RULES_VERSION, settings=None, route: dict | None = None) -> dict:
     reader = csv.DictReader(io.StringIO(csv_text or ""))
     items = []
     errors = []
     for index, row in enumerate(reader, start=2):
         try:
-            fields = product_from_body(row, source="csv")
+            fields = product_from_body({**row, **(route or {})}, source="csv")
             fields, overseas, feed = prepare_market(fields, settings) if settings is not None else (fields, None, None)
             items.append(compare_product(fields, rules_version, overseas_quotes=overseas, feed=feed))
         except AppError as exc:

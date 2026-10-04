@@ -160,3 +160,65 @@ def test_selection_assist_ranks_catalog_source(client: TestClient):
     plain = client.get("/api/v1/catalog/search", headers=auth(), params={"q": "露营"})
     assert "algorithm" not in plain.json()["data"]
     assert "selection" not in plain.json()["data"]["items"][0]
+    assert ranked.json()["data"]["sources"]["provider"] == "local-book"
+    assert {row["id"] for row in ranked.json()["data"]["sources"]["platforms"]} >= {"1688", "taobao", "amazon", "ebay"}
+
+
+def test_selection_ranks_china_supply_against_us_shelf(client: TestClient, monkeypatch):
+    live = {
+        "id": "1688:99",
+        "name": "双层玻璃杯",
+        "sku": "99",
+        "category": "家居",
+        "cost_cny": "20.00",
+        "packaging_cny": "4.00",
+        "domestic_freight_cny": "6.00",
+        "international_freight_usd": "3.20",
+        "target_price_usd": "40.00",
+        "supplier": "义乌杯厂",
+        "platform": "1688",
+        "external_id": "99",
+        "fx_usd_cny": "7.20",
+        "target_market": "US",
+        "tax_regime": "cn_us",
+        "price_basis": "us_shelf",
+    }
+    platforms = [
+        {"id": "1688", "name": "1688", "region": "CN", "status": "ok", "count": 1},
+        {"id": "ebay", "name": "eBay", "region": "US", "status": "ok", "count": 1},
+    ]
+    monkeypatch.setattr("algorithm.selection_assist.collect_goods", lambda *_args, **_kwargs: ([live], platforms))
+    ranked = client.get("/api/v1/catalog/search", headers=auth(), params={"q": "杯", "algorithm": "selection-assist"})
+    assert ranked.status_code == 200, ranked.text
+    body = ranked.json()["data"]
+    assert body["sources"]["provider"] == "live"
+    assert body["items"][0]["platform"] == "1688"
+    assert body["items"][0]["price_basis"] == "us_shelf"
+    assert body["items"][0]["selection"]["pick"] is True
+    adopted = client.post("/api/v1/catalog/adopt", headers=auth(), json={"catalog_id": "1688:99"})
+    assert adopted.status_code == 200, adopted.text
+    assert adopted.json()["data"]["sku"] == "99"
+
+
+def test_pdd_price_is_converted_from_fen(monkeypatch):
+    from algorithm.shelf import _pinduoduo
+
+    class Settings:
+        pdd_client_id = "id"
+        pdd_client_secret = "secret"
+        pdd_pid = "pid"
+
+    def fake_post(url, data=None, content=None, headers=None):
+        del url, content, headers
+        assert data["type"] == "pdd.ddk.goods.search"
+        return {
+            "goods_search_response": {
+                "goods_list": [{"goods_name": "玻璃杯", "goods_id": "7", "min_group_price": 1990, "mall_name": "杯店"}]
+            }
+        }
+
+    monkeypatch.setattr("algorithm.shelf._post", fake_post)
+    rows, status = _pinduoduo("杯", Settings())
+    assert status["status"] == "ok"
+    assert rows[0]["cost_cny"] == "19.90"
+    assert rows[0]["platform"] == "pinduoduo"

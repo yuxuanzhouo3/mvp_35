@@ -6,7 +6,7 @@ export function AuthShell({ title, copy, children }: { title: string; copy: stri
   return (
     <main className="relative flex min-h-screen items-center justify-center bg-background px-4 py-12 text-[11px] [&_a]:!text-[11px] [&_button]:!text-[11px] [&_h1]:!text-[13px] [&_input]:!text-[11px] [&_label]:!text-[11px] [&_p]:!text-[11px]">
       <div className="absolute right-4 top-4"><GuideVideo className="!min-h-7 !px-2 !py-1 !text-[11px]" /></div>
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-sm">
+      <div className="soft-card w-full max-w-sm p-5">
         <a href="/" className="mb-3 flex items-center gap-1.5 !text-[12px]" aria-label="返回首页">
           <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Globe2 className="size-3" />

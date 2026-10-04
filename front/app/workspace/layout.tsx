@@ -63,11 +63,11 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
             </span>
             <span className="font-semibold tracking-tight">Pick<span className="text-primary">Global</span></span>
           </Link>
-          <nav className="hidden items-center gap-1 text-sm md:flex">
+          <nav className="hidden items-center gap-1 rounded-2xl border border-border bg-card p-1 text-sm shadow-sm md:flex">
             {links.map(([href, label]) => {
               const active = href === '/workspace' ? pathname === href : pathname.startsWith(href)
               return (
-                <Link key={href} href={href} className={`rounded-lg px-3 py-1.5 ${active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                <Link key={href} href={href} className={`rounded-xl px-3 py-1.5 ${active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
                   {label}
                 </Link>
               )
@@ -79,12 +79,12 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
               对话
             </button>
             <UserMenu name={name || '账号'} onLogout={() => void logoutSession().then(() => router.replace('/login'))} />
-            <GuideVideo className="mr-3 shrink-0 sm:mr-0" />
+            <GuideVideo className="shrink-0" />
           </div>
         </div>
       </header>
       <div className={chatOpen ? 'md:mr-80' : ''}>
-      <div className="container py-6 md:py-8">
+      <div className="container py-6 md:py-8" data-watch={pathname.startsWith('/workspace/products') ? 'report' : pathname.startsWith('/workspace/acquire') ? 'acquire' : pathname.startsWith('/workspace/billing') ? 'billing' : 'workspace'}>
         {ready ? (
           <>
             <AdSlot placement="dashboard_top" className="mb-5 max-md:mb-4" />

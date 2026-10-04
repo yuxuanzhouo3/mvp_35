@@ -16,7 +16,7 @@ export function SmsQuotaDialog({ count, cap, onClose }: { count: number; cap: nu
       <div className="w-full max-w-sm rounded-2xl bg-card p-5 shadow-xl">
         <h2 className="!text-base font-semibold">短信额度</h2>
         <p className="mt-2 !text-sm !leading-6 text-muted-foreground">
-          这个号码今天已发出 {count} 条短信。同一号码一天大约最多 {cap} 条，超过后要到明天 0 点才能再收。密码登录不受这条限制。
+          这个号码今天已发出 {count} 条短信，已到每天 {cap} 条的上限。明天 0 点后才能再收。密码登录不受这条限制。
         </p>
         <button type="button" className="mt-4 h-10 w-full rounded-xl bg-primary !text-sm font-medium text-primary-foreground" onClick={onClose}>
           知道了

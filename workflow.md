@@ -31,6 +31,7 @@ Add a row when a merge lands. Newest row first.
 
 | Day | Step | Pull request | Result |
 | --- | --- | --- | --- |
+| 4 Oct 2026 | `yzcmf` → `test` | [#11](https://github.com/yuxuanzhouo3/mvp_35/pull/11) | `1.6` on `test` (`433cabe`). Tip `e9faa82`. `pro` stays `1.2`. |
 | 3 Oct 2026 | `yzcmf` → `test` | [#10](https://github.com/yuxuanzhouo3/mvp_35/pull/10) | `1.5` on `test` (`1698cc7`). Tip `6704ca4`. `pro` stays `1.2`. |
 | 2 Oct 2026 | `yzcmf` → `test` | [#9](https://github.com/yuxuanzhouo3/mvp_35/pull/9) | `1.4` on `test` (`951b554`). Tip `e31c5d7`. `pro` stays `1.2`. |
 | 1 Oct 2026 | `yzcmf` → `test` | [#8](https://github.com/yuxuanzhouo3/mvp_35/pull/8) | `1.3` on `test` (`02915cc`). Commit `8d47ec8`. `pro` stays `1.2`. |
@@ -41,6 +42,10 @@ Add a row when a merge lands. Newest row first.
 ## Pace
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
+
+### 4 October 2026
+
+`yzcmf` through `e9faa82` is on `test` as `1.6` ([#11](https://github.com/yuxuanzhouo3/mvp_35/pull/11), `433cabe`). `pro` stays `1.2`. Test now has ad slots, the pricer and selection algorithms, profit-share plans, one acquire step at a time, invite rewards, and recall links. Alipay and WeChat pay succeeded. Next: CloudBase `tcb` with git. A `test` → `pro` merge waits until you agree. Hunyuan and live SES stay unwired.
 
 ### 3 October 2026
 

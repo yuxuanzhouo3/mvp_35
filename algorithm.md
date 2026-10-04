@@ -360,6 +360,16 @@ dedupe_key = source_channel + ":" + company.小写去空白 + ":" + market
 
 没配该平台钥匙时，发现管线仍返回现在的 5 条演示线索，`provider=mock`。配了钥匙就用下表的接口，`provider=live`，演示序列不再混入。
 
+B1–B4 不是匿名搜索。卖家先用各平台官方 OAuth 授权登录，授权之后本系统才对该账号做三件事，并且只动这个账号自己的内容、会话和粉丝，不去扫陌生人主页。
+
+| 动作 | 节奏 | 规则 |
+| --- | --- | --- |
+| 种草 | 授权后按商品报告起草一条，发出前仍要批准 | 只调官方发布接口。没发布权限的平台跳过，不抓页面代发 |
+| 自动回复 | 同一条会话 24 小时最多 1 次 | `REPLY_INTERVAL_HOURS` 默认 24。已在 24 小时内回复过的会话跳过。没消息权限的平台跳过 |
+| 收集粉丝 | 授权后拉取该账号自己的粉丝或关注者 | 只入库官方接口返回的昵称和联系方式。没有联系方式的粉丝可以入库，不能进发送受众 |
+
+B4 的二级代理不另申请一套店铺钥匙，用租户已经授权的店铺账号做上面三件事，名单仍由该代理推送。B5 不发种草、不自动回复。它把 B1–B4 已经授权拉到的买家、表单、粉丝、展会询盘、代理名单，以及企查查、天眼查、启信宝的企业结果，收成同一条 `leads`。
+
 ## B1 电商
 
 `channel=ecommerce`。询盘、订单买家、沉默买家都进 `leads`。`POST /acquisition/ecommerce` 在开关 `acquisition.ecommerce` 打开前保持未开通，发现走 `POST /lead-searches`。
@@ -441,9 +451,9 @@ signature = HMAC-SHA256(ledger_hmac_secret, f"{idempotency_key}:{amount_fen}:age
 
 `level=2` 时 `channel_account_id` 必须是 `agent_1` … `agent_12`，且 `parent_channel_account_id` 不能空。`level=1` 的账户不能是 `agent_n`。两笔幂等键不同，互不覆盖。现有调用只带金额、幂等键和签名时照旧入账；带上 `level` 之后才按上表校验。
 
-## B5 智慧大脑
+## B5 全部客源
 
-`channel=enrichment`。去重和质量分仍用发现管线。这些接口补公司是否存在、行业、地区，不改已经由规则写下的 `quality_score`。
+`channel=enrichment`。这一路负责把客源收齐，不种草，不自动回复。一次发现会合并：B1 订单买家、B2 表单和粉丝、B3 展会询盘、B4 代理推送的名单，再加上下面三家工商接口按关键词补到的企业。去重仍是 `source_channel:公司:市场`，同一 `external_id` 只更新。这些接口补公司是否存在、行业、地区，不改已经由规则写下的 `quality_score`。
 
 | 平台 id | 平台 | 官方接口 | 检索 | 取用字段 |
 | --- | --- | --- | --- | --- |

@@ -232,6 +232,7 @@ TABLES: dict[str, Table] = {
                 "id",
                 "name",
                 "plan",
+                "trade_route",
                 "status",
                 "region",
                 "compliance_region",

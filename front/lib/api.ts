@@ -16,8 +16,18 @@ export type Job = {
 
 export type Rate = { code: string; value: string | null; target: string; north_star?: boolean }
 
+export type MetricBasis = { method: string; included: number; excluded: number; note: string }
+
+export type MetricBand = {
+  band: string
+  users: number
+  rates: Record<string, Rate & { kept: number; samples: number }>
+  timings: Record<string, { value: number | null; kept: number; samples: number }>
+}
+
 export type Metrics = {
   window_days: number
+  display_source?: 'tenant' | 'platform_average'
   rates: Record<string, Rate>
   timings_p50_seconds: Record<string, number | null>
   timing_targets_seconds: Record<string, number>
@@ -25,6 +35,23 @@ export type Metrics = {
   alerts: { act_or_rec_p95_over_72h: boolean }
   import_success_rate: string | null
   counts: { analyses: number; acquired: number; leads: number; audience: number; delivered_people: number }
+  inputs?: {
+    analyses?: number
+    acquired?: number
+    qualified?: number
+    leads?: number
+    audience?: number
+    delivered_people?: number
+    opened_people?: number
+    wins?: number
+    activations?: number
+    cold_hit?: number
+    recall_delivered?: number
+    warm_hit?: number
+  }
+  benchmark?: Metrics
+  basis?: MetricBasis
+  bands?: MetricBand[]
 }
 
 export function percent(value: string | null | undefined) {

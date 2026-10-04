@@ -19,6 +19,16 @@ function websiteHost(link: string) {
 
 export function AdSlot({ placement, className = '' }: { placement: string; className?: string }) {
   const [ad, setAd] = useState<PlacementAd | null>(null)
+  const [show, setShow] = useState(true)
+
+  useEffect(() => {
+    function sync() {
+      setShow(document.documentElement.dataset.ads !== 'off')
+    }
+    sync()
+    window.addEventListener('pickglobal-appearance', sync)
+    return () => window.removeEventListener('pickglobal-appearance', sync)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -35,7 +45,7 @@ export function AdSlot({ placement, className = '' }: { placement: string; class
     }
   }, [placement])
 
-  if (!ad?.link_url) return null
+  if (!show || !ad?.link_url) return null
   const host = websiteHost(ad.link_url)
 
   function openAd(event: MouseEvent<HTMLAnchorElement>) {

@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { ChevronDown, CreditCard, Gift, LogOut, Settings, User } from 'lucide-react'
 import { api } from '@/lib/api'
+import { readAppearance, writeAppearance, type Appearance } from '@/lib/appearance'
 
 type Profile = {
   user: { id?: string; display_name?: string; username?: string; email?: string; phone?: string; role?: string }
@@ -12,7 +13,7 @@ type Profile = {
   role?: string
 }
 
-type Person = { id: string; name: string; email_masked?: string | null }
+type Person = { id: string; name: string; email_masked?: string | null; created_at?: string | null; via_name?: string }
 type InviteEvent = {
   invitee_name: string
   link: string
@@ -21,13 +22,14 @@ type InviteEvent = {
   paid_fen: number
   reward_fen: number
 }
-type CashRequest = { id: string; kind?: string; amount_fen: number; status: string; due_at?: string | null }
+type CashRequest = { id: string; kind?: string; amount_fen: number; status: string; requested_at?: string | null; due_at?: string | null; paid_at?: string | null }
 type Coupon = { id: string; label: string; rate: string; status: string }
 type Invite = {
   invite_code: string
   share_path: string
   used_by: Person[]
   invited_later: Person[]
+  paid_fen: number
   owed_fen: number
   discount_fen: number
   events: InviteEvent[]
@@ -43,19 +45,42 @@ function yuan(fen: number) {
   return `¥${(fen / 100).toFixed(2)}`
 }
 
+function when(value?: string | null) {
+  if (!value) return '—'
+  return value.replace('T', ' ').slice(0, 16)
+}
+
+const cashStatus: Record<string, string> = { paid: '已打款', scheduled: '待打款', pending: '待打款' }
+const cashKind: Record<string, string> = { invite: '邀请奖励', draw: '抽奖', streak: '连续登录' }
+
+function SettingRow({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <p className="text-sm">{label}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </div>
+      <div className="shrink-0 sm:w-44">{children}</div>
+    </div>
+  )
+}
+
 export function UserMenu({ name, onLogout }: { name: string; onLogout: () => void }) {
   const [open, setOpen] = useState(false)
   const [dialog, setDialog] = useState<'settings' | 'invite' | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [invite, setInvite] = useState<Invite | null>(null)
+  const [inviteError, setInviteError] = useState('')
   const [notice, setNotice] = useState('')
-  const [density, setDensity] = useState('comfortable')
+  const [look, setLook] = useState<Appearance>({ theme: 'light', font: 'default', fontSize: '16', density: 'comfortable', ads: true })
+  const [origin, setOrigin] = useState('')
   const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('pickglobal.density') || 'comfortable'
-    setDensity(saved)
-    document.documentElement.dataset.density = saved
+    const saved = readAppearance()
+    setLook(saved)
+    setOrigin(window.location.origin)
+    writeAppearance(saved)
   }, [])
 
   useEffect(() => {
@@ -91,14 +116,18 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
     setNotice('')
     setDialog(next)
     if (next === 'invite') {
-      api<Invite>('/users/me/invite').then(setInvite).catch(() => undefined)
+      setInvite(null)
+      setInviteError('')
+      api<Invite>('/users/me/invite')
+        .then(setInvite)
+        .catch((reason) => setInviteError(reason instanceof Error ? reason.message : '邀请链接暂时取不到'))
     }
   }
 
-  function saveDensity(next: string) {
-    setDensity(next)
-    window.localStorage.setItem('pickglobal.density', next)
-    document.documentElement.dataset.density = next
+  function saveLook(patch: Partial<Appearance>) {
+    const next = { ...look, ...patch }
+    setLook(next)
+    writeAppearance(next)
   }
 
   async function claimCash() {
@@ -146,17 +175,17 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
     <div className="relative" ref={box}>
       <button
         type="button"
-        className="inline-flex h-9 max-w-[11rem] items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground hover:bg-muted"
+        className="inline-flex h-9 min-w-0 max-w-[4.25rem] items-center gap-1 rounded-lg border border-border bg-background px-1.5 text-sm text-foreground hover:bg-muted sm:max-w-[11rem] sm:gap-1.5 sm:px-2.5"
         onClick={toggleMenu}
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        <User className="size-4 shrink-0 text-muted-foreground" />
+        <User className="hidden size-4 shrink-0 text-muted-foreground sm:block" />
         <span className="truncate">{displayName}</span>
-        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+        <ChevronDown className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-border bg-card p-1.5 text-sm shadow-lg" role="menu">
+        <div className="absolute right-0 z-50 mt-2 w-[min(18rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-card p-1.5 text-sm shadow-lg" role="menu">
           <div className="rounded-lg px-3 py-2.5">
             <p className="text-xs text-muted-foreground">个人信息</p>
             <p className="mt-1 truncate font-medium">{displayName}</p>
@@ -186,52 +215,168 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
       )}
       {dialog && createPortal(
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={() => setDialog(null)}>
-          <div className="max-h-[86vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-2xl" onClick={(event) => event.stopPropagation()} role="dialog">
+          <div className={`max-h-[86vh] w-full overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-2xl ${dialog === 'invite' ? 'max-w-3xl' : 'max-w-lg'}`} onClick={(event) => event.stopPropagation()} role="dialog">
             {dialog === 'settings' && (
               <>
                 <h2 className="text-lg font-semibold">界面设置</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{displayName}{contact ? ` · ${contact}` : ''}</p>
-                <div className="mt-4 flex gap-2">
-                  <button type="button" className={`h-10 flex-1 rounded-lg text-sm ${density === 'comfortable' ? 'bg-primary text-primary-foreground' : 'border border-border'}`} onClick={() => saveDensity('comfortable')}>舒适</button>
-                  <button type="button" className={`h-10 flex-1 rounded-lg text-sm ${density === 'compact' ? 'bg-primary text-primary-foreground' : 'border border-border'}`} onClick={() => saveDensity('compact')}>紧凑</button>
+                <div className="mt-3 rounded-lg border border-border px-3 py-3">
+                  <p className="text-sm font-medium">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{contact || '未绑定邮箱或手机'}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">Premium Pro · {plan}{profile?.tenant.name ? ` · ${profile.tenant.name}` : ''}</p>
+                </div>
+                <div className="mt-3 space-y-2">
+                  <SettingRow label="主题" hint="工作台页面的浅色或深色">
+                    <select className="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm" value={look.theme} onChange={(event) => saveLook({ theme: event.target.value as Appearance['theme'] })}>
+                      <option value="light">浅色</option>
+                      <option value="dark">深色</option>
+                      <option value="system">跟随系统</option>
+                    </select>
+                  </SettingRow>
+                  <SettingRow label="字号" hint="页面文字大小">
+                    <select className="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm" value={look.fontSize} onChange={(event) => saveLook({ fontSize: event.target.value as Appearance['fontSize'] })}>
+                      <option value="14">14px</option>
+                      <option value="16">16px</option>
+                      <option value="18">18px</option>
+                    </select>
+                  </SettingRow>
+                  <SettingRow label="字体" hint="正文使用的字体">
+                    <select className="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm" value={look.font} onChange={(event) => saveLook({ font: event.target.value as Appearance['font'] })}>
+                      <option value="default">默认</option>
+                      <option value="serif">衬线</option>
+                      <option value="mono">等宽</option>
+                    </select>
+                  </SettingRow>
+                  <SettingRow label="密度" hint="舒适或更紧凑的字号">
+                    <select className="h-9 w-full rounded-lg border border-border bg-card px-2 text-sm" value={look.density} onChange={(event) => saveLook({ density: event.target.value as Appearance['density'] })}>
+                      <option value="comfortable">舒适</option>
+                      <option value="compact">紧凑</option>
+                    </select>
+                  </SettingRow>
+                  <SettingRow label="广告" hint="工作台里的推广位">
+                    <button type="button" className="h-9 w-full rounded-lg border border-border text-sm" onClick={() => saveLook({ ads: !look.ads })}>{look.ads ? '显示中，点击关闭' : '已关闭，点击打开'}</button>
+                  </SettingRow>
+                  <SettingRow label="账单与订阅" hint="套餐、支付和发票">
+                    <Link href="/workspace/billing" className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm" onClick={() => setDialog(null)}>打开账单</Link>
+                  </SettingRow>
+                  <SettingRow label="隐私" hint="登录状态只保存在这台浏览器">
+                    <button type="button" className="h-9 w-full rounded-lg border border-border text-sm" onClick={onLogout}>退出登录</button>
+                  </SettingRow>
+                  <SettingRow label="支持" hint="问题发到公司邮箱">
+                    <a className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm" href="mailto:pickglobal@yeah.net">pickglobal@yeah.net</a>
+                  </SettingRow>
                 </div>
               </>
             )}
             {dialog === 'invite' && (
               <>
                 <h2 className="text-lg font-semibold">邀请</h2>
-                <p className="mt-1 text-sm text-muted-foreground">好友用这条链接注册。付费后奖励按 10% 先留在账户里当优惠。</p>
-                <div className="mt-4 rounded-xl border border-border bg-muted/40 p-3">
-                  <p className="text-xs text-muted-foreground">邀请码</p>
-                  <p className="mt-1 font-mono text-base">{invite?.invite_code || '正在生成…'}</p>
-                  <p className="mt-3 break-all font-mono text-xs text-muted-foreground">{invite ? invite.share_path : ''}</p>
+                <p className="mt-1 text-sm text-muted-foreground">好友用这条链接注册。付费后奖励按 10% 先留在账户里当优惠，申请兑现后 5 个工作日内打现金。</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+                  <div className="rounded-xl border border-border bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">邀请码</p>
+                    <p className="mt-1 font-mono text-base">{invite?.invite_code || (inviteError ? '暂时取不到' : '正在生成…')}</p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">邀请链接</p>
+                    <p className="mt-1 break-all font-mono text-xs">{invite ? `${origin}${invite.share_path}` : ''}</p>
+                  </div>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">已邀请 {invite?.used_by.length ?? 0} 人，当前优惠 {yuan(invite?.discount_fen ?? 0)}。申请兑现后，现金在 5 个工作日内打出。</p>
-                <p className="mt-1 text-sm text-muted-foreground">连续登录 {invite?.login_streak ?? 0} 天。满 7 天 1 次抽奖，满 14 天再加 2 次，满 30 天奖励现金。可抽 {invite?.draw_chances ?? 0} 次。</p>
-                {invite && invite.coupons.length > 0 && <p className="mt-2 text-sm">优惠券：{invite.coupons.map((coupon) => `${coupon.label} ${Math.round(Number(coupon.rate) * 100)}%`).join('、')}</p>}
-                {invite && invite.events.length > 0 && (
-                  <ul className="mt-3 max-h-32 space-y-1 overflow-y-auto text-xs leading-5 text-muted-foreground">
-                    {invite.events.map((event) => (
-                      <li key={`${event.invitee_name}-${event.paid_at || event.invited_at}`}>
-                        {event.invited_at?.slice(0, 10) || '—'} 邀请 {event.invitee_name || '用户'}
-                        {event.paid_fen > 0 ? `，付费 ${yuan(event.paid_fen)}，奖励 ${yuan(event.reward_fen)}` : '，尚未付费'}
-                      </li>
-                    ))}
-                  </ul>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                  <p className="rounded-lg border border-border px-3 py-2">已邀请 <span className="font-medium">{invite?.used_by.length ?? 0}</span></p>
+                  <p className="rounded-lg border border-border px-3 py-2">再邀请 <span className="font-medium">{invite?.invited_later.length ?? 0}</span></p>
+                  <p className="rounded-lg border border-border px-3 py-2">好友付款 <span className="font-medium">{yuan(invite?.paid_fen ?? 0)}</span></p>
+                  <p className="rounded-lg border border-border px-3 py-2">可兑现 <span className="font-medium">{yuan(invite?.discount_fen ?? 0)}</span></p>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">连续登录 {invite?.login_streak ?? 0} 天。满 7 天 1 次抽奖，满 14 天再加 2 次，满 30 天奖励现金。可抽 {invite?.draw_chances ?? 0} 次。</p>
+                <h3 className="mt-5 text-sm font-medium">被邀请人</h3>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full min-w-[32rem] text-left text-sm">
+                    <thead className="text-xs text-muted-foreground">
+                      <tr><th className="py-2 pr-3 font-medium">姓名</th><th className="py-2 pr-3 font-medium">邮箱</th><th className="py-2 font-medium">邀请日期</th></tr>
+                    </thead>
+                    <tbody>
+                      {(invite?.used_by.length ? invite.used_by : []).map((person) => (
+                        <tr key={person.id} className="border-t border-border">
+                          <td className="py-2 pr-3">{person.name || '用户'}</td>
+                          <td className="py-2 pr-3 text-muted-foreground">{person.email_masked || '—'}</td>
+                          <td className="py-2">{when(person.created_at)}</td>
+                        </tr>
+                      ))}
+                      {invite && invite.used_by.length === 0 && <tr><td className="py-3 text-muted-foreground" colSpan={3}>还没有人通过这条链接注册。</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <h3 className="mt-5 text-sm font-medium">付款与奖励</h3>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full min-w-[40rem] text-left text-sm">
+                    <thead className="text-xs text-muted-foreground">
+                      <tr>
+                        <th className="py-2 pr-3 font-medium">被邀请人</th>
+                        <th className="py-2 pr-3 font-medium">邀请日期</th>
+                        <th className="py-2 pr-3 font-medium">付款日期</th>
+                        <th className="py-2 pr-3 font-medium">付款</th>
+                        <th className="py-2 font-medium">奖励</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(invite?.events || []).map((event, index) => (
+                        <tr key={`${event.invitee_name}-${event.paid_at || event.invited_at}-${index}`} className="border-t border-border">
+                          <td className="py-2 pr-3">{event.invitee_name || '用户'}</td>
+                          <td className="py-2 pr-3">{when(event.invited_at)}</td>
+                          <td className="py-2 pr-3">{when(event.paid_at)}</td>
+                          <td className="py-2 pr-3">{event.paid_fen > 0 ? yuan(event.paid_fen) : '未付款'}</td>
+                          <td className="py-2">{event.reward_fen > 0 ? yuan(event.reward_fen) : '—'}</td>
+                        </tr>
+                      ))}
+                      {invite && invite.events.length === 0 && <tr><td className="py-3 text-muted-foreground" colSpan={5}>还没有付款记录。</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                {invite && invite.invited_later.length > 0 && (
+                  <>
+                    <h3 className="mt-5 text-sm font-medium">他们再邀请的人</h3>
+                    <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                      {invite.invited_later.map((person) => (
+                        <li key={person.id}>{person.name || '用户'}{person.via_name ? ` · 来自 ${person.via_name}` : ''} · {when(person.created_at)}</li>
+                      ))}
+                    </ul>
+                  </>
                 )}
-                {invite && invite.cash_requests.length > 0 && (
-                  <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    {invite.cash_requests.map((row) => (
-                      <li key={row.id}>{yuan(row.amount_fen)} · {row.status === 'paid' ? '已打款' : `待打款，${row.due_at?.slice(0, 10) || ''} 前`}</li>
-                    ))}
-                  </ul>
-                )}
+                <h3 className="mt-5 text-sm font-medium">兑现记录</h3>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full min-w-[36rem] text-left text-sm">
+                    <thead className="text-xs text-muted-foreground">
+                      <tr>
+                        <th className="py-2 pr-3 font-medium">类型</th>
+                        <th className="py-2 pr-3 font-medium">金额</th>
+                        <th className="py-2 pr-3 font-medium">状态</th>
+                        <th className="py-2 pr-3 font-medium">申请日期</th>
+                        <th className="py-2 pr-3 font-medium">预计到账</th>
+                        <th className="py-2 font-medium">打款日期</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(invite?.cash_requests || []).map((row) => (
+                        <tr key={row.id} className="border-t border-border">
+                          <td className="py-2 pr-3">{cashKind[row.kind || ''] || '奖励'}</td>
+                          <td className="py-2 pr-3">{yuan(row.amount_fen)}</td>
+                          <td className="py-2 pr-3">{cashStatus[row.status] || row.status}</td>
+                          <td className="py-2 pr-3">{when(row.requested_at)}</td>
+                          <td className="py-2 pr-3">{when(row.due_at)}</td>
+                          <td className="py-2">{when(row.paid_at)}</td>
+                        </tr>
+                      ))}
+                      {invite && invite.cash_requests.length === 0 && <tr><td className="py-3 text-muted-foreground" colSpan={6}>还没有兑现申请。</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                {invite && invite.coupons.length > 0 && <p className="mt-3 text-sm">优惠券：{invite.coupons.map((coupon) => `${coupon.label} ${Math.round(Number(coupon.rate) * 100)}%（${coupon.status}）`).join('、')}</p>}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button type="button" className="h-10 rounded-lg border border-border px-3 text-sm" onClick={() => void copyLink()}>复制链接</button>
                   <button type="button" className="h-10 rounded-lg bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50" disabled={!invite || invite.discount_fen <= 0} onClick={() => void claimCash()}>申请兑现</button>
                   <button type="button" className="h-10 rounded-lg border border-border px-3 text-sm disabled:opacity-50" disabled={!invite || invite.draw_chances <= 0} onClick={() => void drawOnce()}>抽现金</button>
                 </div>
-                {notice && <p className="mt-3 text-sm text-muted-foreground">{notice}</p>}
+                {(inviteError || notice) && <p className="mt-3 text-sm text-muted-foreground">{inviteError || notice}</p>}
               </>
             )}
           </div>

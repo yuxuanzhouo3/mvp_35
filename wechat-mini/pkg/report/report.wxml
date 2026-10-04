@@ -1,0 +1,17 @@
+<view class="page">
+  <view class="muted">规则版本 {{rules}} · 解释模型 {{model}}</view>
+  <view class="err" wx:if="{{error}}">{{error}}</view>
+  <view class="warn" wx:if="{{stale}}">市场或成本已经变更。这份历史报告只读，需要重新分析后才能获客。</view>
+  <view class="grid2">
+    <view class="metric" wx:for="{{cards}}" wx:key="label">
+      <view class="k">{{item.label}}</view>
+      <view class="v">{{item.value}}</view>
+    </view>
+  </view>
+  <view class="chips">
+    <view class="chip {{tab == item.id ? 'on' : ''}}" wx:for="{{tabs}}" wx:key="id" data-id="{{item.id}}" bindtap="setTab">{{item.name}}</view>
+  </view>
+  <view class="card">{{panel}}</view>
+  <view class="card" wx:if="{{explanation}}">{{explanation}}</view>
+  <button class="btn" disabled="{{stale || busy || !ready}}" bindtap="acquire">一键获客</button>
+</view>
