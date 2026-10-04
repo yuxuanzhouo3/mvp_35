@@ -200,6 +200,90 @@ def test_selection_ranks_china_supply_against_us_shelf(client: TestClient, monke
     assert adopted.json()["data"]["sku"] == "99"
 
 
+def test_alibaba_refresh_replaces_a_rejected_access_token(monkeypatch):
+    from algorithm.shelf import _alibaba, clear_alibaba_session
+
+    clear_alibaba_session()
+    calls = []
+
+    class Settings:
+        alibaba_app_key = "4140001"
+        alibaba_app_secret = "secret"
+        alibaba_access_token = "old-access"
+        alibaba_refresh_token = "refresh-1"
+        alibaba_refresh_token_timeout = "20261014200339000+0800"
+
+    def fake_http(url, data):
+        calls.append(url)
+        if "getToken" in url:
+            assert data["grant_type"] == "refresh_token"
+            assert data["refresh_token"] == "refresh-1"
+            return {"access_token": "new-access", "expires_in": "3600", "refresh_token_timeout": "20261014200339000+0800"}, 200
+        if data["access_token"] == "old-access":
+            return {"error_code": "401", "error_message": "Request need user authorized"}, 200
+        return {"result": {"toReturn": [{"subject": "玻璃杯", "offerId": "9", "price": "12.50", "companyName": "杯厂"}]}}, 200
+
+    monkeypatch.setattr("algorithm.shelf._alibaba_http", fake_http)
+    rows, status = _alibaba("杯", Settings())
+    assert status["status"] == "ok"
+    assert rows[0]["cost_cny"] == "12.50"
+    assert sum("getToken" in url for url in calls) == 1
+    _alibaba("杯", Settings())
+    assert sum("getToken" in url for url in calls) == 1
+    clear_alibaba_session()
+
+
+def test_alibaba_refresh_deadline_requires_a_new_authorization(monkeypatch):
+    from algorithm.shelf import _alibaba, clear_alibaba_session
+
+    clear_alibaba_session()
+
+    class Settings:
+        alibaba_app_key = "4140001"
+        alibaba_app_secret = "secret"
+        alibaba_access_token = "old-access"
+        alibaba_refresh_token = "refresh-1"
+        alibaba_refresh_token_timeout = "20200101000000000+0800"
+
+    def fail_http(url, data):
+        del url, data
+        raise AssertionError("expired refresh token must not call 1688")
+
+    monkeypatch.setattr("algorithm.shelf._alibaba_http", fail_http)
+    rows, status = _alibaba("杯", Settings())
+    assert rows == []
+    assert status["status"] == "reauth"
+    clear_alibaba_session()
+
+
+def test_alibaba_missing_permission_is_a_failure(monkeypatch):
+    from algorithm.shelf import _alibaba, clear_alibaba_session
+
+    clear_alibaba_session()
+    calls = []
+
+    class Settings:
+        alibaba_app_key = "4140001"
+        alibaba_app_secret = "secret"
+        alibaba_access_token = "access"
+        alibaba_refresh_token = ""
+        alibaba_refresh_token_timeout = ""
+
+    def fake_http(url, data):
+        del data
+        calls.append(url)
+        return {"error_code": "gw.APIACLDecline", "error_message": "AppKey is not allowed(acl)"}, 400
+
+    monkeypatch.setattr("algorithm.shelf._alibaba_http", fake_http)
+    rows, status = _alibaba("杯", Settings())
+    assert rows == []
+    assert status["status"] == "failed"
+    assert len(calls) == 2
+    _alibaba("杯", Settings())
+    assert len(calls) == 2
+    clear_alibaba_session()
+
+
 def test_pdd_price_is_converted_from_fen(monkeypatch):
     from algorithm.shelf import _pinduoduo
 

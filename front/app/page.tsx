@@ -145,12 +145,13 @@ export default function Page() {
             <GuideVideo />
           </div>
           <div className="flex items-center gap-2 md:hidden">
+            {signedIn && <UserMenu name={accountName || '账号'} onLogout={signOut} />}
             <GuideVideo />
             <Button variant="ghost" size="icon" className="size-11" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? '关闭菜单' : '打开菜单'}>{menuOpen ? <X /> : <Menu />}</Button>
           </div>
         </div>
         {menuOpen && (
-          <div className="border-t border-border bg-background px-5 py-5 md:hidden">
+          <div className="max-h-[calc(100dvh-8.5rem-env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain border-t border-border bg-background px-5 py-5 md:hidden">
             <nav className="flex flex-col gap-1 text-base">
               <button className="min-h-11 text-left" onClick={() => scrollTo('path-a')}>选品分析</button>
               <button className="min-h-11 text-left" onClick={() => scrollTo('path-b')}>获客九路</button>

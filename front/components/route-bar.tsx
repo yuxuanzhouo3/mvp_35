@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { DEFAULT_ROUTE, TRADE_ROUTES, isRouteId, readTradeRoute, writeTradeRoute, type RouteId } from '@/lib/trade-route'
+import { DEFAULT_ROUTE, TRADE_ROUTES, isRouteId, placeName, readTradeRoute, writeTradeRoute, type RouteId } from '@/lib/trade-route'
 
 export function RouteBar() {
   const [route, setRoute] = useState<RouteId>(DEFAULT_ROUTE)
@@ -30,25 +30,26 @@ export function RouteBar() {
     void api('/tenants/current/trade-route', { method: 'PATCH', body: JSON.stringify({ route: id }) }).catch(() => undefined)
   }
 
+  const spec = TRADE_ROUTES[route]
   return (
-    <div className="shrink-0">
-      <p className="text-xs font-semibold tracking-wide text-primary">路线</p>
-      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-        {(Object.keys(TRADE_ROUTES) as RouteId[]).map((id) => {
-          const active = route === id
-          return (
-            <button
-              key={id}
-              type="button"
-              className={`h-12 shrink-0 rounded-2xl px-5 text-base font-semibold ${active ? 'bg-primary text-primary-foreground shadow-md' : 'border border-border bg-card text-foreground'}`}
-              aria-pressed={active}
-              onClick={() => choose(id)}
-            >
-              {TRADE_ROUTES[id].label}
-            </button>
-          )
-        })}
-      </div>
+    <div className="flex shrink-0 items-center gap-2 overflow-x-auto overscroll-x-contain rounded-2xl border border-blue-100 bg-blue-50/80 px-2 py-2 dark:border-blue-900 dark:bg-blue-950/30">
+      {(Object.keys(TRADE_ROUTES) as RouteId[]).map((id) => {
+        const active = route === id
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`h-9 shrink-0 rounded-full px-3 text-sm font-semibold ${active ? 'bg-blue-600 text-white' : 'border border-blue-100 bg-white text-slate-800 dark:border-blue-900 dark:bg-card dark:text-foreground'}`}
+            aria-pressed={active}
+            onClick={() => choose(id)}
+          >
+            {TRADE_ROUTES[id].label}
+          </button>
+        )
+      })}
+      <p className="ms-auto shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-slate-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-foreground" aria-label="起源地到目标地">
+        {placeName(spec.origin_country)} → {placeName(spec.target_market)}
+      </p>
     </div>
   )
 }

@@ -52,6 +52,8 @@ def client(tmp_path, monkeypatch):
         "ALIBABA_APP_KEY",
         "ALIBABA_APP_SECRET",
         "ALIBABA_ACCESS_TOKEN",
+        "ALIBABA_REFRESH_TOKEN",
+        "ALIBABA_REFRESH_TOKEN_TIMEOUT",
         "TAOBAO_APP_KEY",
         "TAOBAO_APP_SECRET",
         "TAOBAO_ADZONE_ID",

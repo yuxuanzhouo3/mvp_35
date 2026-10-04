@@ -82,7 +82,7 @@ function Sidebar({ close, session, onLogout, onExport }: { close?: () => void; s
         <div className="px-3 pb-2 pt-6 text-[10px] font-bold uppercase tracking-[.18em] text-slate-400">Governance</div>
         <NavLinks items={governance} close={close} pathname={pathname} onExport={onExport} />
       </nav>
-      <div className="relative border-t border-white/10 p-4">
+      <div className="relative border-t border-white/10 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {accountOpen && (
           <div className="absolute bottom-20 left-4 right-4 rounded-xl border border-white/10 bg-[#1b315c] p-2 shadow-xl">
             <Link href="/admin/settings" onClick={close} className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-white/10">平台设置</Link>
@@ -184,7 +184,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-amber-700">{label}</span>
             <button className="admin-focus relative rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600" aria-label="通知" aria-expanded={notesOpen} onClick={() => void openNotes()}><Bell className="size-5" /><span className="absolute right-2 top-2 size-2 rounded-full bg-red-500 ring-2 ring-white" /></button>
             {notesOpen && (
-              <div className="absolute right-0 top-14 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+              <div className="absolute right-0 top-14 z-30 max-h-[min(24rem,calc(100dvh-7.5rem))] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
                 <div className="mb-2 text-sm font-semibold text-slate-900">最近操作</div>
                 {notes.length === 0 ? <p className="text-sm text-slate-400">暂无通知</p> : notes.map((item) => (
                   <Link key={item.id} href="/admin/audit" onClick={() => setNotesOpen(false)} className="block rounded-lg px-2 py-2 text-sm hover:bg-slate-50">

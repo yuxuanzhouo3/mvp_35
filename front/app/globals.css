@@ -36,6 +36,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .soft-card:hover { border-color: color-mix(in oklab, var(--primary) 40%, var(--border)); }
 .soft-card.is-focus { border-color: var(--primary); background: color-mix(in oklab, var(--primary) 6%, var(--card)); }
 .panel-frame { border: 1px solid var(--border); }
+.work-desk { height: calc(100dvh - 11rem - 5.25rem - env(safe-area-inset-bottom)); min-height: 0; }
+@media (min-width: 768px) { .work-desk { height: calc(100dvh - 9rem); } }
 .cta-panel { position: relative; overflow: hidden; border-radius: 1.5rem; background: var(--navy); padding: 4.5rem 1.5rem; }
 .cta-panel:before { content: ''; position: absolute; inset: -50%; background: radial-gradient(circle at 70% 25%, rgba(71, 151, 255, .28), transparent 28%), radial-gradient(circle at 20% 80%, rgba(35, 205, 177, .16), transparent 24%); }
 .animate-float { animation: float 7s ease-in-out infinite; }

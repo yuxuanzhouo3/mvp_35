@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AuthShell, authButton, authInput } from '@/components/auth-shell'
+import { LegalConsent, rememberLegalAcceptance } from '@/components/legal-consent'
 import { SmsQuotaDialog } from '@/components/sms-quota-dialog'
 import { registerAccount, sendLoginCode } from '@/lib/session'
 
@@ -19,6 +20,7 @@ export default function RegisterPage() {
   const [pending, setPending] = useState(false)
   const [quota, setQuota] = useState<{ count: number; cap: number } | null>(null)
   const [inviteCode, setInviteCode] = useState('')
+  const [accepted, setAccepted] = useState(false)
 
   useEffect(() => {
     setInviteCode(new URLSearchParams(window.location.search).get('invite') || '')
@@ -31,10 +33,15 @@ export default function RegisterPage() {
       setError('请填写邮箱或手机号')
       return
     }
+    if (!accepted) {
+      setError('请先勾选《隐私政策》《CIO 合规》和《用户协议》。')
+      return
+    }
     setPending(true)
     setError('')
     try {
       await registerAccount({ account, password, displayName, code, inviteCode })
+      rememberLegalAcceptance()
       router.replace('/workspace')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '注册失败')
@@ -84,8 +91,9 @@ export default function RegisterPage() {
           <p className="mt-2 text-xs text-muted-foreground">邮箱验证码 10 分钟内有效，短信验证码 5 分钟内有效。填写后再提交。</p>
         </div>
         {inviteCode && <p className="mt-4 text-sm text-muted-foreground">邀请码 {inviteCode}</p>}
+        <LegalConsent checked={accepted} onChange={setAccepted} />
         {error && <p className="mt-4 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-        <button className={authButton} disabled={pending} type="submit">{pending ? '正在注册' : '注册并进入工作台'}</button>
+        <button className={authButton} disabled={pending || !accepted} type="submit">{pending ? '正在注册' : '注册并进入工作台'}</button>
       </form>
       {quota && <SmsQuotaDialog count={quota.count} cap={quota.cap} onClose={() => setQuota(null)} />}
       <p className="mt-4 text-sm text-muted-foreground">已有账号？<Link href="/login" className="text-primary"> 登录</Link></p>

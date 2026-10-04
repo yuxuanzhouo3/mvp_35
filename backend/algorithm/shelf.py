@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -24,6 +25,8 @@ from algorithm.product_pricer import _floor_price
 from app.services.profit import money
 
 _SHELF: dict[str, dict] = {}
+_ALIBABA_SESSION = {"access_token": "", "refresh_token": "", "access_until": 0.0, "refresh_until": 0.0}
+_ALIBABA_DENY: dict[str, float] = {}
 TIMEOUT = 4
 
 
@@ -187,25 +190,114 @@ def _domestic(platform: str, external_id: str, name: str, cost: Decimal, supplie
     }
 
 
+def clear_alibaba_session() -> None:
+    _ALIBABA_SESSION.update(access_token="", refresh_token="", access_until=0.0, refresh_until=0.0)
+    _ALIBABA_DENY.clear()
+
+
+def _alibaba_deadline(text: str) -> float:
+    raw = (text or "").strip()
+    if not raw:
+        return 0.0
+    try:
+        if len(raw) >= 19 and raw[:14].isdigit():
+            stamp = datetime.strptime(raw[:14] + raw[17:], "%Y%m%d%H%M%S%z")
+        else:
+            stamp = datetime.fromisoformat(raw)
+    except ValueError:
+        return 0.0
+    return stamp.timestamp()
+
+
+def _alibaba_token(settings, *, force: bool = False) -> tuple[str, bool]:
+    now = time.time()
+    app_key = getattr(settings, "alibaba_app_key", "") or ""
+    secret = getattr(settings, "alibaba_app_secret", "") or ""
+    refresh = _ALIBABA_SESSION["refresh_token"] or getattr(settings, "alibaba_refresh_token", "") or ""
+    deadline = _ALIBABA_SESSION["refresh_until"] or _alibaba_deadline(getattr(settings, "alibaba_refresh_token_timeout", "") or "")
+    if deadline and now >= deadline:
+        return "", True
+    if _ALIBABA_SESSION["access_token"] and not force and now + 120 < _ALIBABA_SESSION["access_until"]:
+        return _ALIBABA_SESSION["access_token"], False
+    env_access = getattr(settings, "alibaba_access_token", "") or ""
+    if env_access and not force and not _ALIBABA_SESSION["access_token"]:
+        _ALIBABA_SESSION["access_token"] = env_access
+        _ALIBABA_SESSION["access_until"] = now + 9 * 3600
+        return env_access, False
+    if not (app_key and secret and refresh):
+        return "", True
+    url = f"https://gw.open.1688.com/openapi/http/1/system.oauth2/getToken/{app_key}"
+    body, _code = _alibaba_http(url, {
+        "grant_type": "refresh_token",
+        "client_id": app_key,
+        "client_secret": secret,
+        "refresh_token": refresh,
+    })
+    access = str((body or {}).get("access_token") or "")
+    if not access:
+        return "", True
+    _ALIBABA_SESSION["access_token"] = access
+    _ALIBABA_SESSION["refresh_token"] = str(body.get("refresh_token") or refresh)
+    try:
+        expires = int(body.get("expires_in") or 35000)
+    except (TypeError, ValueError):
+        expires = 35000
+    _ALIBABA_SESSION["access_until"] = now + max(expires, 60)
+    refreshed_deadline = _alibaba_deadline(str(body.get("refresh_token_timeout") or ""))
+    if refreshed_deadline:
+        _ALIBABA_SESSION["refresh_until"] = refreshed_deadline
+    return access, False
+
+
+def _alibaba_http(url: str, data: dict) -> tuple[dict | None, int]:
+    try:
+        response = httpx.post(url, data=data, timeout=8, follow_redirects=True)
+        body = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None, 0
+    return (body if isinstance(body, dict) else None), response.status_code
+
+
+def _alibaba_rejected(body: dict | None, code: int) -> bool:
+    if code in (401, 403):
+        return True
+    if not isinstance(body, dict):
+        return False
+    blob = " ".join(
+        str(body.get(key) or "")
+        for key in ("error", "error_code", "error_message", "exception", "error_description")
+    ).lower()
+    return any(part in blob for part in ("401", "authorized", "invalid_token", "access_token", "access token"))
+
+
 def _alibaba(query: str, settings) -> tuple[list, dict]:
     app_key = getattr(settings, "alibaba_app_key", "") or ""
     secret = getattr(settings, "alibaba_app_secret", "") or ""
-    token = getattr(settings, "alibaba_access_token", "") or ""
-    if not (app_key and secret and token):
+    has_grant = bool(
+        (getattr(settings, "alibaba_access_token", "") or "")
+        or (getattr(settings, "alibaba_refresh_token", "") or "")
+        or _ALIBABA_SESSION["access_token"]
+        or _ALIBABA_SESSION["refresh_token"]
+    )
+    if not (app_key and secret and has_grant):
         return _skip("1688", "1688", "CN")
-    path = f"param2/1/com.alibaba.product/product.keyword.search/{app_key}"
-    params = {"access_token": token, "keyword": query}
-    signed = path + "".join(f"{key}{params[key]}" for key in sorted(params))
-    params["_aop_signature"] = hmac.new(secret.encode(), signed.encode(), hashlib.sha1).hexdigest().upper()
-    body = _post(f"https://gw.open.1688.com/openapi/{path}", data=params)
-    products = _alibaba_rows(body)
-    if body is None:
+    token, reauth = _alibaba_token(settings)
+    if reauth or not token:
+        return [], _status("1688", "1688", "CN", "reauth" if reauth else "skipped", 0)
+    body = _alibaba_search(app_key, secret, token, query, settings)
+    if body == "reauth":
+        return [], _status("1688", "1688", "CN", "reauth", 0)
+    products = _alibaba_rows(body if isinstance(body, dict) else None)
+    if not isinstance(body, dict) or body.get("error_code") or body.get("error"):
         return _fail("1688", "1688", "CN")
     rows = []
     for product in products:
         name = str(product.get("subject") or product.get("title") or "")
         external = str(product.get("offerId") or product.get("productID") or "")
+        price_info = product.get("priceInfo") if isinstance(product.get("priceInfo"), dict) else {}
         cost = _amount((product.get("price") or {}).get("price") if isinstance(product.get("price"), dict) else product.get("price"))
+        if cost is None:
+            cost = _amount(price_info.get("price") or price_info.get("consignPrice"))
         if not name or not external or cost is None:
             continue
         rows.append(
@@ -221,6 +313,57 @@ def _alibaba(query: str, settings) -> tuple[list, dict]:
     return rows[:8], _status("1688", "1688", "CN", "ok", len(rows[:8]))
 
 
+def _alibaba_sign(path: str, secret: str, params: dict) -> dict:
+    signed = path + "".join(f"{key}{params[key]}" for key in sorted(params))
+    stamped = dict(params)
+    stamped["_aop_signature"] = hmac.new(secret.encode(), signed.encode(), hashlib.sha1).hexdigest().upper()
+    return stamped
+
+
+def _alibaba_acl(body: dict | None) -> bool:
+    if not isinstance(body, dict):
+        return False
+    blob = f"{body.get('error_code') or ''} {body.get('error_message') or ''}"
+    return "APIACLDecline" in blob or "not allowed" in blob.lower()
+
+
+def _alibaba_search(app_key: str, secret: str, token: str, query: str, settings):
+    now = time.time()
+    endpoints = (
+        (
+            "crossborder",
+            f"param2/1/com.alibaba.fenxiao.crossborder/product.search.keywordQuery/{app_key}",
+            {"offerQueryParam": json.dumps({"keyword": query, "beginPage": 1, "pageSize": 8, "country": "en"}, separators=(",", ":"))},
+        ),
+        (
+            "keyword",
+            f"param2/1/com.alibaba.product/product.keyword.search/{app_key}",
+            {"keyword": query},
+        ),
+    )
+    last = None
+    tried = False
+    for name, path, extra in endpoints:
+        if _ALIBABA_DENY.get(name, 0) > now:
+            continue
+        tried = True
+        current = token
+        params = _alibaba_sign(path, secret, {"access_token": current, **extra})
+        body, code = _alibaba_http(f"https://gw.open.1688.com/openapi/{path}", params)
+        if _alibaba_rejected(body, code):
+            current, reauth = _alibaba_token(settings, force=True)
+            if reauth or not current:
+                return "reauth"
+            params = _alibaba_sign(path, secret, {"access_token": current, **extra})
+            body, code = _alibaba_http(f"https://gw.open.1688.com/openapi/{path}", params)
+        last = body
+        if _alibaba_acl(body):
+            _ALIBABA_DENY[name] = now + 15 * 60
+            continue
+        return body
+    return last if tried else {"error_code": "gw.APIACLDecline"}
+
+
 def _alibaba_rows(body: dict | None) -> list:
     if not isinstance(body, dict):
         return []
@@ -229,9 +372,13 @@ def _alibaba_rows(body: dict | None) -> list:
         if isinstance(value, list):
             return [row for row in value if isinstance(row, dict)]
         if isinstance(value, dict):
-            nested = value.get("products") or value.get("result") or value.get("toReturn")
+            nested = value.get("products") or value.get("result") or value.get("toReturn") or value.get("data")
             if isinstance(nested, list):
                 return [row for row in nested if isinstance(row, dict)]
+            if isinstance(nested, dict):
+                deeper = nested.get("data") or nested.get("products") or nested.get("toReturn")
+                if isinstance(deeper, list):
+                    return [row for row in deeper if isinstance(row, dict)]
     return []
 
 

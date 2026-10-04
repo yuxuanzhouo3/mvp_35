@@ -180,6 +180,8 @@ R ≥ (C + fixed_tax) / (1 − fee_rate − 增值税率 − 0.15)
 
 价格单位要先看平台：拼多多、京东常见分为单位，入库前除以 100 变成元。1688 的阶梯价取起批量第一档。
 
+1688 的 `access_token` 大约 10 小时有效。进程里发现它失效后，用 `ALIBABA_REFRESH_TOKEN` 调 `system.oauth2/getToken`（`grant_type=refresh_token`）换一张新的，并记下返回的 `expires_in` 和 `refresh_token_timeout`。到了 `ALIBABA_REFRESH_TOKEN_TIMEOUT`（或接口返回的同一时刻）之后，刷新会被拒绝。这时 1688 这一路标成 `reauth`，选品继续用其他已配置平台；要恢复 1688，卖家必须再打开一次授权页，用新的 `code` 换一套 `access_token` 和 `refresh_token`。
+
 ### 海外货架平台
 
 按 `target_market` 选择站点。US 用 amazon.com / walmart.com / ebay.com；HK 用亚马逊国际与 eBay；AU 用 amazon.com.au；CN 不再查海外表。

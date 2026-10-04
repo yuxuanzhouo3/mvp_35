@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     alibaba_app_key: str = ""
     alibaba_app_secret: str = ""
     alibaba_access_token: str = ""
+    alibaba_refresh_token: str = ""
+    alibaba_refresh_token_timeout: str = ""
     taobao_app_key: str = ""
     taobao_app_secret: str = ""
     taobao_adzone_id: str = ""

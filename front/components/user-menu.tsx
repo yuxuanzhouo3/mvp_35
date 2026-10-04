@@ -55,12 +55,12 @@ const cashKind: Record<string, string> = { invite: '邀请奖励', draw: '抽奖
 
 function SettingRow({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2">
       <div className="min-w-0">
         <p className="text-sm">{label}</p>
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p className="hidden text-xs text-muted-foreground sm:block">{hint}</p>
       </div>
-      <div className="shrink-0 sm:w-44">{children}</div>
+      <div className="w-32 shrink-0 sm:w-40">{children}</div>
     </div>
   )
 }
@@ -75,6 +75,8 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
   const [look, setLook] = useState<Appearance>({ theme: 'light', font: 'default', fontSize: '16', density: 'comfortable', ads: true })
   const [origin, setOrigin] = useState('')
   const box = useRef<HTMLDivElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+  const [spot, setSpot] = useState({ top: 64, right: 12, dock: 92 })
 
   useEffect(() => {
     const saved = readAppearance()
@@ -85,7 +87,9 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
 
   useEffect(() => {
     function close(event: MouseEvent) {
-      if (!box.current?.contains(event.target as Node)) setOpen(false)
+      const target = event.target as Node
+      if (box.current?.contains(target) || menu.current?.contains(target)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
@@ -105,6 +109,11 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
   }
 
   function toggleMenu() {
+    const rect = box.current?.getBoundingClientRect()
+    if (rect) {
+      const dock = window.matchMedia('(max-width: 767px)').matches ? 92 : 16
+      setSpot({ top: rect.bottom + 8, right: Math.max(12, window.innerWidth - rect.right), dock })
+    }
     setOpen((current) => {
       if (!current) loadProfile()
       return !current
@@ -168,8 +177,7 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
   const displayName = profile?.user.display_name || profile?.user.username || name || '账号'
   const contact = profile?.user.email || profile?.user.phone || profile?.user.username || ''
   const plan = planLabel[profile?.tenant.plan_id || ''] || profile?.tenant.plan_id || '免费'
-  const userId = profile?.user.id || ''
-  const item = 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted'
+  const item = 'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm hover:bg-muted'
 
   return (
     <div className="relative" ref={box}>
@@ -184,14 +192,16 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
         <span className="truncate">{displayName}</span>
         <ChevronDown className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
       </button>
-      {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(18rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-card p-1.5 text-sm shadow-lg" role="menu">
-          <div className="rounded-lg px-3 py-2.5">
-            <p className="text-xs text-muted-foreground">个人信息</p>
-            <p className="mt-1 truncate font-medium">{displayName}</p>
-            {contact && <p className="truncate text-xs text-muted-foreground">{contact}</p>}
-            {userId && <p className="mt-1 truncate text-xs text-muted-foreground">用户 ID {userId}</p>}
-            <p className="mt-2 inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">Premium Pro · {plan}</p>
+      {open && createPortal(
+        <div
+          ref={menu}
+          className="fixed z-[80] w-[min(16rem,calc(100vw-1.5rem))] overflow-y-auto overscroll-contain rounded-xl border border-blue-100 bg-card p-1 text-sm shadow-lg"
+          style={{ top: spot.top, right: spot.right, maxHeight: `min(18rem, calc(100dvh - ${spot.top}px - ${spot.dock}px - env(safe-area-inset-bottom)))` }}
+          role="menu"
+        >
+          <div className="rounded-lg px-2.5 py-1.5">
+            <p className="truncate text-sm font-medium">{displayName}</p>
+            <p className="truncate text-xs text-muted-foreground">{contact || plan}</p>
           </div>
           <div className="my-1 h-px bg-border" />
           <Link href="/workspace/billing" className={item} onClick={() => setOpen(false)}>
@@ -211,11 +221,12 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
             <LogOut className="size-4 text-muted-foreground" />
             退出登录
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
       {dialog && createPortal(
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" onClick={() => setDialog(null)}>
-          <div className={`max-h-[86vh] w-full overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-2xl ${dialog === 'invite' ? 'max-w-3xl' : 'max-w-lg'}`} onClick={(event) => event.stopPropagation()} role="dialog">
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-3 pb-[calc(5rem+env(safe-area-inset-bottom))] md:items-center md:p-4 md:pb-4" onClick={() => setDialog(null)}>
+          <div className={`w-full overflow-y-auto overscroll-contain rounded-2xl border border-blue-100 bg-card p-4 shadow-2xl md:max-h-[86vh] md:p-5 ${dialog === 'invite' ? 'max-h-[min(24rem,calc(100dvh-8rem-env(safe-area-inset-bottom)))] max-w-3xl' : 'max-h-[min(20rem,calc(100dvh-8rem-env(safe-area-inset-bottom)))] max-w-lg'}`} onClick={(event) => event.stopPropagation()} role="dialog">
             {dialog === 'settings' && (
               <>
                 <h2 className="text-lg font-semibold">界面设置</h2>

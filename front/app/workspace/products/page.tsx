@@ -169,7 +169,7 @@ export default function ProductsPage() {
   ] as const
 
   return (
-    <div className="flex h-[calc(100dvh-11rem)] flex-col gap-3 overflow-hidden md:h-[calc(100dvh-9rem)]">
+    <div className="work-desk flex flex-col gap-3 overflow-hidden">
       <RouteBar />
       <div className="shrink-0">
         <span className="eyebrow">路径 A · 选品与分析报告</span>
@@ -180,7 +180,7 @@ export default function ProductsPage() {
       {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
       <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4">
         {views.map((item) => (
-          <button key={item.id} type="button" className={`h-11 rounded-xl border px-2 text-sm font-medium ${tab === item.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card'}`} onClick={() => setTab(item.id)}>
+          <button key={item.id} type="button" className={`h-11 rounded-xl border px-2 text-sm font-medium ${tab === item.id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-blue-100 bg-white text-slate-700 dark:border-blue-900 dark:bg-card dark:text-foreground'}`} onClick={() => setTab(item.id)}>
             {item.name}
           </button>
         ))}
@@ -226,7 +226,7 @@ export default function ProductsPage() {
             })
           }}>
             <h2 className="font-semibold">表格导入</h2>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">表头要有 sku、name、cost_cny、target_price_usd。可粘贴，也可上传 CSV、TSV、Excel。</p>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">表头要有 sku、name、cost_cny、target_price_usd。导入时写入当前起源地和目标地。</p>
             <textarea className="mt-3 h-40 w-full rounded-xl border border-border bg-background p-3 font-mono text-xs" value={csv} onChange={(event) => setCsv(event.target.value)} />
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <label className="inline-flex min-h-9 cursor-pointer items-center rounded-lg border border-border px-3 text-sm">
@@ -278,7 +278,7 @@ export default function ProductsPage() {
           <div className="mt-1 text-sm text-muted-foreground">按{TRADE_ROUTES[route].label}比价。利润率<TermHint id="margin" />达到 15% 且风险<TermHint id="risk" />不是高的商品优先<TermHint id="pick" />。</div>
           {platforms.length > 0 && (
             <div className="mt-2 text-xs leading-5 text-muted-foreground">
-              {platforms.map((item) => `${item.name}${item.status === 'ok' ? ` ${item.count}` : item.status === 'failed' ? ' 失败' : ' 未配置'}`).join(' · ')}
+              {platforms.map((item) => `${item.name}${item.status === 'ok' ? ` ${item.count}` : item.status === 'failed' ? ' 失败' : item.status === 'reauth' ? ' 需重新授权' : ' 未配置'}`).join(' · ')}
               {' · '}来源 {provider === 'live' ? '实时' : '本地演示'}<TermHint id="provider" />
             </div>
           )}

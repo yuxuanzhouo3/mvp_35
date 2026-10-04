@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { api, waitJob } from '@/lib/api'
 import { ResultDesk } from '@/components/result-desk'
 import { TermHint } from '@/components/term-hint'
-import { DEFAULT_ROUTE, readTradeRoute, TRADE_ROUTES, type RouteId } from '@/lib/trade-route'
+import { DEFAULT_ROUTE, placeName, readTradeRoute, TRADE_ROUTES, type RouteId } from '@/lib/trade-route'
 
 type Product = {
   id: string
@@ -92,7 +92,7 @@ export function ProductLibrary() {
             <h3 className="text-base font-semibold">{product.name}</h3>
             <div className="mt-1 text-sm text-muted-foreground">
               <span className="inline-flex items-center">SKU {product.sku}<TermHint id="sku" /></span>
-              {product.origin_country && product.target_market ? <span className="inline-flex items-center"> · {product.origin_country} → {product.target_market}<TermHint id="route" /></span> : ''}
+              {product.origin_country && product.target_market ? <span className="inline-flex items-center"> · {placeName(product.origin_country)} → {placeName(product.target_market)}<TermHint id="route" /></span> : ''}
               {product.target_price_usd ? <span className="inline-flex items-center"> · ${product.target_price_usd}<TermHint id="price" /></span> : ''}
             </div>
             <div className="mt-3 flex gap-2">

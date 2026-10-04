@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { AuthShell, authButton, authInput } from '@/components/auth-shell'
+import { LegalConsent, rememberLegalAcceptance } from '@/components/legal-consent'
 import { SmsQuotaDialog } from '@/components/sms-quota-dialog'
 import { readClient } from '@/lib/client-adapter'
 import { loginAccount, loginWithCode, safeNext, sendLoginCode, wechatAuthorizeUrl } from '@/lib/session'
@@ -29,6 +30,7 @@ function LoginForm() {
   const [sending, setSending] = useState(false)
   const [miniprogram, setMiniprogram] = useState(false)
   const [quota, setQuota] = useState<{ count: number; cap: number } | null>(null)
+  const [accepted, setAccepted] = useState(false)
 
   useEffect(() => {
     setMiniprogram(readClient()?.shell === 'miniprogram')
@@ -36,11 +38,16 @@ function LoginForm() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
+    if (!accepted) {
+      setError('请先勾选《隐私政策》《CIO 合规》和《用户协议》。')
+      return
+    }
     setPending(true)
     setError('')
     try {
       if (mode === 'code') await loginWithCode(account, code, recall)
       else await loginAccount(account, password, recall)
+      rememberLegalAcceptance()
       router.replace(next)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '登录失败')
@@ -92,14 +99,20 @@ function LoginForm() {
             </label>
           </div>
         )}
+        <LegalConsent checked={accepted} onChange={setAccepted} />
         {error && <p className="mt-4 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-        <button className={authButton} disabled={pending} type="submit">{pending ? '正在登录' : '登录'}</button>
+        <button className={authButton} disabled={pending || !accepted} type="submit">{pending ? '正在登录' : '登录'}</button>
       </form>
       {miniprogram && (
         <button
           type="button"
-          className="mt-4 w-full rounded-lg border border-border px-3 py-2 text-sm"
+          className="mt-4 w-full rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
+          disabled={!accepted}
           onClick={() => {
+            if (!accepted) {
+              setError('请先勾选《隐私政策》《CIO 合规》和《用户协议》。')
+              return
+            }
             setError('')
             void wechatAuthorizeUrl()
               .then((result) => window.location.assign(result.url))

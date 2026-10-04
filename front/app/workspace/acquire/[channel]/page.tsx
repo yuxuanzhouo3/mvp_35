@@ -127,7 +127,7 @@ function ChannelDesk() {
   const views = channel.id === 'raas' ? [baseViews[5], ...baseViews.slice(0, 5)] : baseViews
 
   return (
-    <div className="flex h-[calc(100dvh-11rem)] flex-col gap-3 overflow-hidden md:h-[calc(100dvh-9rem)]">
+    <div className="work-desk flex flex-col gap-3 overflow-hidden">
       <RouteBar />
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
@@ -140,7 +140,7 @@ function ChannelDesk() {
       {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
       <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-6">
         {views.map((item) => (
-          <button key={item.id} type="button" className={`h-11 rounded-xl border px-2 text-sm font-medium ${view === item.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card'}`} onClick={() => setView(item.id)}>
+          <button key={item.id} type="button" className={`h-11 rounded-xl border px-2 text-sm font-medium ${view === item.id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-blue-100 bg-white text-slate-700 dark:border-blue-900 dark:bg-card dark:text-foreground'}`} onClick={() => setView(item.id)}>
             {item.name}
           </button>
         ))}
