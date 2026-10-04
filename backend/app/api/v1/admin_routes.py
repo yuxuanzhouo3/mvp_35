@@ -6,6 +6,7 @@ Creates stay drafts and do not send mail or post a reward ledger.
 """
 
 import hashlib
+import json
 import secrets
 from urllib.parse import urlparse
 
@@ -155,6 +156,64 @@ def _csv_cell(value: str) -> str:
     if text[:1] in "=+-@":
         text = "'" + text
     return f'"{text}"'
+
+
+def _csv(header: list[str], rows: list[tuple]) -> str:
+    lines = [",".join(_csv_cell(cell) for cell in header)]
+    for row in rows:
+        lines.append(",".join(_csv_cell("" if cell is None else str(cell)) for cell in row))
+    return "\n".join(lines) + "\n"
+
+
+def _nav_export_body(kind: str, request: Request, store, prof: dict, authorization: str | None):
+    tenant_id = prof["tenant"]["id"]
+    if kind == "overview":
+        from app.services.metrics import cohort_average
+
+        return "overview.json", cohort_average(store, request.app.state.settings, 30)
+    if kind == "ads":
+        rows = store.query("ad_campaigns", tenant_id=tenant_id, limit=200)["items"]
+        return "ads.csv", _csv(
+            ["id", "title", "placement", "status", "link_url", "clicks"],
+            [(row.get("id"), row.get("title"), row.get("placement"), row.get("status"), row.get("link_url"), row.get("clicks") or 0) for row in rows],
+        )
+    if kind == "users":
+        rows = _platform_users(store)
+        return "users.csv", _csv(
+            ["id", "display_name", "email_masked", "phone_masked", "status", "role"],
+            [
+                (row.get("id"), row.get("display_name"), _mask_email(row.get("email")), _mask_phone(row.get("phone")), row.get("status") or "active", row.get("role"))
+                for row in rows
+            ],
+        )
+    if kind == "analytics":
+        return "analytics.json", admin_analytics(request, 30, authorization)["data"]
+    if kind == "invitations":
+        rows = store.query("invitation_campaigns", tenant_id=tenant_id, limit=200)["items"]
+        return "invitations.csv", _csv(
+            ["id", "name", "status", "share_path"],
+            [(row.get("id"), row.get("name"), row.get("status"), f"/invite/{row.get('id')}") for row in rows],
+        )
+    if kind == "recall":
+        rows = store.query("user_recall_campaigns", tenant_id=tenant_id, limit=200)["items"]
+        return "recall.csv", _csv(
+            ["id", "name", "status", "sent", "audience"],
+            [(row.get("id"), row.get("name"), row.get("status"), row.get("sent"), row.get("audience") or 0) for row in rows],
+        )
+    if kind == "audit":
+        rows = store.query("audit_logs", tenant_id=tenant_id, limit=200)["items"]
+        return "audit.csv", _csv(
+            ["created_at", "action", "resource", "user_id"],
+            [(row.get("created_at"), row.get("action"), row.get("resource"), row.get("user_id")) for row in rows],
+        )
+    if kind == "settings":
+        row = _settings_row(store, prof)
+        return "settings.json", {
+            "environment_label": row.get("environment_label"),
+            "timezone": row.get("timezone"),
+            "window_days": row.get("window_days"),
+        }
+    raise AppError("INVALID_EXPORT", "这个栏目不能导出")
 
 
 def _in_window(row: dict, window_days: int | None) -> bool:
@@ -741,7 +800,31 @@ def admin_search(request: Request, q: str = "", authorization: str | None = Head
         for row in store.query("user_recall_campaigns", tenant_id=tenant_id, limit=50)["items"]
         if hit(row, "id", "name")
     ]
-    return respond(request, {"users": users, "ads": ads, "invitations": invitations, "recalls": recalls})
+    from app.modules.page_behavior import search_pages
+
+    return respond(
+        request,
+        {"users": users, "ads": ads, "invitations": invitations, "recalls": recalls, "pages": search_pages(store, needle)},
+    )
+
+
+@router.post("/admin/exports/{kind}")
+def admin_nav_export(kind: str, request: Request, authorization: str | None = Header(default=None)):
+    store, prof = _admin_write(request, authorization)
+    filename, body = _nav_export_body(kind, request, store, prof, authorization)
+    doc = store.insert(
+        "admin_exports",
+        base_doc(
+            prof["tenant"]["id"],
+            prof["user"]["id"],
+            id=new_id("exp"),
+            kind=kind,
+            filename=filename,
+            body=body if isinstance(body, str) else json.dumps(body, ensure_ascii=False, default=str),
+        ),
+    )
+    _audit(store, prof, f"{kind}.exported", doc["id"])
+    return respond(request, {"id": doc["id"], "filename": filename, "body": body})
 
 
 def _settings_row(store, prof: dict) -> dict:

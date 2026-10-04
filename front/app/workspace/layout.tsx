@@ -84,7 +84,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       <div className={chatOpen ? 'md:mr-80' : ''}>
-      <div className="container py-6 md:py-8" data-watch={pathname.startsWith('/workspace/products') ? 'report' : pathname.startsWith('/workspace/acquire') ? 'acquire' : pathname.startsWith('/workspace/billing') ? 'billing' : 'workspace'}>
+      <div className="container py-6 md:py-8">
         {ready ? (
           <>
             <AdSlot placement="dashboard_top" className="mb-5 max-md:mb-4" />
