@@ -23,6 +23,32 @@ def test_page_behavior_ranks_sections_and_cohort_has_three_kpi_bands(client: Tes
     assert behavior["worst"]["section"] == "faq"
     assert behavior["sections"][0]["clicks"] == 18
 
+    child = client.post(
+        "/api/v1/behavior",
+        json={"path": "/workspace/acquire/ecommerce", "section": "acquire-ecommerce", "kind": "dwell", "duration_ms": 5000},
+    )
+    assert child.status_code == 200, child.text
+    pages = client.get("/api/v1/admin/search", headers=headers, params={"q": "电商平台"}).json()["data"]["pages"]
+    assert any(item["id"] == "acquire-ecommerce" and item["dwell_ms"] == 5000 for item in pages)
+    billing = client.get("/api/v1/admin/search", headers=headers, params={"q": "账单"}).json()["data"]["pages"]
+    assert any(item["id"] == "workspace-billing" and item["dwell_ms"] == 0 for item in billing)
+
+    for kind, filename in (
+        ("overview", "overview.json"),
+        ("ads", "ads.csv"),
+        ("users", "users.csv"),
+        ("analytics", "analytics.json"),
+        ("invitations", "invitations.csv"),
+        ("recall", "recall.csv"),
+        ("audit", "audit.csv"),
+        ("settings", "settings.json"),
+    ):
+        exported = client.post(f"/api/v1/admin/exports/{kind}", headers=headers)
+        assert exported.status_code == 200, exported.text
+        assert exported.json()["data"]["filename"] == filename
+    settings_export = client.post("/api/v1/admin/exports/settings", headers=headers).json()["data"]["body"]
+    assert "password" not in settings_export
+
     cohort = client.get("/api/v1/admin/metrics/cohort", headers=headers).json()["data"]
     assert [item["band"] for item in cohort["bands"]] == ["10-90", "20-80", "30-70"]
     assert "net_margin" in cohort["bands"][0]["rates"]
@@ -74,7 +100,9 @@ def test_admin_lists_are_empty_until_created_and_recall_stays_separate(client: T
     funnel = {item["label"]: item["value"] for item in analytics.json()["data"]["funnel"]}
     assert funnel["完成注册"] == 1
     assert analytics.json()["data"]["retention"] == []
-    assert analytics.json()["data"]["behavior"]["sections"] == []
+    behavior = analytics.json()["data"]["behavior"]
+    assert behavior["best"] is None
+    assert any(row["section"] == "home" and row["dwells"] == 0 for row in behavior["sections"])
 
 
 def test_platform_admin_login_and_operator_actions(client: TestClient):

@@ -110,13 +110,13 @@ export default function AnalyticsPage() {
             <div className="grid gap-3 md:grid-cols-2">
               <article className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                 <p className="text-xs font-semibold text-emerald-700">更好的设计</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{data.behavior.best?.label ?? '—'}</p>
-                <p className="mt-1 text-xs text-slate-600">{data.behavior.best?.reason} · 关注 {stay(data.behavior.best?.attention_ms ?? 0)}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{data?.behavior?.best?.label ?? '—'}</p>
+                <p className="mt-1 text-xs text-slate-600">{data?.behavior?.best?.reason} · 关注 {stay(data?.behavior?.best?.attention_ms ?? 0)}</p>
               </article>
               <article className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <p className="text-xs font-semibold text-amber-800">更差的设计</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{data.behavior.worst?.label ?? '—'}</p>
-                <p className="mt-1 text-xs text-slate-600">{data.behavior.worst?.reason} · 关闭 {data.behavior.worst?.leaves ?? 0} 次 · 平均停留 {stay(data.behavior.worst?.avg_dwell_ms ?? 0)}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{data?.behavior?.worst?.label ?? '—'}</p>
+                <p className="mt-1 text-xs text-slate-600">{data?.behavior?.worst?.reason} · 关闭 {data?.behavior?.worst?.leaves ?? 0} 次 · 平均停留 {stay(data?.behavior?.worst?.avg_dwell_ms ?? 0)}</p>
               </article>
             </div>
             <div className="overflow-x-auto">
