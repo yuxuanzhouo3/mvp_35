@@ -182,6 +182,8 @@ R ≥ (C + fixed_tax) / (1 − fee_rate − 增值税率 − 0.15)
 
 1688 的 `access_token` 大约 10 小时有效。进程里发现它失效后，用 `ALIBABA_REFRESH_TOKEN` 调 `system.oauth2/getToken`（`grant_type=refresh_token`）换一张新的，并记下返回的 `expires_in` 和 `refresh_token_timeout`。到了 `ALIBABA_REFRESH_TOKEN_TIMEOUT`（或接口返回的同一时刻）之后，刷新会被拒绝。这时 1688 这一路标成 `reauth`，选品继续用其他已配置平台；要恢复 1688，卖家必须再打开一次授权页，用新的 `code` 换一套 `access_token` 和 `refresh_token`。
 
+同一关键词的 1688 价格不会每次搜索都重打官方接口。免费账号每 1 小时拉一次。已支付且未过期的 `growth` 或 `scale` 每 15 分钟拉一次，另外有 10 次随时刷新，用 `POST /catalog/refresh` 扣 1 次；这 10 次只在间隔还没到时才扣，1688 没有返回商品则不扣。套餐标价仍是免费 0、成长 29900 分、规模 99900 分。新的一笔会费入账后，这 10 次重新记满。
+
 ### 海外货架平台
 
 按 `target_market` 选择站点。US 用 amazon.com / walmart.com / ebay.com；HK 用亚马逊国际与 eBay；AU 用 amazon.com.au；CN 不再查海外表。

@@ -41,7 +41,7 @@ export function GuideVideo({ className = '', onDark = false }: { className?: str
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-sm font-medium ${onDark ? 'border-white/30 bg-white/10 text-white hover:bg-white/20' : 'border-border bg-background text-foreground hover:bg-muted'} ${className}`}
+        className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-sm font-medium ${onDark ? 'bg-white/10 text-white hover:bg-white/20' : 'text-foreground hover:bg-muted'} ${className}`}
       >
         <Play className="size-3.5" />
         操作演示

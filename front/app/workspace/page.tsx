@@ -38,7 +38,7 @@ export default function DashboardPage() {
   const openValue = openKey ? cardValue(openKey, shown) : ''
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <span className="eyebrow">{averaged ? '30 天 · 全站中间平均' : '30 天 · 本账号'}</span>

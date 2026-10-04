@@ -12,6 +12,7 @@ import {
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import { readClient, type ClientInfo } from '@/lib/client-adapter'
 import { ProductLibrary } from '@/components/product-library'
+import { docIds, legalDocs } from '@/lib/legal-docs'
 import { GuideVideo } from '@/components/guide-video'
 import { UserMenu } from '@/components/user-menu'
 import { AdSlot } from '@/components/ad-slot'
@@ -64,7 +65,7 @@ const channelGroups = [
 
 function SectionTitle({ eyebrow, title, copy }: { eyebrow: string; title: string; copy?: string }) {
   return (
-    <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center">
+    <div className="mx-auto flex max-w-2xl flex-col items-center gap-2 text-center">
       <span className="eyebrow">{eyebrow}</span>
       <h2 className="text-balance text-3xl font-semibold tracking-tight text-foreground md:text-5xl">{title}</h2>
       {copy && <p className="text-pretty text-base leading-7 text-muted-foreground md:text-lg">{copy}</p>}
@@ -118,7 +119,7 @@ export default function Page() {
 
   return (
     <main className="min-h-screen overflow-x-clip pb-24 md:pb-0">
-      <header className="site-header sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-md">
+      <header className="site-header sticky top-0 z-50 bg-background/90 backdrop-blur-md">
         <div className="container flex h-14 items-center justify-between md:h-16">
           <a href="#top" className="flex items-center gap-2" aria-label="PickGlobal 首页">
             <span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Globe2 className="size-[18px]" /></span>
@@ -175,7 +176,7 @@ export default function Page() {
       </header>
 
       <section id="top" className="hero-grid relative">
-        <div className="container grid items-center gap-6 py-8 md:grid-cols-[.95fr_1.05fr] md:gap-12 md:py-28">
+        <div className="container grid items-center gap-6 py-8 md:grid-cols-[.95fr_1.05fr] md:gap-10 md:py-12">
           <div className="relative z-10 flex flex-col items-start gap-4 md:gap-6">
             <span className="eyebrow"><Sparkles className="size-3.5" /> Oversea Market Selling</span>
             <h1 className="max-w-xl text-balance text-[1.7rem] font-semibold leading-[1.15] tracking-[-.03em] md:text-6xl md:leading-[1.1] md:tracking-[-.04em]">两条路径：先算清货，再帮你把客户找回来</h1>
@@ -214,7 +215,7 @@ export default function Page() {
 
       <AdSlot placement="home_mid_banner" className="container my-4 max-md:my-3" />
 
-      <section id="library" className="section-padding border-t border-border bg-muted/30">
+      <section id="library" className="section-padding bg-muted/30">
         <div className="container max-w-3xl">
           <SectionTitle eyebrow="Product library" title="商品库" copy="搜索已入库的商品，使用它生成分析报告，或删除这条记录。" />
           <div className="mt-8">
@@ -226,7 +227,7 @@ export default function Page() {
       <section id="path-a" className="section-padding">
         <div className="container">
           <SectionTitle eyebrow="Path A" title="选品与分析报告" copy="先算清利润和风险，再去获客。" />
-          <div className="mt-14 grid gap-4 md:grid-cols-4">
+          <div className="mt-8 grid gap-4 md:grid-cols-4">
             {pathA.map(([num, title, copy, Icon], index) => (
               <div key={num as string} className="step-card relative">
                 <div className="mb-5 flex items-center justify-between"><span className="text-xs font-semibold text-primary">{num as string}</span><span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-4" /></span></div>
@@ -286,13 +287,13 @@ export default function Page() {
               <Link href={`/login?next=${encodeURIComponent(loginNext)}`} className={buttonVariants()}>去登录</Link>
             </div>
           )}
-          <div className="mt-14 flex flex-col gap-10">
+          <div className="mt-8 flex flex-col gap-8">
             {channelGroups.map((group) => (
               <div key={group.title}>
                 <h3 className="text-sm font-semibold text-primary">{group.title}</h3>
                 <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {group.items.map(([code, id, title, copy]) => (
-                    <button key={code} type="button" className="feature-card !min-h-56 !w-full cursor-pointer !p-7 text-left" onClick={() => openChannel(code, id)}>
+                    <button key={code} type="button" className="feature-card !min-h-0 !w-full cursor-pointer !p-5 text-left" onClick={() => openChannel(code, id)}>
                       <span className="text-sm font-semibold text-primary">{code}</span>
                       <h3 className="mt-4 text-xl font-semibold">{title}</h3>
                       <p className="mt-3 text-sm leading-7 text-muted-foreground">{copy}</p>
@@ -336,7 +337,7 @@ export default function Page() {
         </div>
       </section>
 
-      <section id="trust" className="border-y border-border bg-muted/30">
+      <section id="trust" className="bg-muted/30">
         <div className="container grid gap-4 py-8 sm:grid-cols-2 lg:grid-cols-4">
           {[['国内云基础设施', ShieldCheck], ['数据集中管理', Radar], ['操作记录可追溯', RefreshCw], ['AI 分析与文案生成', Sparkles]].map(([text, Icon]) => (
             <div key={text as string} className="flex items-center gap-3 text-sm font-medium"><Icon className="size-4 text-primary" />{text as string}</div>
@@ -344,8 +345,8 @@ export default function Page() {
         </div>
       </section>
 
-      <section id="faq" className="section-padding">
-        <div className="container grid gap-12 md:grid-cols-[.7fr_1.3fr]">
+      <section id="faq" className="pt-8 pb-3">
+        <div className="container grid items-start gap-6 md:grid-cols-[.7fr_1.3fr]">
           <div>
             <span className="eyebrow">Questions, answered</span>
             <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">还有问题？<br />我们来回答。</h2>
@@ -365,9 +366,9 @@ export default function Page() {
         </div>
       </section>
 
-      <AdSlot placement="pricing_banner" className="container mb-2 max-md:mb-4" />
+      <AdSlot placement="pricing_banner" className="container mb-2" />
 
-      <section id="contact" className="section-padding">
+      <section id="contact" className="pb-8 pt-1">
         <div className="container">
           <div className="cta-panel">
             <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center gap-5 text-center">
@@ -384,16 +385,47 @@ export default function Page() {
       </section>
 
       <footer className="border-t border-border">
-        <div className="container grid gap-10 py-12 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
-          <div>
-            <div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Globe2 className="size-4" /></span><span className="font-semibold">Pick<span className="text-primary">Global</span></span></div>
-            <p className="mt-4 max-w-xs text-sm leading-6 text-muted-foreground">选品分析与出海获客全链路闭环。</p>
+        <div className="container py-6">
+          <div className="grid items-start gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Globe2 className="size-4" /></span><span className="font-semibold">Pick<span className="text-primary">Global</span></span></div>
+              <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">选品分析与出海获客全链路闭环。</p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">产品</h3>
+              <div className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('path-a')}>选品分析</button>
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('path-b')}>获客九路</button>
+                <Link href="/workspace" className="hover:text-foreground">工作台</Link>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">资源</h3>
+              <div className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('faq')}>常见问题</button>
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('scenes')}>应用场景</button>
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('contact')}>预约演示</button>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">公司联系</h3>
+              <div className="mt-3 flex flex-col gap-1.5 text-sm text-muted-foreground">
+                <p className="text-foreground">晨佑科学（深圳）有限公司</p>
+                <a href="mailto:pickglobal@yeah.net" className="hover:text-foreground">pickglobal@yeah.net</a>
+                <a href="mailto:mornscience@sina.cn" className="hover:text-foreground">mornscience@sina.cn</a>
+              </div>
+            </div>
           </div>
-          <div><h3 className="text-sm font-semibold">产品</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><button className="text-left hover:text-foreground" onClick={() => scrollTo('path-a')}>选品分析</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('path-b')}>获客九路</button><Link href="/workspace" className="text-left hover:text-foreground">工作台</Link></div></div>
-          <div><h3 className="text-sm font-semibold">资源</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><button className="text-left hover:text-foreground" onClick={() => scrollTo('faq')}>常见问题</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('scenes')}>应用场景</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('contact')}>预约演示</button></div></div>
-          <div><h3 className="text-sm font-semibold">公司</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><a href="https://pickglobal.mornscience.top" className="hover:text-foreground">pickglobal.mornscience.top</a><a href="mailto:pickglobal@yeah.net" className="hover:text-foreground">pickglobal@yeah.net</a><a href="mailto:mornscience@sina.cn" className="hover:text-foreground">mornscience@sina.cn</a><span>中国 · 美国</span></div></div>
+          <div className="mt-5 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-baseline sm:gap-4">
+            <h3 className="shrink-0 text-sm font-semibold">合同</h3>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
+              {docIds.map((id) => (
+                <Link key={id} href={`/legal/${id}`} className="hover:text-foreground">{legalDocs[id].title}</Link>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="container flex flex-col gap-2 border-t border-border py-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between"><span>© 2026 PickGlobal. 保留所有权利。</span><span>首页展示数据均为样例数据</span></div>
+        <div className="container flex flex-col gap-2 border-t border-border py-3 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between"><span>© 2026 PickGlobal. 保留所有权利。</span><span>首页展示数据均为样例数据</span></div>
       </footer>
       <div className="phone-dock md:hidden">
         <Link href="/workspace/products" className={buttonVariants({ className: 'min-h-12 flex-1 text-base' })}>开始分析</Link>

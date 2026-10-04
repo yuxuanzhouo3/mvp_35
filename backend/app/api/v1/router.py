@@ -213,6 +213,27 @@ def _channel_order(settings, store, prof, plan: dict, provider: str, *, scene: s
     )
 
 
+def _shelf_info(store, tenant_id: str) -> dict:
+    from app.modules.shelf_refresh import policy
+
+    return policy(store, tenant_id)
+
+
+def _shelf_payload(query: str, algorithm: str | None, settings, spec: dict | None, route: str | None, info: dict, *, force: bool = False) -> dict:
+    return catalog_payload(
+        query,
+        algorithm,
+        settings.rules_version,
+        settings,
+        spec["target_market"] if spec else None,
+        route,
+        refresh_after=info["interval_seconds"],
+        force=force,
+        premium=info["premium"],
+        manual_left=info["manual_left"],
+    )
+
+
 def create_router() -> APIRouter:
     router = APIRouter(prefix="/api/v1")
 
@@ -306,9 +327,39 @@ def create_router() -> APIRouter:
 
     @router.get("/catalog/search")
     def catalog_search(request: Request, q: str = "", algorithm: str | None = None, route: str | None = None, authorization: str | None = Header(default=None)):
-        settings, _store, _prof = ctx(request, authorization)
+        settings, store, prof = ctx(request, authorization)
         spec = resolve_route(route)
-        return respond(request, catalog_payload(q, algorithm, settings.rules_version, settings, spec["target_market"] if spec else None, route))
+        info = _shelf_info(store, prof["tenant"]["id"])
+        return respond(request, _shelf_payload(q, algorithm, settings, spec, route, info))
+
+    @router.post("/catalog/refresh")
+    def catalog_refresh(request: Request, q: str = "", route: str | None = None, authorization: str | None = Header(default=None)):
+        settings, store, prof = ctx(request, authorization, write=True)
+        spec = resolve_route(route)
+        market = spec["target_market"] if spec else "US"
+        info = _shelf_info(store, prof["tenant"]["id"])
+        from algorithm.shelf import goods_age
+
+        age = goods_age(q, market)
+        due = age is None or age >= info["interval_seconds"]
+        if not due and not (info["premium"] and info["manual_left"] > 0):
+            raise AppError(
+                "SHELF_REFRESH_WAIT",
+                "价格还在刷新间隔内。免费每小时更新；支付成长或规模后每 15 分钟更新，并有 10 次随时刷新。",
+                403,
+                {"manual_left": info["manual_left"], "interval_seconds": info["interval_seconds"]},
+            )
+        payload = _shelf_payload(q, "selection-assist", settings, spec, route, info, force=not due)
+        fresh_hit = any(
+            row.get("id") == "1688" and row.get("status") == "ok"
+            for row in (payload.get("sources") or {}).get("platforms") or []
+        )
+        if not due and fresh_hit:
+            from app.modules.shelf_refresh import spend
+
+            left = spend(store, prof["tenant"]["id"])
+            payload["sources"]["refresh"]["manual_left"] = left
+        return respond(request, payload)
 
     @router.post("/catalog/adopt")
     def catalog_adopt(request: Request, body: AdoptIn, authorization: str | None = Header(default=None)):

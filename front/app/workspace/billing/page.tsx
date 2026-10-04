@@ -168,7 +168,7 @@ export default function BillingPage() {
   const pendingCount = payments.filter((item) => item.status === 'pending').length
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div>
         <span className="eyebrow">账单</span>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">套餐与支付</h1>

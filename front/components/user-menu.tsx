@@ -269,8 +269,8 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
                   <SettingRow label="账单与订阅" hint="套餐、支付和发票">
                     <Link href="/workspace/billing" className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm" onClick={() => setDialog(null)}>打开账单</Link>
                   </SettingRow>
-                  <SettingRow label="隐私" hint="登录状态只保存在这台浏览器">
-                    <button type="button" className="h-9 w-full rounded-lg border border-border text-sm" onClick={onLogout}>退出登录</button>
+                  <SettingRow label="隐私" hint="用户守则和隐私条款">
+                    <Link href="/legal/privacy" className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm" onClick={() => setDialog(null)}>查看条款</Link>
                   </SettingRow>
                   <SettingRow label="支持" hint="问题发到公司邮箱">
                     <a className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm" href="mailto:pickglobal@yeah.net">pickglobal@yeah.net</a>

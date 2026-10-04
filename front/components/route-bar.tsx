@@ -32,14 +32,14 @@ export function RouteBar() {
 
   const spec = TRADE_ROUTES[route]
   return (
-    <div className="flex shrink-0 items-center gap-2 overflow-x-auto overscroll-x-contain rounded-2xl border border-blue-100 bg-blue-50/80 px-2 py-2 dark:border-blue-900 dark:bg-blue-950/30">
+    <div className="flex shrink-0 items-center gap-2 overflow-x-auto overscroll-x-contain">
       {(Object.keys(TRADE_ROUTES) as RouteId[]).map((id) => {
         const active = route === id
         return (
           <button
             key={id}
             type="button"
-            className={`h-9 shrink-0 rounded-full px-3 text-sm font-semibold ${active ? 'bg-blue-600 text-white' : 'border border-blue-100 bg-white text-slate-800 dark:border-blue-900 dark:bg-card dark:text-foreground'}`}
+            className={`h-9 shrink-0 rounded-full px-3 text-sm font-semibold ${active ? 'bg-blue-600 text-white' : 'border border-border bg-white text-slate-800 dark:bg-card dark:text-foreground'}`}
             aria-pressed={active}
             onClick={() => choose(id)}
           >

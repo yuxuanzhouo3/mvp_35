@@ -23,7 +23,7 @@ function AcquireHome() {
   }, [channel, seed, router])
 
   return (
-    <div className="flex flex-col gap-4 md:h-[calc(100dvh-11.5rem)]">
+    <div className="flex flex-col gap-2 md:h-[calc(100dvh-8.5rem)]">
       <RouteBar />
       <div className="shrink-0">
         <span className="eyebrow">路径 B · 九路获客</span>

@@ -279,6 +279,10 @@ def _grant(store: DocumentStore, payment: dict) -> None:
             ),
         )
         store.touch("tenants", payment["tenant_id"], {"plan_id": plan["id"]})
+        if plan["id"] in {"growth", "scale"}:
+            from app.modules.shelf_refresh import grant
+
+            grant(store, payment["tenant_id"])
     _issue_invoice(store, payment)
 
 

@@ -187,7 +187,10 @@ def test_selection_ranks_china_supply_against_us_shelf(client: TestClient, monke
         {"id": "1688", "name": "1688", "region": "CN", "status": "ok", "count": 1},
         {"id": "ebay", "name": "eBay", "region": "US", "status": "ok", "count": 1},
     ]
-    monkeypatch.setattr("algorithm.selection_assist.collect_goods", lambda *_args, **_kwargs: ([live], platforms))
+    monkeypatch.setattr(
+        "algorithm.selection_assist.cached_collect",
+        lambda *_args, **_kwargs: ([live], platforms, {"fresh": True, "at": 0}),
+    )
     ranked = client.get("/api/v1/catalog/search", headers=auth(), params={"q": "杯", "algorithm": "selection-assist"})
     assert ranked.status_code == 200, ranked.text
     body = ranked.json()["data"]
@@ -282,6 +285,131 @@ def test_alibaba_missing_permission_is_a_failure(monkeypatch):
     _alibaba("杯", Settings())
     assert len(calls) == 2
     clear_alibaba_session()
+
+
+def test_free_prices_stay_cached_for_one_hour(monkeypatch):
+    from algorithm.shelf import cached_collect, clear_goods_cache
+
+    clear_goods_cache()
+    calls = {"n": 0}
+    clock = {"now": 1_700_000_000.0}
+
+    def fake(*_args, **_kwargs):
+        calls["n"] += 1
+        return [{"id": "1688:1"}], [{"id": "1688", "status": "ok"}]
+
+    monkeypatch.setattr("algorithm.shelf.collect_goods", fake)
+    monkeypatch.setattr("algorithm.shelf.time.time", lambda: clock["now"])
+    cached_collect("杯", None, "US", interval=3600)
+    cached_collect("杯", None, "US", interval=3600)
+    assert calls["n"] == 1
+    clock["now"] += 900
+    cached_collect("杯", None, "US", interval=900)
+    assert calls["n"] == 2
+    clock["now"] += 3601
+    cached_collect("杯", None, "US", interval=3600)
+    assert calls["n"] == 3
+    clear_goods_cache()
+
+
+def test_paid_plan_starts_with_ten_manual_refreshes():
+    from datetime import timedelta
+
+    from app.core.timeutil import iso, utcnow
+    from app.modules.shelf_refresh import grant, policy, spend
+
+    class Store:
+        def __init__(self):
+            self.tenants = {}
+            self.subs = []
+
+        def get(self, collection, doc_id, _tenant=None):
+            return self.tenants.get(doc_id) if collection == "tenants" else None
+
+        def touch(self, collection, doc_id, patch):
+            row = self.tenants.setdefault(doc_id, {"id": doc_id})
+            row.update(patch)
+            return row
+
+        def query(self, collection, tenant_id, limit=20, **_kwargs):
+            del collection, limit
+            return {"items": [row for row in self.subs if row["tenant_id"] == tenant_id]}
+
+    store = Store()
+    assert policy(store, "ten")["interval_seconds"] == 3600
+    store.subs.append({"tenant_id": "ten", "status": "active", "plan_id": "growth", "period_end": iso(utcnow() + timedelta(days=20))})
+    paid = policy(store, "ten")
+    assert paid["premium"] is True
+    assert paid["interval_seconds"] == 900
+    assert paid["manual_left"] == 10
+    grant(store, "ten")
+    assert spend(store, "ten") == 9
+
+
+def test_free_refresh_waits_and_paid_refresh_spends_one(client: TestClient, monkeypatch):
+    from datetime import timedelta
+
+    from app.core.timeutil import iso, utcnow
+    from app.modules.shelf_refresh import grant
+    from app.services.common import base_doc, new_id
+    from algorithm.shelf import cached_collect, clear_goods_cache
+
+    clear_goods_cache()
+    live = {
+        "id": "1688:99",
+        "name": "双层玻璃杯",
+        "sku": "99",
+        "category": "家居",
+        "cost_cny": "20.00",
+        "packaging_cny": "4.00",
+        "domestic_freight_cny": "6.00",
+        "international_freight_usd": "3.20",
+        "target_price_usd": "40.00",
+        "supplier": "义乌杯厂",
+        "platform": "1688",
+        "external_id": "99",
+        "fx_usd_cny": "7.20",
+        "target_market": "US",
+        "tax_regime": "cn_us",
+    }
+    monkeypatch.setattr(
+        "algorithm.shelf.collect_goods",
+        lambda *_args, **_kwargs: ([live], [{"id": "1688", "name": "1688", "region": "CN", "status": "ok", "count": 1}]),
+    )
+    cached_collect("杯", None, "US", interval=3600)
+    waited = client.post("/api/v1/catalog/refresh", headers=auth(), params={"q": "杯", "route": "cn_us"})
+    assert waited.status_code == 403, waited.text
+    tenant = client.get("/api/v1/tenants/current", headers=auth()).json()["data"]["id"]
+    store = client.app.state.store
+    store.insert(
+        "subscriptions",
+        base_doc(
+            tenant,
+            "test",
+            id=new_id("sub"),
+            plan_id="growth",
+            plan="growth",
+            status="active",
+            period_end=iso(utcnow() + timedelta(days=30)),
+            payment_id="pay-shelf",
+        ),
+    )
+    grant(store, tenant)
+    pulled = client.post("/api/v1/catalog/refresh", headers=auth(), params={"q": "杯", "route": "cn_us"})
+    assert pulled.status_code == 200, pulled.text
+    assert pulled.json()["data"]["sources"]["refresh"]["manual_left"] == 9
+    assert pulled.json()["data"]["sources"]["refresh"]["interval_seconds"] == 900
+    clear_goods_cache()
+
+
+def test_platform_status_carries_sample_prices():
+    from algorithm.shelf import _attach_offers
+
+    cn = _attach_offers([{"name": "玻璃杯", "cost_cny": "12.50"}], {"id": "1688", "region": "CN", "status": "ok"})
+    us = _attach_offers([{"name": "Glass", "usd": Decimal("9.99")}], {"id": "amazon", "region": "US", "status": "ok"})
+    assert cn["offers"] == [{"name": "玻璃杯", "price": "12.50", "currency": "CNY"}]
+    assert us["offers"][0]["currency"] == "USD"
+    assert us["offers"][0]["price"] == "9.99"
 
 
 def test_pdd_price_is_converted_from_fen(monkeypatch):

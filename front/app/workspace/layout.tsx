@@ -55,7 +55,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-background pb-28 md:pb-0">
-      <header className="site-header sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-md">
+      <header className="site-header sticky top-0 z-40 bg-background/90 backdrop-blur-md">
         <div className="container flex h-14 items-center justify-between gap-4 md:h-16">
           <Link href="/" className="flex items-center gap-2" aria-label="返回 PickGlobal 首页">
             <span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -76,7 +76,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           <div className="flex min-w-0 items-center gap-2 text-xs sm:gap-3 sm:text-sm">
             <button type="button" className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 ${chatOpen ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`} aria-expanded={chatOpen} onClick={() => setChatOpen((open) => !open)}>
               <MessageSquare className="size-4" />
-              对话
+              客服
             </button>
             <UserMenu name={name || '账号'} onLogout={() => void logoutSession().then(() => router.replace('/login'))} />
             <GuideVideo className="shrink-0" />
@@ -84,10 +84,10 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       <div className={chatOpen ? 'md:mr-80' : ''}>
-      <div className="container py-6 md:py-8">
+      <div className="container pb-4 pt-2 md:pb-3 md:pt-2">
         {ready ? (
           <>
-            <AdSlot placement="dashboard_top" className="mb-5 max-md:mb-4" />
+            <AdSlot placement="dashboard_top" className="mb-2" />
             {children}
           </>
         ) : (

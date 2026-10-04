@@ -59,7 +59,7 @@ export function TermHint({ id }: { id: SelectionTermId }) {
     <>
       <button
         type="button"
-        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10px] leading-none text-muted-foreground"
+        className="ml-1 inline-flex h-4 w-4 items-center justify-center text-[10px] leading-none text-muted-foreground"
         aria-label={`${term.title}是什么`}
         onClick={(event) => {
           event.preventDefault()

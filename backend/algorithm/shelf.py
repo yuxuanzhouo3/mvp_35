@@ -25,9 +25,35 @@ from algorithm.product_pricer import _floor_price
 from app.services.profit import money
 
 _SHELF: dict[str, dict] = {}
+_GOODS_CACHE: dict[str, dict] = {}
 _ALIBABA_SESSION = {"access_token": "", "refresh_token": "", "access_until": 0.0, "refresh_until": 0.0}
 _ALIBABA_DENY: dict[str, float] = {}
 TIMEOUT = 4
+
+
+def clear_goods_cache() -> None:
+    _GOODS_CACHE.clear()
+
+
+def goods_age(query: str, target_market: str = "US") -> float | None:
+    hit = _GOODS_CACHE.get(f"{target_market}:{query.strip().lower()}")
+    if not hit:
+        return None
+    return time.time() - hit["at"]
+
+
+def cached_collect(query: str, settings, target_market: str = "US", *, interval: int = 3600, force: bool = False):
+    needle = query.strip().lower()
+    key = f"{target_market}:{needle}"
+    now = time.time()
+    hit = _GOODS_CACHE.get(key)
+    if hit and needle and not force and now - hit["at"] < interval:
+        return hit["items"], hit["statuses"], {"fresh": False, "at": hit["at"]}
+    items, statuses = collect_goods(query, settings, target_market)
+    if items:
+        _GOODS_CACHE[key] = {"at": now, "items": items, "statuses": statuses}
+        return items, statuses, {"fresh": True, "at": now}
+    return items, statuses, {"fresh": True, "at": None}
 
 
 def lookup_shelf(catalog_id: str) -> dict | None:
@@ -62,7 +88,7 @@ def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list
         futures = [pool.submit(job, needle, settings) for job in jobs]
         for future in as_completed(futures):
             rows, status = future.result()
-            statuses.append(status)
+            statuses.append(_attach_offers(rows, status))
             if status["region"] == "CN":
                 domestic.extend(rows)
             else:
@@ -137,6 +163,16 @@ def _amount(value) -> Decimal | None:
     if parsed <= 0:
         return None
     return parsed
+
+
+def _attach_offers(rows: list, status: dict) -> dict:
+    offers = []
+    for row in rows[:3]:
+        if status.get("region") == "CN" and row.get("cost_cny"):
+            offers.append({"name": str(row.get("name") or ""), "price": str(row["cost_cny"]), "currency": "CNY"})
+        elif row.get("usd") is not None:
+            offers.append({"name": str(row.get("name") or ""), "price": money(row["usd"]), "currency": "USD"})
+    return {**status, "offers": offers}
 
 
 def _status(platform: str, name: str, region: str, status: str, count: int) -> dict:

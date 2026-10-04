@@ -127,7 +127,7 @@ function ChannelDesk() {
   const views = channel.id === 'raas' ? [baseViews[5], ...baseViews.slice(0, 5)] : baseViews
 
   return (
-    <div className="work-desk flex flex-col gap-3 overflow-hidden">
+    <div className="work-desk flex flex-col gap-2 overflow-hidden">
       <RouteBar />
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
@@ -140,7 +140,7 @@ function ChannelDesk() {
       {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
       <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-6">
         {views.map((item) => (
-          <button key={item.id} type="button" className={`h-11 rounded-xl border px-2 text-sm font-medium ${view === item.id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-blue-100 bg-white text-slate-700 dark:border-blue-900 dark:bg-card dark:text-foreground'}`} onClick={() => setView(item.id)}>
+          <button key={item.id} type="button" className={`h-11 rounded-xl px-2 text-sm font-medium ${view === item.id ? 'bg-blue-600 text-white' : 'border border-border bg-white text-slate-700 dark:bg-card dark:text-foreground'}`} onClick={() => setView(item.id)}>
             {item.name}
           </button>
         ))}
@@ -150,7 +150,7 @@ function ChannelDesk() {
           <div>
             <h2 className="font-semibold">发现线索</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-              <select className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm" value={platform} aria-label="平台" onChange={(event) => setPlatform(event.target.value)}>
+              <select className="h-11 w-full rounded-xl border-0 bg-muted px-3 text-sm outline-none" value={platform} aria-label="平台" onChange={(event) => setPlatform(event.target.value)}>
                 {channel.platforms.map((item) => <option key={item}>{item}</option>)}
               </select>
               <button type="button" disabled={busy} className="h-11 rounded-xl bg-primary text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => {

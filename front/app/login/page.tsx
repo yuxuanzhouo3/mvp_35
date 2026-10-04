@@ -39,7 +39,7 @@ function LoginForm() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     if (!accepted) {
-      setError('请先勾选《隐私政策》《CIO 合规》和《用户协议》。')
+      setError('请先勾选《用户守则》和《隐私条款》。')
       return
     }
     setPending(true)
@@ -110,7 +110,7 @@ function LoginForm() {
           disabled={!accepted}
           onClick={() => {
             if (!accepted) {
-              setError('请先勾选《隐私政策》《CIO 合规》和《用户协议》。')
+              setError('请先勾选《用户守则》和《隐私条款》。')
               return
             }
             setError('')
