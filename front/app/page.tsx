@@ -1,62 +1,436 @@
 'use client'
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
-  ArrowRight, BarChart3, BellRing, Check, ChevronDown, ChevronRight, CircleDollarSign,
-  Globe2, Laptop, Mail, Menu, MapPin, Monitor, PackageSearch, Radar, RefreshCw,
-  ShieldCheck, Smartphone, Sparkles, Target, TrendingUp, Users, X, Zap,
+  ArrowRight, BarChart3, Check, ChevronDown, ChevronRight, Globe2, Laptop, Menu, MapPin,
+  Monitor, PackageSearch, Radar, RefreshCw, ShieldCheck, Smartphone, Sparkles, Store,
+  Tablet, Target, Terminal, Users, X,
 } from 'lucide-react'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
+import { readClient, type ClientInfo } from '@/lib/client-adapter'
+import { ProductLibrary } from '@/components/product-library'
+import { docIds, legalDocs } from '@/lib/legal-docs'
+import { GuideVideo } from '@/components/guide-video'
+import { UserMenu } from '@/components/user-menu'
+import { AdSlot } from '@/components/ad-slot'
+import { api } from '@/lib/api'
+import { accessToken, logoutSession } from '@/lib/session'
 
-const trendData = [
-  { name: '1月', value: 18 }, { name: '2月', value: 25 }, { name: '3月', value: 23 },
-  { name: '4月', value: 36 }, { name: '5月', value: 42 }, { name: '6月', value: 51 },
-]
 const marketData = [
-  { name: '北美', value: 82 }, { name: '欧洲', value: 64 }, { name: '东南亚', value: 57 }, { name: '中东', value: 41 },
+  { name: '利润', value: 50 }, { name: '税费', value: 18 }, { name: '物流', value: 32 }, { name: '风险', value: 24 },
 ]
-const tabs = ['市场机会', '利润测算', '税务', '物流时效', '风险提示']
 const faqs = [
-  ['PickGlobal 适合哪些企业？', '适合跨境电商卖家、外贸工厂、品牌出海团队和外贸服务商，尤其适合需要持续寻找市场与客户的团队。'],
-  ['可以分析自有商品吗？', '可以。支持手动录入、CSV 导入以及国内商品数据接口，让自有商品快速进入分析工作台。'],
-  ['首期支持哪些市场？', '首期支持中国与美国市场，后续将持续扩展更多国家和地区。'],
-  ['如何获取潜在客户？', '系统会根据地区、行业与产品相关性筛选潜在客户，帮助团队建立更精准的客户池。'],
-  ['AI 会自动发送邮件吗？', 'AI 负责生成个性化内容与触达建议，发送前由团队确认，确保每一次沟通都符合品牌语气。'],
-  ['是否支持多端使用？', '支持 Web、微信小程序、Android、iOS、macOS 和 Windows，多端同步同一个工作台。'],
+  ['PickGlobal 适合哪些企业？', '适合中国制造商、出口商、独立卖家和跨境电商团队。工作台只做两件事：选品分析报告，以及九路获客成交召回。'],
+  ['可以分析自有商品吗？', '可以。手动录入、CSV 或国内货源目录会进入同一个商品库，不绑定外部电商选品主库。'],
+  ['首期支持哪些市场？', '默认货源中国、目标美国，税务按中美口径。路线可以扩展到香港、澳大利亚和一部分内陆市场。'],
+  ['如何获取潜在客户？', '电商、社交、展会、代理和大数据是主获客；GEO/SEO、内容与跨境元素用于优化；RaaS 用来销售 PickGlobal 本身。冷启和召回属于获客路径，不是第三条产品线。'],
+  ['AI 会自动发送邮件吗？', '不会。文案生成后必须人工批准才发送。利润、税费和评分由规则引擎计算，模型不能改这些数字。'],
+  ['是否支持多端使用？', '手机、iPad、微信小程序、Web、Mac、Windows 和 Linux 共用同一套选品与获客。手机上直接开始分析，不必先装客户端。'],
+]
+const pathA = [
+  ['01', '双向入口', '手动、CSV，或从国内货源目录选入同一商品库', PackageSearch],
+  ['02', '路线与市场', '货源地、目标市场、物流路线、税务口径和售价币种', Globe2],
+  ['03', '规则引擎', '利润、税务、时效和风险可复核，模型只解释不改数', BarChart3],
+  ['04', '报告并获客', '四维报告上的一键获客，会带上这份分析', Target],
+]
+const channelGroups = [
+  {
+    title: '主获客 1–5',
+    items: [
+      ['B1', 'ecommerce', '电商平台', 'Amazon、Temu、Walmart、淘宝、拼多多。访客、询盘和买家进入同一线索池。'],
+      ['B2', 'social', '社交平台', 'LinkedIn、Facebook、微信小程序、抖音、小红书、快手。'],
+      ['B3', 'expo', '线上展会', '会期集中发现，会后进入冷启或召回。'],
+      ['B4', 'agency', '12 代理渠道', '渠道子账户获客，分成与线索账分开。'],
+      ['B5', 'enrichment', '智慧大脑大数据', '企查查、天眼查等来源去重、打分并留痕。'],
+    ],
+  },
+  {
+    title: '优化 6–8，也可用于销售本品',
+    items: [
+      ['B6', 'geo_seo', 'GEO / SEO', '给前五路补充落地页归因，不另开线索主表。'],
+      ['B7', 'content_dh', '内容、数智人、线下', '内容任务和扫码获客。数智人 DEMO 为占位演示。'],
+      ['B8', 'cross_border', '跨境元素复现', '约 80% 覆盖中美、中港、中澳，20% 覆盖内陆。'],
+    ],
+  },
+  {
+    title: '本品销售',
+    items: [
+      ['B9', 'raas', 'RaaS', '官网成功抽成和 APP 账户销售。抽成账本与普通获客率分开。'],
+    ],
+  },
 ]
 
 function SectionTitle({ eyebrow, title, copy }: { eyebrow: string; title: string; copy?: string }) {
-  return <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 text-center"><span className="eyebrow">{eyebrow}</span><h2 className="text-balance text-3xl font-semibold tracking-tight text-foreground md:text-5xl">{title}</h2>{copy && <p className="text-pretty text-base leading-7 text-muted-foreground md:text-lg">{copy}</p>}</div>
-}
-
-function DashboardPreview() {
-  return <div className="dashboard-shell animate-float" aria-label="PickGlobal 商品分析工作台演示">
-    <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 md:px-5"><div className="flex items-center gap-2"><div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Globe2 className="size-4" /></div><span className="text-xs font-semibold">商品分析工作台</span></div><span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">演示数据</span></div>
-    <div className="grid gap-3 p-4 md:grid-cols-[1.05fr_.95fr] md:p-5">
-      <div className="flex flex-col gap-3"><div className="rounded-xl border border-border bg-muted/35 p-3"><div className="flex items-center justify-between"><div><p className="text-[10px] text-muted-foreground">当前分析商品</p><p className="mt-1 text-sm font-semibold">智能温控水杯 · 500ml</p></div><PackageSearch className="size-5 text-primary" /></div><div className="mt-4 flex items-center gap-2"><span className="rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary">美国市场</span><span className="rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">机会较高</span></div></div><div className="grid grid-cols-2 gap-3"><Metric label="商品机会分" value="86" suffix="/100" tone="blue" /><Metric label="预估利润率" value="38.6%" suffix="" tone="green" /></div><div className="grid grid-cols-2 gap-3"><Metric label="潜客数量" value="2,480" suffix="+" tone="blue" /><Metric label="风险等级" value="低" suffix="" tone="green" /></div></div>
-      <div className="rounded-xl border border-border bg-card p-3"><div className="flex items-center justify-between"><p className="text-xs font-semibold">海外客户增长</p><span className="text-[10px] text-emerald-600">+24.8%</span></div><div className="mt-2 h-28"><ResponsiveContainer width="100%" height="100%"><AreaChart data={trendData}><defs><linearGradient id="fillBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={.22}/><stop offset="100%" stopColor="var(--primary)" stopOpacity={0}/></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3"/><XAxis dataKey="name" hide/><YAxis hide/><Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 11 }} /><Area type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2} fill="url(#fillBlue)" /></AreaChart></ResponsiveContainer></div><div className="mt-3 flex items-center gap-2 border-t border-border/70 pt-3 text-[10px] text-muted-foreground"><TrendingUp className="size-3 text-emerald-600" /> 近 6 个月有效潜客持续增长</div></div>
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col items-center gap-2 text-center">
+      <span className="eyebrow">{eyebrow}</span>
+      <h2 className="text-balance text-3xl font-semibold tracking-tight text-foreground md:text-5xl">{title}</h2>
+      {copy && <p className="text-pretty text-base leading-7 text-muted-foreground md:text-lg">{copy}</p>}
     </div>
-  </div>
+  )
 }
-function Metric({ label, value, suffix, tone }: { label: string; value: string; suffix: string; tone: 'blue' | 'green' }) { return <div className="rounded-xl border border-border bg-card p-3"><p className="text-[10px] text-muted-foreground">{label}</p><p className={`mt-2 text-xl font-semibold ${tone === 'green' ? 'text-emerald-600' : 'text-foreground'}`}>{value}<span className="text-[10px] font-normal text-muted-foreground">{suffix}</span></p></div> }
 
 export default function Page() {
+  const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('市场机会')
   const [openFaq, setOpenFaq] = useState<number | null>(0)
-  const scrollTo = (id: string) => { setMenuOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }) }
-  return <main className="min-h-screen overflow-hidden">
-    <header className="sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-md"><div className="container flex h-16 items-center justify-between"><a href="#top" className="flex items-center gap-2" aria-label="PickGlobal 首页"><span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Globe2 className="size-[18px]" /></span><span className="text-lg font-semibold tracking-tight">Pick<span className="text-primary">Global</span></span></a><nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex"><button onClick={() => scrollTo('capabilities')} className="transition-colors hover:text-foreground">产品能力</button><button onClick={() => scrollTo('workflow')} className="transition-colors hover:text-foreground">工作流程</button><button onClick={() => scrollTo('scenes')} className="transition-colors hover:text-foreground">应用场景</button><button onClick={() => scrollTo('faq')} className="transition-colors hover:text-foreground">常见问题</button></nav><div className="hidden items-center gap-3 md:flex"><Button variant="ghost" onClick={() => scrollTo('contact')}>登录</Button><Button onClick={() => scrollTo('contact')}>免费体验 <ArrowRight data-icon="inline-end" /></Button></div><Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? '关闭菜单' : '打开菜单'}>{menuOpen ? <X /> : <Menu />}</Button></div>{menuOpen && <div className="border-t border-border bg-background px-5 py-5 md:hidden"><nav className="flex flex-col gap-4 text-sm"><button onClick={() => scrollTo('capabilities')} className="text-left">产品能力</button><button onClick={() => scrollTo('workflow')} className="text-left">工作流程</button><button onClick={() => scrollTo('scenes')} className="text-left">应用场景</button><button onClick={() => scrollTo('faq')} className="text-left">常见问题</button><Button onClick={() => scrollTo('contact')}>免费体验</Button></nav></div>}</header>
-    <section id="top" className="hero-grid relative"><div className="container grid items-center gap-12 py-20 md:grid-cols-[.95fr_1.05fr] md:py-28"><div className="relative z-10 flex flex-col items-start gap-6"><span className="eyebrow"><Sparkles className="size-3.5" /> Oversea Market Selling</span><h1 className="max-w-xl text-balance text-4xl font-semibold leading-[1.1] tracking-[-.04em] md:text-6xl">从选品分析，到找到客户，<span className="text-primary">再到持续成交</span></h1><p className="max-w-lg text-pretty text-base leading-7 text-muted-foreground md:text-lg">PickGlobal 将商品评估、利润与税务分析、海外客户发现、AI 营销触达和流失召回整合到一个工作台。</p><div className="flex flex-wrap gap-3"><Button size="lg" onClick={() => scrollTo('analysis')}>开始分析商品 <ArrowRight data-icon="inline-end" /></Button><Button size="lg" variant="outline" onClick={() => scrollTo('workflow')}>查看完整流程</Button></div><div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="size-3.5 text-emerald-600" /> 首期支持中国与美国市场</div></div><DashboardPreview /></div></section>
-    <section id="workflow" className="section-padding"><div className="container"><SectionTitle eyebrow="End-to-end workflow" title="从一个商品，走完出海增长全链路" copy="把分散在多个工具里的判断、触达与跟进，收拢到一个清晰可执行的工作流。"/><div className="mt-14 grid gap-4 md:grid-cols-5">{[['01','导入商品','手动录入、CSV 或国内商品数据接口',PackageSearch],['02','智能分析','利润空间、税务、时效与市场风险',BarChart3],['03','发现客户','按地区和行业筛选潜在客户',Target],['04','AI 触达','生成个性化邮件与数字人内容',Mail],['05','流失召回','追踪互动并自动创建召回任务',RefreshCw]].map(([num,title,copy,Icon], i) => <div key={num as string} className="step-card relative"><div className="mb-5 flex items-center justify-between"><span className="text-xs font-semibold text-primary">{num as string}</span><span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-4" /></span></div><h3 className="font-semibold">{title as string}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{copy as string}</p>{i < 4 && <ChevronRight className="step-arrow" />}</div>)}</div></div></section>
-    <section id="analysis" className="section-padding bg-muted/35"><div className="container grid items-center gap-12 md:grid-cols-[.82fr_1.18fr]"><div><span className="eyebrow">Product intelligence</span><h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">每一次决策，都有数据依据</h2><p className="mt-5 text-pretty leading-7 text-muted-foreground">从市场热度到物流时效，PickGlobal 帮你把复杂的出海变量，转化为一份看得懂、能行动的商品报告。</p><ul className="mt-7 flex flex-col gap-4">{['识别更值得投入的市场机会','预估真实利润，提前规避隐性成本','用风险提示辅助团队做出稳健判断'].map(item => <li key={item} className="flex items-start gap-3 text-sm"><span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check className="size-3" /></span>{item}</li>)}</ul></div><div className="report-card"><div className="flex flex-wrap gap-1 border-b border-border px-3 pt-3 md:px-5">{tabs.map(tab => <button key={tab} onClick={() => setActiveTab(tab)} className={`report-tab ${activeTab === tab ? 'report-tab-active' : ''}`}>{tab}</button>)}</div><div className="p-4 md:p-6"><div className="flex items-start justify-between gap-4"><div><p className="text-xs text-muted-foreground">{activeTab} · AI 分析摘要</p><h3 className="mt-2 text-xl font-semibold">美国市场机会良好</h3></div><span className="flex size-12 items-center justify-center rounded-2xl bg-emerald-50 text-lg font-semibold text-emerald-700">86</span></div><div className="mt-6 grid gap-4 md:grid-cols-[1fr_1fr]"><div className="rounded-xl border border-border p-3"><p className="text-xs font-medium">市场机会指数</p><div className="mt-4 h-32"><ResponsiveContainer width="100%" height="100%"><BarChart data={marketData} layout="vertical" margin={{ left: 10, right: 8 }}><XAxis type="number" hide/><YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} width={48}/><Bar dataKey="value" fill="var(--primary)" radius={[0, 5, 5, 0]} barSize={10}/></BarChart></ResponsiveContainer></div></div><div className="rounded-xl border border-border p-3"><p className="text-xs font-medium">建议行动</p><div className="mt-4 flex flex-col gap-3 text-xs leading-5 text-muted-foreground"><div className="flex gap-2"><Zap className="size-4 shrink-0 text-emerald-600" />优先测试北美中高端渠道</div><div className="flex gap-2"><CircleDollarSign className="size-4 shrink-0 text-primary" />建议定价区间 $39–49</div><div className="flex gap-2"><Radar className="size-4 shrink-0 text-primary" />建立首批 120 个潜客名单</div></div></div></div></div></div></div></section>
-    <section id="capabilities" className="section-padding"><div className="container"><SectionTitle eyebrow="Core capabilities" title="让增长动作，变成可复制的能力"/><div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-4">{[['商品与市场分析','看清市场机会与真实利润，减少试错成本',BarChart3,'深度洞察'],['海外客户发现','找到更匹配的行业买家，扩大有效客户池',Users,'精准获客'],['AI 营销触达','让每一次沟通更贴合客户与品牌语气',Mail,'高效转化'],['客户召回自动化','及时识别流失信号，把沉默客户带回来',BellRing,'持续成交']].map(([title,copy,Icon,label]) => <article key={title as string} className="feature-card"><div className="flex items-center justify-between"><span className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="size-5" /></span><span className="text-[10px] font-medium text-muted-foreground">{label as string}</span></div><h3 className="mt-8 text-lg font-semibold">{title as string}</h3><p className="mt-3 text-sm leading-6 text-muted-foreground">{copy as string}</p><ArrowRight className="mt-7 size-4 text-primary transition-transform group-hover:translate-x-1" /></article>)}</div></div></section>
-    <section id="scenes" className="section-padding bg-navy text-white"><div className="container"><div className="max-w-xl"><span className="eyebrow eyebrow-dark">Built for growth teams</span><h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">不论你从哪里出发，都能找到增长下一步</h2></div><div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">{[['跨境电商卖家','快速验证新品，找到更有潜力的海外市场',Globe2],['外贸工厂','让优质产能连接更多精准买家',PackageSearch],['品牌出海团队','统一管理品牌触达与客户关系',Sparkles],['外贸服务商','为客户提供可量化的出海增长方案',Users]].map(([title,copy,Icon]) => <div key={title as string} className="dark-feature"><Icon className="size-5 text-cyan-300" /><h3 className="mt-8 font-semibold">{title as string}</h3><p className="mt-2 text-sm leading-6 text-slate-300">{copy as string}</p></div>)}</div></div></section>
-    <section className="section-padding"><div className="container"><div className="platform-panel"><div className="max-w-xl"><span className="eyebrow">One workspace, everywhere</span><h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">一个工作台，多端同步</h2><p className="mt-5 leading-7 text-muted-foreground">无论在办公室、路上还是客户现场，随时查看分析结果、跟进客户动作，不错过每一个增长机会。</p></div><div className="mt-10 grid grid-cols-3 gap-5 text-center md:mt-0 md:grid-cols-6">{[['Web',Monitor],['微信小程序',Globe2],['Android',Smartphone],['iOS',Smartphone],['macOS',Laptop],['Windows',Monitor]].map(([name,Icon]) => <div key={name as string} className="flex flex-col items-center gap-3 text-xs text-muted-foreground"><span className="flex size-12 items-center justify-center rounded-2xl border border-border bg-background text-primary"><Icon className="size-5" /></span>{name as string}</div>)}</div></div></div></section>
-    <section className="border-y border-border bg-muted/30"><div className="container grid gap-4 py-8 sm:grid-cols-2 lg:grid-cols-4">{[['国内云基础设施',ShieldCheck],['数据集中管理',Radar],['操作记录可追溯',RefreshCw],['AI 分析与文案生成',Sparkles]].map(([text,Icon]) => <div key={text as string} className="flex items-center gap-3 text-sm font-medium"><Icon className="size-4 text-primary" />{text as string}</div>)}</div></section>
-    <section id="faq" className="section-padding"><div className="container grid gap-12 md:grid-cols-[.7fr_1.3fr]"><div><span className="eyebrow">Questions, answered</span><h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">还有问题？<br />我们来回答。</h2><p className="mt-5 leading-7 text-muted-foreground">如果你还想了解更多，欢迎联系我们预约一次产品演示。</p><Button className="mt-7" variant="outline" onClick={() => scrollTo('contact')}>预约演示 <ArrowRight data-icon="inline-end" /></Button></div><div className="flex flex-col border-t border-border">{faqs.map(([question, answer], i) => <div key={question} className="border-b border-border"><button className="flex w-full items-center justify-between gap-4 py-5 text-left text-sm font-medium" onClick={() => setOpenFaq(openFaq === i ? null : i)} aria-expanded={openFaq === i}><span>{question}</span><ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${openFaq === i ? 'rotate-180' : ''}`} /></button>{openFaq === i && <p className="pb-5 pr-8 text-sm leading-6 text-muted-foreground">{answer}</p>}</div>)}</div></div></section>
-    <section id="contact" className="section-padding"><div className="container"><div className="cta-panel"><div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center gap-5 text-center"><span className="eyebrow eyebrow-dark">Start your next market</span><h2 className="text-balance text-3xl font-semibold tracking-tight text-white md:text-5xl">让每一个商品，都找到更合适的海外市场</h2><p className="text-slate-300">从第一次分析到客户召回，在一个工作台完成。</p><div className="flex flex-wrap justify-center gap-3"><Button size="lg" className="bg-white text-primary hover:bg-white/90" onClick={() => alert('感谢关注，体验申请已记录。')}>免费体验 <ArrowRight data-icon="inline-end" /></Button><Button size="lg" variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white" onClick={() => alert('我们会尽快与您联系。')}>预约演示</Button></div></div></div></div></section>
-    <footer className="border-t border-border"><div className="container grid gap-10 py-12 md:grid-cols-[1.5fr_1fr_1fr_1fr]"><div><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Globe2 className="size-4" /></span><span className="font-semibold">Pick<span className="text-primary">Global</span></span></div><p className="mt-4 max-w-xs text-sm leading-6 text-muted-foreground">选品分析与出海获客全链路闭环。</p></div><div><h3 className="text-sm font-semibold">产品</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><button className="text-left hover:text-foreground" onClick={() => scrollTo('capabilities')}>产品能力</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('workflow')}>工作流程</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('analysis')}>分析报告</button></div></div><div><h3 className="text-sm font-semibold">资源</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><button className="text-left hover:text-foreground" onClick={() => scrollTo('faq')}>常见问题</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('scenes')}>应用场景</button><button className="text-left hover:text-foreground" onClick={() => scrollTo('contact')}>预约演示</button></div></div><div><h3 className="text-sm font-semibold">公司</h3><div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground"><span>pickgrobal.mornscience.top</span><span>hello@pickglobal.example</span><span>中国 · 美国</span></div></div></div><div className="container flex flex-col gap-2 border-t border-border py-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between"><span>© 2026 PickGlobal. 保留所有权利。</span><span>首页展示数据均为样例数据</span></div></footer>
-  </main>
+  const [chartReady, setChartReady] = useState(false)
+  const [client, setClient] = useState<ClientInfo | null>(null)
+  const [signedIn, setSignedIn] = useState(false)
+  const [accountName, setAccountName] = useState('')
+  const [loginHint, setLoginHint] = useState('')
+  const [loginNext, setLoginNext] = useState('/workspace/acquire')
+  useEffect(() => {
+    setChartReady(true)
+    setClient(readClient())
+    if (!accessToken()) return
+    setSignedIn(true)
+    api<{ user: { display_name?: string; username?: string; email?: string } }>('/users/me')
+      .then((me) => setAccountName(me.user.display_name || me.user.username || me.user.email || '已登录'))
+      .catch(() => {
+        setSignedIn(Boolean(accessToken()))
+        setAccountName((current) => current || '已登录')
+      })
+  }, [])
+  function openChannel(code: string, id: string) {
+    const next = `/workspace/acquire/${id}`
+    if (accessToken()) {
+      router.push(next)
+      return
+    }
+    setLoginNext(next)
+    setLoginHint(`请先登录。登录后会进入 ${code}。`)
+    document.getElementById('path-b')?.scrollIntoView({ behavior: 'smooth' })
+  }
+  function signOut() {
+    void logoutSession().then(() => {
+      setSignedIn(false)
+      setAccountName('')
+    })
+  }
+  const scrollTo = (id: string) => {
+    setMenuOpen(false)
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  return (
+    <main className="min-h-screen overflow-x-clip pb-24 md:pb-0">
+      <header className="site-header sticky top-0 z-50 bg-background/90 backdrop-blur-md">
+        <div className="container flex h-14 items-center justify-between md:h-16">
+          <a href="#top" className="flex items-center gap-2" aria-label="PickGlobal 首页">
+            <span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Globe2 className="size-[18px]" /></span>
+            <span className="text-lg font-semibold tracking-tight">Pick<span className="text-primary">Global</span></span>
+          </a>
+          <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
+            <button onClick={() => scrollTo('path-a')}>选品分析</button>
+            <button onClick={() => scrollTo('path-b')}>获客九路</button>
+            <button onClick={() => scrollTo('scenes')}>应用场景</button>
+            <button onClick={() => scrollTo('faq')}>常见问题</button>
+          </nav>
+          <div className="hidden items-center gap-3 md:flex">
+            {signedIn ? (
+              <>
+                <Link href="/workspace" className={buttonVariants({ variant: 'ghost' })}>工作台</Link>
+                <UserMenu name={accountName || '账号'} onLogout={signOut} />
+              </>
+            ) : (
+              <>
+                <Link href="/login" className={buttonVariants({ variant: 'ghost' })}>登录</Link>
+                <Link href="/register" className={buttonVariants()}>免费体验 <ArrowRight data-icon="inline-end" /></Link>
+              </>
+            )}
+            <GuideVideo />
+          </div>
+          <div className="flex items-center gap-2 md:hidden">
+            {signedIn && <UserMenu name={accountName || '账号'} onLogout={signOut} />}
+            <GuideVideo />
+            <Button variant="ghost" size="icon" className="size-11" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? '关闭菜单' : '打开菜单'}>{menuOpen ? <X /> : <Menu />}</Button>
+          </div>
+        </div>
+        {menuOpen && (
+          <div className="max-h-[calc(100dvh-8.5rem-env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain border-t border-border bg-background px-5 py-5 md:hidden">
+            <nav className="flex flex-col gap-1 text-base">
+              <button className="min-h-11 text-left" onClick={() => scrollTo('path-a')}>选品分析</button>
+              <button className="min-h-11 text-left" onClick={() => scrollTo('path-b')}>获客九路</button>
+              <button className="min-h-11 text-left" onClick={() => scrollTo('scenes')}>应用场景</button>
+              <button className="min-h-11 text-left" onClick={() => scrollTo('faq')}>常见问题</button>
+              {signedIn ? (
+                <>
+                  {accountName && <p className="min-h-11 text-left text-muted-foreground">{accountName}</p>}
+                  <Link href="/workspace" className="min-h-11 text-left">工作台</Link>
+                  <button type="button" className="min-h-11 text-left" onClick={signOut}>退出</button>
+                </>
+              ) : (
+                <>
+                  <Link href="/login" className="min-h-11 text-left">登录</Link>
+                  <Link href="/register" className={buttonVariants({ className: 'mt-2 min-h-12' })}>免费体验</Link>
+                </>
+              )}
+            </nav>
+          </div>
+        )}
+      </header>
+
+      <section id="top" className="hero-grid relative">
+        <div className="container grid items-center gap-6 py-8 md:grid-cols-[.95fr_1.05fr] md:gap-10 md:py-12">
+          <div className="relative z-10 flex flex-col items-start gap-4 md:gap-6">
+            <span className="eyebrow"><Sparkles className="size-3.5" /> Oversea Market Selling</span>
+            <h1 className="max-w-xl text-balance text-[1.7rem] font-semibold leading-[1.15] tracking-[-.03em] md:text-6xl md:leading-[1.1] md:tracking-[-.04em]">两条路径：先算清货，再帮你把客户找回来</h1>
+            <p className="max-w-lg text-pretty text-[15px] leading-6 text-muted-foreground md:text-lg md:leading-7">
+              <span className="md:hidden">先看清利润和风险，再把客户找回来。</span>
+              <span className="hidden md:inline">选品报告和九路获客，放在同一个工作台。</span>
+            </p>
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+              <Link href="/workspace/products" className={buttonVariants({ size: 'lg', className: 'min-h-12 w-full text-base sm:w-auto' })}>开始分析商品 <ArrowRight data-icon="inline-end" /></Link>
+              <Button size="lg" variant="outline" className="min-h-12 w-full text-base sm:w-auto" onClick={() => scrollTo('path-b')}>查看获客九路</Button>
+            </div>
+            <div className="grid w-full grid-cols-2 gap-2 md:hidden" aria-label="样例指标">
+              {[['机会分', '80'], ['利润率', '49.9%'], ['税费', '可复核'], ['风险', '低']].map(([label, value]) => (
+                <div key={label} className="soft-card px-2 py-2.5"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground"><MapPin className="size-3.5 shrink-0 text-emerald-600" /> 首期支持中国与美国市场</div>
+          </div>
+          <div className="dashboard-shell animate-float hidden md:block" aria-label="PickGlobal 工作台演示">
+            <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 md:px-5">
+              <div className="flex items-center gap-2"><div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Globe2 className="size-4" /></div><span className="text-xs font-semibold">选品与获客工作台</span></div>
+              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">演示数据</span>
+            </div>
+            <div className="grid gap-3 p-4 md:grid-cols-2 md:p-5">
+              {[['机会分', '80'], ['利润率', '49.9%'], ['税费', '可复核'], ['风险', '低']].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-muted/50 p-3"><p className="text-[10px] text-muted-foreground">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>
+              ))}
+              <div className="rounded-xl bg-muted/50 p-3 md:col-span-2">
+                <p className="text-xs font-semibold">九路线索与成交</p>
+                <p className="mt-2 text-[11px] leading-5 text-muted-foreground">电商 · 社交 · 展会 · 代理 · 大数据 · GEO · 内容 · 跨境 · RaaS。成交和召回都回到同一条获客路径。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <AdSlot placement="home_mid_banner" className="container my-4 max-md:my-3" />
+
+      <section id="library" className="section-padding bg-muted/30">
+        <div className="container max-w-3xl">
+          <SectionTitle eyebrow="Product library" title="商品库" copy="搜索已入库的商品，使用它生成分析报告，或删除这条记录。" />
+          <div className="mt-8">
+            <ProductLibrary />
+          </div>
+        </div>
+      </section>
+
+      <section id="path-a" className="section-padding">
+        <div className="container">
+          <SectionTitle eyebrow="Path A" title="选品与分析报告" copy="先算清利润和风险，再去获客。" />
+          <div className="mt-8 grid gap-4 md:grid-cols-4">
+            {pathA.map(([num, title, copy, Icon], index) => (
+              <div key={num as string} className="step-card relative">
+                <div className="mb-5 flex items-center justify-between"><span className="text-xs font-semibold text-primary">{num as string}</span><span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="size-4" /></span></div>
+                <h3 className="font-semibold">{title as string}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy as string}</p>
+                {index < 3 && <ChevronRight className="step-arrow" />}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="analysis" className="section-padding bg-muted/35">
+        <div className="container grid items-center gap-12 md:grid-cols-[.82fr_1.18fr]">
+          <div>
+            <span className="eyebrow">Auditable report</span>
+            <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">报告能复核，也能接着获客</h2>
+            <ul className="mt-7 flex flex-col gap-4">
+              {['金额用小数规则计算，并保存规则版本', '改了市场或成本，必须重算才出新报告', '一键获客会带上这份分析编号'].map((item) => (
+                <li key={item} className="flex items-start gap-3 text-sm"><span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check className="size-3" /></span>{item}</li>
+              ))}
+            </ul>
+            <Link href="/workspace/products" className={`${buttonVariants()} mt-7`}>打开选品分析</Link>
+          </div>
+          <div className="report-card">
+            <div className="flex gap-1 overflow-x-auto border-b border-border px-3 pt-3 md:px-5">
+              {['市场机会', '利润测算', '税务', '物流时效', '风险提示'].map((tab) => (
+                <button key={tab} onClick={() => setActiveTab(tab)} className={`report-tab ${activeTab === tab ? 'report-tab-active' : ''}`}>{tab}</button>
+              ))}
+            </div>
+            <div className="p-4 md:p-6">
+              <p className="text-xs text-muted-foreground">{activeTab} · 规则摘要</p>
+              <h3 className="mt-2 text-xl font-semibold">美国市场样本：利润率约 49.9%</h3>
+              <div className="mt-6 h-36">
+                {chartReady && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={marketData} layout="vertical" margin={{ left: 10, right: 8 }}>
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} width={40} />
+                      <Bar dataKey="value" fill="var(--primary)" radius={[0, 5, 5, 0]} barSize={10} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">首页图表是样例。工作台里的金额以规则引擎结果为准。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="path-b" className="section-padding">
+        <div className="container">
+          <SectionTitle eyebrow="Path B" title="九路获客，同一条成交与召回" copy="1–5 找客户，6–8 优化，9 是结果抽成。登录后进入对应一路。" />
+          {loginHint && (
+            <div className="mx-auto mt-8 flex max-w-2xl flex-wrap items-center justify-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-5 py-4 text-sm">
+              <p>{loginHint}</p>
+              <Link href={`/login?next=${encodeURIComponent(loginNext)}`} className={buttonVariants()}>去登录</Link>
+            </div>
+          )}
+          <div className="mt-8 flex flex-col gap-8">
+            {channelGroups.map((group) => (
+              <div key={group.title}>
+                <h3 className="text-sm font-semibold text-primary">{group.title}</h3>
+                <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {group.items.map(([code, id, title, copy]) => (
+                    <button key={code} type="button" className="feature-card !min-h-0 !w-full cursor-pointer !p-5 text-left" onClick={() => openChannel(code, id)}>
+                      <span className="text-sm font-semibold text-primary">{code}</span>
+                      <h3 className="mt-4 text-xl font-semibold">{title}</h3>
+                      <p className="mt-3 text-sm leading-7 text-muted-foreground">{copy}</p>
+                      <p className="mt-5 text-sm font-medium text-primary">{signedIn ? '进入这一路' : '登录后进入'}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8"><Link href="/workspace/acquire" className={buttonVariants()}>打开获客经营</Link></div>
+        </div>
+      </section>
+
+      <section id="scenes" className="section-padding bg-navy text-white">
+        <div className="container">
+          <div className="max-w-xl"><span className="eyebrow eyebrow-dark">Built for growth teams</span><h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">不论你从哪里出发，都能找到增长下一步</h2></div>
+          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[['跨境电商卖家', '先算清一款货，再按渠道找买家', Store], ['外贸工厂', '把产能和目标市场放进同一份报告', PackageSearch], ['品牌出海团队', '统一线索、批准和召回', Sparkles], ['外贸服务商', '用可复核的利润和获客率交付方案', Users]].map(([title, copy, Icon]) => (
+              <div key={title as string} className="dark-feature"><Icon className="size-5 text-cyan-300" /><h3 className="mt-8 font-semibold">{title as string}</h3><p className="mt-2 text-sm leading-6 text-slate-300">{copy as string}</p></div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="devices" className="section-padding">
+        <div className="container">
+          <div className="platform-panel">
+            <div className="max-w-xl">
+              <span className="eyebrow">One workspace, everywhere</span>
+              <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">一个工作台，多端同步</h2>
+              <p className="mt-5 leading-7 text-muted-foreground">手机看任务，iPad 读报告，小程序做分享。Web、Mac、Windows 和 Linux 打开同一份工作台。</p>
+              {client && <p className="mt-3 text-sm font-medium text-foreground">{client.surface === 'phone' || client.surface === 'miniprogram' ? `已按${client.label}排版，从底部开始分析。` : client.surface === 'ipad' ? '已按 iPad 排版，报告和列表可以并排看。' : '安装包稍后开放，现在直接用网页。'}</p>}
+            </div>
+            <div className="mt-8 grid grid-cols-3 gap-4 text-center sm:grid-cols-4 lg:mt-0 lg:grid-cols-7">
+              {[['Web', Monitor], ['手机', Smartphone], ['iPad', Tablet], ['微信小程序', Globe2], ['Mac', Laptop], ['Windows', Monitor], ['Linux', Terminal]].map(([name, Icon]) => (
+                <div key={name as string} className={`flex flex-col items-center gap-2 text-xs ${client?.label === name ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}><span className={`flex size-12 items-center justify-center rounded-2xl border bg-background text-primary ${client?.label === name ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}><Icon className="size-5" /></span>{name as string}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="trust" className="bg-muted/30">
+        <div className="container grid gap-4 py-8 sm:grid-cols-2 lg:grid-cols-4">
+          {[['国内云基础设施', ShieldCheck], ['数据集中管理', Radar], ['操作记录可追溯', RefreshCw], ['AI 分析与文案生成', Sparkles]].map(([text, Icon]) => (
+            <div key={text as string} className="flex items-center gap-3 text-sm font-medium"><Icon className="size-4 text-primary" />{text as string}</div>
+          ))}
+        </div>
+      </section>
+
+      <section id="faq" className="pt-8 pb-3">
+        <div className="container grid items-start gap-6 md:grid-cols-[.7fr_1.3fr]">
+          <div>
+            <span className="eyebrow">Questions, answered</span>
+            <h2 className="mt-4 text-balance text-3xl font-semibold tracking-tight md:text-5xl">还有问题？<br />我们来回答。</h2>
+            <Button className="mt-7" variant="outline" onClick={() => scrollTo('contact')}>预约演示 <ArrowRight data-icon="inline-end" /></Button>
+          </div>
+          <div className="soft-card overflow-hidden px-4">
+            {faqs.map(([question, answer], index) => (
+              <div key={question} className={index > 0 ? 'border-t border-border' : ''}>
+                <button className="flex w-full items-center justify-between gap-4 py-4 text-left text-sm font-medium" onClick={() => setOpenFaq(openFaq === index ? null : index)} aria-expanded={openFaq === index}>
+                  <span>{question}</span>
+                  <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${openFaq === index ? 'rotate-180' : ''}`} />
+                </button>
+                {openFaq === index && <p className="pb-4 text-sm leading-6 text-muted-foreground">{answer}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <AdSlot placement="pricing_banner" className="container mb-2" />
+
+      <section id="contact" className="pb-8 pt-1">
+        <div className="container">
+          <div className="cta-panel">
+            <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center gap-5 text-center">
+              <span className="eyebrow eyebrow-dark">Start your next market</span>
+              <h2 className="text-balance text-3xl font-semibold tracking-tight text-white md:text-5xl">让每一个商品，都找到更合适的海外市场</h2>
+              <p className="text-slate-300">从第一次分析到客户召回，在一个工作台完成。</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Link href={signedIn ? '/workspace' : '/register'} className={buttonVariants({ size: 'lg', className: '!h-11 !border-transparent !bg-white !px-5 !text-slate-950 hover:!bg-slate-100' })}>{signedIn ? '进入工作台' : '免费体验'} <ArrowRight data-icon="inline-end" /></Link>
+                <Link href="/workspace/acquire" className={buttonVariants({ size: 'lg', variant: 'outline', className: '!h-11 !border-cyan-200 !bg-cyan-400/15 !px-5 !text-cyan-50 hover:!bg-cyan-300/25 hover:!text-white' })}>预约演示</Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-border">
+        <div className="container py-6">
+          <div className="grid items-start gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Globe2 className="size-4" /></span><span className="font-semibold">Pick<span className="text-primary">Global</span></span></div>
+              <p className="mt-3 max-w-xs text-sm leading-6 text-muted-foreground">选品分析与出海获客全链路闭环。</p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">产品</h3>
+              <div className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('path-a')}>选品分析</button>
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('path-b')}>获客九路</button>
+                <Link href="/workspace" className="hover:text-foreground">工作台</Link>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">资源</h3>
+              <div className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('faq')}>常见问题</button>
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('scenes')}>应用场景</button>
+                <button className="text-left hover:text-foreground" onClick={() => scrollTo('contact')}>预约演示</button>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">公司联系</h3>
+              <div className="mt-3 flex flex-col gap-1.5 text-sm text-muted-foreground">
+                <p className="text-foreground">晨佑科学（深圳）有限公司</p>
+                <a href="mailto:pickglobal@yeah.net" className="hover:text-foreground">pickglobal@yeah.net</a>
+                <a href="mailto:mornscience@sina.cn" className="hover:text-foreground">mornscience@sina.cn</a>
+              </div>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-baseline sm:gap-4">
+            <h3 className="shrink-0 text-sm font-semibold">合同</h3>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
+              {docIds.map((id) => (
+                <Link key={id} href={`/legal/${id}`} className="hover:text-foreground">{legalDocs[id].title}</Link>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="container flex flex-col gap-2 border-t border-border py-3 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between"><span>© 2026 PickGlobal. 保留所有权利。</span><span>首页展示数据均为样例数据</span></div>
+      </footer>
+      <div className="phone-dock md:hidden">
+        <Link href="/workspace/products" className={buttonVariants({ className: 'min-h-12 flex-1 text-base' })}>开始分析</Link>
+        <Link href="/workspace/acquire" className={buttonVariants({ variant: 'outline', className: 'min-h-12 px-4 text-base' })}>获客</Link>
+      </div>
+    </main>
+  )
 }

@@ -1,0 +1,29 @@
+{
+  "id": "s2-v1.0.0",
+  "shape": "modular_monolith",
+  "image": "pickglobal/api:1.0.0",
+  "runtime": "fastapi",
+  "worker": "same_image_different_command",
+  "domains": [
+    "user",
+    "payment",
+    "product",
+    "selection",
+    "report",
+    "acquisition",
+    "lead",
+    "campaign",
+    "recall",
+    "ai",
+    "geo_seo",
+    "content",
+    "digital_human",
+    "channel",
+    "raas",
+    "analytics"
+  ],
+  "degrade": {
+    "ai": "rules",
+    "email": "in_app"
+  }
+}

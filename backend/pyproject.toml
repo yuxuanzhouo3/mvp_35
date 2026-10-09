@@ -1,0 +1,40 @@
+[project]
+name = "pickglobal-api"
+version = "1.0"
+description = "PickGlobal API: product analysis reports and nine-channel acquisition"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "httpx>=0.27",
+  "pydantic>=2",
+  "pydantic-settings>=2",
+  "uvicorn>=0.32",
+  "cryptography>=43",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+postgres = ["psycopg[binary]>=3.2"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+pythonpath = [".", ".."]
+testpaths = ["../test"]
+markers = [
+  "mvp: MVP gate",
+  "svp: SVP gate",
+  "business: Business gate",
+  "speedup1: Speed up 1",
+  "speedup2: Speed up 2",
+  "speedup3: Speed up 3",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*", "config*", "db*", "algorithm*"]
+
+[tool.setuptools.package-data]
+db = ["sql/*/*.sql"]

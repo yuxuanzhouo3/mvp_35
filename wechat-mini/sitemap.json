@@ -1,0 +1,9 @@
+{
+  "desc": "PickGlobal seller workspace pages are allowed for indexing.",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

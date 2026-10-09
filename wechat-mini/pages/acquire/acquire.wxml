@@ -1,0 +1,12 @@
+<view class="page">
+  <text class="eyebrow">路径 B · 九路获客</text>
+  <view class="h1">线索、触达、成交与召回</view>
+  <view class="copy">点开一路，完成发现、线索、触达、冷启和召回。九路写入同一线索池。</view>
+  <view class="grid2">
+    <view class="tile" wx:for="{{channels}}" wx:key="id" data-id="{{item.id}}" bindtap="openChannel">
+      <view class="code">{{item.code}}</view>
+      <view class="name">{{item.name}}</view>
+      <view class="muted">{{item.copy}}</view>
+    </view>
+  </view>
+</view>
