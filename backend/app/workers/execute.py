@@ -6,20 +6,22 @@ from config.settings import Settings
 from db.store import DocumentStore
 
 from algorithm.feeds import prepare_market
+from algorithm.lead_feeds import discover
 from algorithm.product_pricer import PRODUCT_PRICER, compare_product
 from algorithm.sources import DOMESTIC_SOURCE, OVERSEAS_SOURCE
 from app.core.errors import AppError
 from app.core.timeutil import iso, parse_iso, utcnow
 from app.modules.events import emit
 from app.services.common import (
+    apply_market_change,
     base_doc,
-    mock_leads,
     new_id,
     normalize_sku,
     product_from_body,
     quota_finish,
     quota_reserve,
 )
+from app.services.trade_route import market_fields
 from app.services.profit import calculate
 
 
@@ -135,7 +137,8 @@ def _import(store: DocumentStore, settings: Settings, job: dict) -> dict:
     imported, failed, ids, errors, quotes = 0, 0, [], [], []
     for index, row in enumerate(reader, start=2):
         try:
-            fields = product_from_body(row, source="csv")
+            overlay = {key: job["payload"][key] for key in ("origin_country", "target_market", "route", "tax_regime") if job["payload"].get(key)}
+            fields = product_from_body({**row, **overlay}, source="csv")
             existing = store.find_global(
                 "products", tenant_id=job["tenant_id"], normalized_sku=fields["normalized_sku"]
             )
@@ -179,6 +182,10 @@ def _analysis(store: DocumentStore, settings: Settings, job: dict) -> dict:
     product = store.get("products", job["payload"]["product_id"], job["tenant_id"])
     if not product:
         raise AppError("PRODUCT_NOT_FOUND", "商品不存在")
+    route_id = (job.get("payload") or {}).get("route")
+    if route_id:
+        apply_market_change(product, market_fields(route_id))
+        store.put("products", product)
     metrics = calculate(product, settings.rules_version)
     if settings.hunyuan_enabled:
         metrics["explanation_model"] = "rules"
@@ -252,16 +259,30 @@ def _analysis(store: DocumentStore, settings: Settings, job: dict) -> dict:
 
 def _discovery(store: DocumentStore, settings: Settings, job: dict) -> dict:
     payload = job["payload"]
-    rows = mock_leads(payload["channel"], payload.get("platform"), payload.get("query") or "", payload.get("seed_analysis_id"))
+    rows, provider = discover(store, settings, payload, job["tenant_id"])
     inserted, updated, ids = 0, 0, []
     for row in rows:
         dedupe_key = f"{row['source_channel']}:{row['company'].strip().lower()}:{row['market']}"
-        existing = store.find_global("leads", tenant_id=job["tenant_id"], dedupe_key=dedupe_key)
+        existing = None
+        if row.get("external_id"):
+            existing = store.find_global(
+                "leads",
+                tenant_id=job["tenant_id"],
+                platform=row["platform"],
+                external_id=row["external_id"],
+            )
+        if not existing:
+            existing = store.find_global("leads", tenant_id=job["tenant_id"], dedupe_key=dedupe_key)
         if existing and not existing.get("deleted_at"):
             store.touch(
                 "leads",
                 existing["id"],
-                {"quality_score": row["quality_score"], "email": row["email"], "platform": row["platform"]},
+                {
+                    "quality_score": row["quality_score"],
+                    "email": row["email"],
+                    "platform": row["platform"],
+                    "external_id": row.get("external_id") or existing.get("external_id") or "",
+                },
             )
             updated += 1
             ids.append(existing["id"])
@@ -283,6 +304,7 @@ def _discovery(store: DocumentStore, settings: Settings, job: dict) -> dict:
             status="new",
             exclude_from_ar=row["exclude_from_ar"],
             note=row["note"],
+            external_id=row.get("external_id") or "",
             opened_at=None,
             replied_at=None,
             won_at=None,
@@ -309,6 +331,7 @@ def _discovery(store: DocumentStore, settings: Settings, job: dict) -> dict:
         "inserted": inserted,
         "updated": updated,
         "lead_ids": ids,
+        "provider": provider,
         "finished_at": iso(),
         "steps": [{"key": "normalize", "status": "succeeded"}, {"key": "score", "status": "succeeded"}],
     }

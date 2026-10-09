@@ -7,6 +7,7 @@ from algorithm.selection_assist import rank_query
 from algorithm.sources import CATALOG_SOURCE, DOMESTIC_QUOTES, DOMESTIC_SOURCE, OVERSEAS_QUOTES, OVERSEAS_SOURCE, query_quotes
 from app.api.deps import bind, respond
 from app.services.common import product_from_body, search_catalog
+from app.services.trade_route import market_fields, resolve_route
 
 router = APIRouter(prefix="/api/v1")
 
@@ -29,6 +30,7 @@ class PricerIn(BaseModel):
     cost_currency: str | None = None
     price_currency: str | None = None
     fx_usd_cny: str | None = None
+    route_id: str | None = None
 
 
 class SelectionIn(BaseModel):
@@ -80,7 +82,8 @@ def catalog_source(request: Request, q: str = "", authorization: str | None = He
 def run_product_pricer(request: Request, body: PricerIn, authorization: str | None = Header(default=None)):
     settings, _store, _prof = bind(request, authorization)
     if body.csv is not None:
-        return respond(request, compare_csv(body.csv, settings.rules_version, settings))
+        spec = resolve_route(body.route_id)
+        return respond(request, compare_csv(body.csv, settings.rules_version, settings, market_fields(body.route_id) if spec else None))
     fields = product_from_body(body.model_dump(exclude_none=True), source="pricer")
     fields, overseas, feed = prepare_market(fields, settings)
     result = compare_product(fields, settings.rules_version, overseas_quotes=overseas, feed=feed)
@@ -92,4 +95,4 @@ def run_product_pricer(request: Request, body: PricerIn, authorization: str | No
 @router.post("/algorithms/selection-assist")
 def run_selection_assist(request: Request, body: SelectionIn, authorization: str | None = Header(default=None)):
     settings, _store, _prof = bind(request, authorization)
-    return respond(request, rank_query(body.q, settings.rules_version, body.target_market))
+    return respond(request, rank_query(body.q, settings.rules_version, body.target_market, settings))

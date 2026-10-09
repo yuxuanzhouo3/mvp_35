@@ -1,0 +1,51 @@
+<view class="page">
+  <view class="brand">
+    <view class="mark">P</view>
+    <text class="brand-name">Pick<text class="brand-accent">Global</text></text>
+  </view>
+
+  <block wx:if="{{!signedIn}}">
+    <text class="eyebrow">OVERSEA MARKET SELLING</text>
+    <view class="h1">两条路径：先算清货，再把客户找回来</view>
+    <view class="copy">选品分析报告，和九路获客成交召回，放在这个小程序里。</view>
+    <view class="grid2">
+      <view class="metric" wx:for="{{samples}}" wx:key="label">
+        <view class="k">{{item.label}}</view>
+        <view class="v">{{item.value}}</view>
+      </view>
+    </view>
+    <button class="wx-btn" bindtap="goLogin">
+      <image class="wx-logo" src="/assets/wechat.png" mode="aspectFit" />
+      <text>微信登录</text>
+    </button>
+    <button class="btn-line" bindtap="goLogin">账号登录</button>
+  </block>
+
+  <block wx:else>
+    <text class="eyebrow">30 天 · 租户口径</text>
+    <view class="h1">八率五时效</view>
+    <view class="copy">首屏是四率加北星获客率。还没有本租户成交时，卡片显示样例。</view>
+    <view class="warn" wx:if="{{redline}}">{{redline}}</view>
+    <view class="err" wx:if="{{error}}">{{error}}</view>
+    <view class="grid2">
+      <view class="metric {{item.star ? 'star' : ''}}" wx:for="{{rates}}" wx:key="label">
+        <view class="k">{{item.label}}{{item.sampled ? ' · 样例' : ''}}</view>
+        <view class="v">{{item.value}}</view>
+        <view class="k">目标 {{item.target}}{{item.star ? ' · 北星' : ''}}</view>
+      </view>
+    </view>
+    <view class="card">
+      <view class="h2">五时效</view>
+      <view class="item" wx:for="{{timings}}" wx:key="label">
+        <view class="k">{{item.label}}</view>
+        <view class="v">{{item.value}}</view>
+        <view class="k">目标 {{item.target}}</view>
+      </view>
+      <view class="warn" wx:if="{{alert}}">激活或召回 P95 超过 72 小时。</view>
+    </view>
+    <view class="muted">{{footer}}</view>
+    <button class="btn" bindtap="goProducts">去选品分析</button>
+    <button class="btn-line" bindtap="goAcquire">去获客经营</button>
+    <button class="btn-line" open-type="share">分享给同事</button>
+  </block>
+</view>

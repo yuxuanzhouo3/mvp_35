@@ -11,6 +11,7 @@ from app.core.errors import AppError
 from app.services.common import search_catalog
 from app.services.profit import RULES_VERSION, calculate
 
+from algorithm.shelf import cached_collect, remember_shelf
 from algorithm.sources import CATALOG_SOURCE
 
 SELECTION_ASSIST = "selection-assist"
@@ -73,18 +74,61 @@ def rank_items(items: list[dict], rules_version: str = RULES_VERSION) -> dict:
     }
 
 
-def rank_query(query: str, rules_version: str = RULES_VERSION, target_market: str | None = None) -> dict:
-    items = search_catalog(query)
+def rank_query(
+    query: str,
+    rules_version: str = RULES_VERSION,
+    target_market: str | None = None,
+    settings=None,
+    *,
+    refresh_after: int = 3600,
+    force: bool = False,
+    premium: bool = False,
+    manual_left: int = 0,
+) -> dict:
+    market = target_market or "US"
+    live: list[dict] = []
+    platforms: list[dict] = []
+    cache = {"fresh": True, "at": None}
+    if settings is not None:
+        live, platforms, cache = cached_collect(query, settings, market, interval=refresh_after, force=force)
+    if live:
+        items = live
+        provider = "live"
+        remember_shelf(items)
+    else:
+        items = search_catalog(query)
+        provider = "local-book"
     if target_market:
         regime = {"US": "cn_us", "HK": "cn_hk", "AU": "cn_au", "CN": "domestic"}.get(target_market, "cn_us")
         items = [
             {**item, "target_market": target_market, "tax_regime": regime, "route": f"CN-{target_market}"}
             for item in items
         ]
-    return rank_items(items, rules_version)
+    ranked = rank_items(items, rules_version)
+    ranked["sources"]["provider"] = provider
+    ranked["sources"]["platforms"] = platforms
+    ranked["sources"]["refresh"] = {
+        "interval_seconds": refresh_after,
+        "premium": premium,
+        "manual_left": manual_left,
+        "fresh": cache["fresh"],
+    }
+    return ranked
 
 
-def catalog_payload(query: str, algorithm: str | None = None, rules_version: str = RULES_VERSION) -> dict:
+def catalog_payload(
+    query: str,
+    algorithm: str | None = None,
+    rules_version: str = RULES_VERSION,
+    settings=None,
+    target_market: str | None = None,
+    route: str | None = None,
+    *,
+    refresh_after: int = 3600,
+    force: bool = False,
+    premium: bool = False,
+    manual_left: int = 0,
+) -> dict:
     if algorithm and algorithm != SELECTION_ASSIST:
         raise AppError(
             "UNKNOWN_ALGORITHM",
@@ -92,5 +136,20 @@ def catalog_payload(query: str, algorithm: str | None = None, rules_version: str
             details={"algorithm": algorithm, "expected": SELECTION_ASSIST},
         )
     if algorithm == SELECTION_ASSIST:
-        return rank_query(query, rules_version)
+        ranked = rank_query(
+            query,
+            rules_version,
+            target_market,
+            settings,
+            refresh_after=refresh_after,
+            force=force,
+            premium=premium,
+            manual_left=manual_left,
+        )
+        if route:
+            from app.services.trade_route import market_fields
+
+            fields = market_fields(route)
+            ranked["items"] = [{**item, **fields} for item in ranked["items"]]
+        return ranked
     return {"items": search_catalog(query)}

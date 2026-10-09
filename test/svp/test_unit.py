@@ -161,6 +161,26 @@ def test_sql_up_and_down_cover_the_same_tables():
     assert "leads_tenant_email" in up
 
 
+def test_middle_average_drops_both_tails_and_demo_users():
+    from decimal import Decimal
+
+    from app.services.metrics import _invalid_reason, middle_band, middle_mean
+
+    assert middle_band([1, 2, 3, 4, 5, 6, 7, 8]) == [3, 4, 5, 6]
+    assert middle_band([1, 2, 3]) == [2]
+    assert middle_mean([Decimal(str(item)) for item in range(1, 9)]) == Decimal("4.5")
+    from app.services.metrics import percentile_band
+
+    wide = percentile_band(list(range(1, 11)), 0.1, 0.9)
+    tight = percentile_band(list(range(1, 11)), 0.3, 0.7)
+    assert len(tight) < len(wide)
+    assert percentile_band([1, 2], 0.3, 0.7) == [1, 2]
+    assert _invalid_reason({"status": "disabled", "tenant_id": "t"}) == "inactive"
+    assert _invalid_reason({"status": "active", "email": "a@example.com", "tenant_id": "t"}) == "example"
+    assert _invalid_reason({"status": "active", "cloudbase_user_id": "demo", "tenant_id": "t"}) == "demo"
+    assert _invalid_reason({"status": "active", "email": "seller@shop.test", "tenant_id": "t", "cloudbase_user_id": "usr"}) is None
+
+
 def test_empty_dashboard_denominator_is_blank(tmp_path):
     store = DocumentStore(tmp_path / "store.json")
     snap = snapshot(store, "tenant_missing", Settings(), 30)
@@ -212,14 +232,80 @@ def test_sms_quota_warns_after_five_sends(tmp_path, monkeypatch):
     store.touch("users", user["id"], {"phone": "+8618800001111"})
     monkeypatch.setattr("app.modules.messages.deliver_code", lambda *args, **kwargs: "sms")
     last = {}
-    for _ in range(5):
+    for _ in range(9):
         last = send_login_code(store, settings, email=None, phone="18800001111")
         assert last["sms_quota_warning"] is False
-    assert last["sms_sent_today"] == 5
-    sixth = send_login_code(store, settings, email=None, phone="18800001111")
-    assert sixth["sms_sent_today"] == 6
-    assert sixth["sms_daily_cap"] == 10
-    assert sixth["sms_quota_warning"] is True
+    assert last["sms_sent_today"] == 9
+    tenth = send_login_code(store, settings, email=None, phone="18800001111")
+    assert tenth["sms_sent_today"] == 10
+    assert tenth["sms_daily_cap"] == 10
+    assert tenth["sms_quota_warning"] is True
+
+
+def test_qichacha_search_replaces_demo_leads(monkeypatch):
+    from algorithm.lead_feeds import discover
+
+    def fake_get(url, params=None, headers=None):
+        assert "FuzzySearch" in url
+        assert params["searchKey"] == "北辰"
+        assert headers["Token"]
+        return {"Result": [{"Name": "北辰贸易有限公司", "OperName": "张三", "CreditCode": "91310000MA1"}]}
+
+    monkeypatch.setattr("algorithm.lead_feeds._get", fake_get)
+
+    class Keys:
+        qichacha_app_key = "app"
+        qichacha_secret_key = "sec"
+
+    rows, provider = discover(None, Keys(), {"channel": "enrichment", "platform": "qichacha", "query": "北辰"})
+    assert provider == "live"
+    assert rows[0]["company"] == "北辰贸易有限公司"
+    assert rows[0]["external_id"] == "91310000MA1"
+    assert rows[0]["market"] == "CN"
+    assert rows[0]["quality_score"] == 47
+
+    demo, demo_provider = discover(None, Keys(), {"channel": "expo", "platform": "canton_fair", "query": "杯"})
+    assert demo_provider == "mock"
+    assert len(demo) == 5
+
+
+def test_agency_push_needs_a_parent_then_discovery_uses_it(client):
+    denied = client.post(
+        "/api/v1/agency/leads",
+        headers={"Authorization": "Bearer demo"},
+        json={"platform": "agent_1", "items": [{"company": "甲公司"}]},
+    )
+    assert denied.status_code == 400
+    assert denied.json()["error"]["code"] == "AGENCY_PARENT_REQUIRED"
+    saved = client.post(
+        "/api/v1/agency/leads",
+        headers={"Authorization": "Bearer demo"},
+        json={
+            "platform": "agent_1",
+            "parent_channel_account_id": "parent-1",
+            "items": [{"company": "甲公司", "contact_name": "李", "email": "li@buyer.example", "market": "US", "external_id": "ext-1"}],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["data"]["saved"] == 1
+    created = client.post(
+        "/api/v1/lead-searches",
+        headers={"Authorization": "Bearer demo"},
+        json={"channel": "agency", "platform": "agent_1", "query": ""},
+    )
+    assert created.status_code == 202
+    job = client.get(f"/api/v1/jobs/{created.json()['data']['job_id']}", headers={"Authorization": "Bearer demo"}).json()["data"]
+    assert job["status"] == "succeeded"
+    assert job["result"]["provider"] == "live"
+    assert job["result"]["inserted"] == 1
+    again = client.post(
+        "/api/v1/lead-searches",
+        headers={"Authorization": "Bearer demo"},
+        json={"channel": "agency", "platform": "agent_1", "query": ""},
+    )
+    second = client.get(f"/api/v1/jobs/{again.json()['data']['job_id']}", headers={"Authorization": "Bearer demo"}).json()["data"]
+    assert second["result"]["inserted"] == 0
+    assert second["result"]["updated"] == 1
 
 
 def test_sms_daily_limit_is_explained():

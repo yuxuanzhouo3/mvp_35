@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from 'next'
+import { AppearanceBoot } from '@/components/appearance-boot'
 import { FingerScale } from '@/components/finger-scale'
+import { PageWatch } from '@/components/page-watch'
+import { APPEARANCE_BOOT } from '@/lib/appearance'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -20,5 +23,15 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-CN" className="bg-background"><body className="antialiased"><FingerScale />{children}</body></html>
+  return (
+    <html lang="zh-CN" className="bg-background" suppressHydrationWarning>
+      <body className="antialiased">
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT }} />
+        <AppearanceBoot />
+        <FingerScale />
+        <PageWatch />
+        {children}
+      </body>
+    </html>
+  )
 }

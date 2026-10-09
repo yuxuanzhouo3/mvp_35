@@ -7,10 +7,80 @@ from app.services.common import median, percentile, within_window
 from app.services.profit import rate
 
 
+RATE_TARGETS = {
+    "net_margin": ("N%", "0.1500", False),
+    "act_r": ("ActR", "0.5000", False),
+    "tr": ("TR", "0.9500", False),
+    "open_r": ("OR", "0.4000", False),
+    "ar": ("AR", "0.0800", True),
+    "qr": ("QR", "0.6000", False),
+    "act_r_cold": ("ActR_cold", "0.2500", False),
+    "rec_r": ("RecR", "0.1000", False),
+}
+TIMING_TARGETS = {"ana_t": 120, "lead_t": 180, "acq_t": 3 * 86400, "act_t": 86400, "rec_t": 86400}
+
+
 def _rate(numerator: int, denominator: int):
     if denominator <= 0:
         return None
     return rate(Decimal(numerator) / Decimal(denominator))
+
+
+def middle_band(values: list):
+    """Drop both tails, then average from the middle of the remaining users."""
+    ordered = sorted(values)
+    count = len(ordered)
+    if count >= 4:
+        cut = count // 4
+        return ordered[cut : count - cut]
+    if count == 3:
+        return ordered[1:2]
+    return ordered
+
+
+def middle_mean(values: list[Decimal]) -> Decimal | None:
+    band = middle_band(values)
+    if not band:
+        return None
+    return sum(band, Decimal("0")) / Decimal(len(band))
+
+
+KPI_BANDS = ((10, 90), (20, 80), (30, 70))
+
+
+def percentile_band(values: list, low: float, high: float) -> list:
+    """Keep values between the two percentiles. Fewer than four samples stay whole."""
+    ordered = sorted(values)
+    if len(ordered) < 4:
+        return ordered
+    scores = [float(item) for item in ordered]
+    floor = percentile(scores, low)
+    ceiling = percentile(scores, high)
+    if floor is None or ceiling is None:
+        return ordered
+    return [item for item in ordered if floor <= float(item) <= ceiling]
+
+
+def _mean(values: list[Decimal]) -> Decimal | None:
+    if not values:
+        return None
+    return sum(values, Decimal("0")) / Decimal(len(values))
+
+
+def _invalid_reason(user: dict) -> str | None:
+    if user.get("deleted_at"):
+        return "deleted"
+    if user.get("status") not in {None, "active"}:
+        return "inactive"
+    principal = str(user.get("cloudbase_user_id") or user.get("principal") or user.get("id") or "")
+    if principal.startswith("demo"):
+        return "demo"
+    email = str(user.get("email") or "")
+    if email.endswith("@example.com"):
+        return "example"
+    if not user.get("tenant_id"):
+        return "no_tenant"
+    return None
 
 
 def snapshot(store: DocumentStore, tenant_id: str, settings: Settings, window_days: int = 30) -> dict:
@@ -159,7 +229,7 @@ def snapshot(store: DocumentStore, tenant_id: str, settings: Settings, window_da
             "act_t": _p50(act_t),
             "rec_t": _p50(rec_t),
         },
-        "timing_targets_seconds": {"ana_t": 120, "lead_t": 180, "acq_t": 3 * 86400, "act_t": 86400, "rec_t": 86400},
+        "timing_targets_seconds": dict(TIMING_TARGETS),
         "alerts": {
             "act_t_p95_seconds": percentile(act_t, 0.95),
             "rec_t_p95_seconds": percentile(rec_t, 0.95),
@@ -179,7 +249,155 @@ def snapshot(store: DocumentStore, tenant_id: str, settings: Settings, window_da
             "audience": audience,
             "delivered_people": len(delivered_people),
         },
+        "inputs": {
+            "analyses": len(analyses),
+            "acquired": len(acquired),
+            "qualified": len(qualified),
+            "leads": len(leads),
+            "audience": audience,
+            "delivered_people": len(delivered_people),
+            "opened_people": len(opened_people),
+            "wins": wins,
+            "activations": len(activations),
+            "cold_hit": cold_hit,
+            "recall_delivered": recall_delivered,
+            "warm_hit": warm_hit,
+        },
     }
+
+
+def has_acquirers(snap: dict) -> bool:
+    counts = snap.get("counts") or {}
+    return bool(counts.get("acquired") or counts.get("delivered_people") or counts.get("audience"))
+
+
+def _measurable(snap: dict) -> bool:
+    if has_acquirers(snap):
+        return True
+    if any((snap.get("counts") or {}).get(key) for key in ("analyses", "leads")):
+        return True
+    return any(value is not None for value in (snap.get("timings_p50_seconds") or {}).values())
+
+
+def cohort_average(store: DocumentStore, settings: Settings, window_days: int = 30) -> dict:
+    users = store.query("users", limit=500)["items"]
+    included = []
+    excluded = 0
+    for user in users:
+        if _invalid_reason(user):
+            excluded += 1
+            continue
+        snap = snapshot(store, user["tenant_id"], settings, window_days)
+        if not _measurable(snap):
+            excluded += 1
+            continue
+        included.append(snap)
+
+    def averaged_rate(key: str):
+        code, target, north = RATE_TARGETS[key]
+        numbers = []
+        for snap in included:
+            raw = ((snap.get("rates") or {}).get(key) or {}).get("value")
+            if raw is not None:
+                numbers.append(Decimal(str(raw)))
+        mean = middle_mean(numbers)
+        row = {"code": code, "value": rate(mean) if mean is not None else None, "target": target}
+        if north:
+            row["north_star"] = True
+        return row
+
+    timings = {}
+    for key in TIMING_TARGETS:
+        numbers = [snap["timings_p50_seconds"][key] for snap in included if snap["timings_p50_seconds"].get(key) is not None]
+        band = middle_band(numbers)
+        timings[key] = round(sum(band) / len(band), 3) if band else None
+
+    def averaged_redline(key: str):
+        numbers = []
+        for snap in included:
+            raw = (snap.get("redlines") or {}).get(key)
+            if raw is not None:
+                numbers.append(Decimal(str(raw)))
+        mean = middle_mean(numbers)
+        return rate(mean) if mean is not None else None
+
+    delivery_rate = averaged_redline("delivery_rate")
+    bounce_rate = averaged_redline("bounce_rate")
+    complaint_rate = averaged_redline("complaint_rate")
+    tripped = False
+    if delivery_rate or bounce_rate or complaint_rate:
+        tripped = (
+            Decimal(delivery_rate or "1") < Decimal("0.95")
+            or Decimal(bounce_rate or "0") >= Decimal("0.015")
+            or Decimal(complaint_rate or "0") >= Decimal("0.001")
+        )
+    return {
+        "window_days": window_days,
+        "currency_note": "全站有效用户去掉两端后的中间平均。无效用户含演示、停用、删除、示例邮箱，以及窗口内没有报告和获客的账号。",
+        "display_source": "platform_average",
+        "rates": {key: averaged_rate(key) for key in RATE_TARGETS},
+        "timings_p50_seconds": timings,
+        "timing_targets_seconds": dict(TIMING_TARGETS),
+        "alerts": {"act_or_rec_p95_over_72h": any(snap.get("alerts", {}).get("act_or_rec_p95_over_72h") for snap in included)},
+        "redlines": {
+            "delivery_rate": delivery_rate,
+            "bounce_rate": bounce_rate,
+            "complaint_rate": complaint_rate,
+            "tripped": tripped,
+        },
+        "import_success_rate": None,
+        "counts": {
+            "analyses": sum(snap["counts"]["analyses"] for snap in included),
+            "acquired": sum(snap["counts"]["acquired"] for snap in included),
+            "leads": sum(snap["counts"]["leads"] for snap in included),
+            "audience": sum(snap["counts"]["audience"] for snap in included),
+            "delivered_people": sum(snap["counts"]["delivered_people"] for snap in included),
+        },
+        "basis": {
+            "method": "middle",
+            "included": len(included),
+            "excluded": excluded,
+            "note": "先去掉无效用户。剩下的人按这项指标从低到高排序，4 人及以上去掉前后各四分之一，3 人只留中间一个，2 人及以下直接平均。",
+        },
+        "bands": _kpi_bands(included),
+    }
+
+
+def _metric_numbers(snaps: list[dict], key: str, timing: bool) -> list[Decimal]:
+    numbers = []
+    for snap in snaps:
+        raw = snap["timings_p50_seconds"].get(key) if timing else ((snap.get("rates") or {}).get(key) or {}).get("value")
+        if raw is not None:
+            numbers.append(Decimal(str(raw)))
+    return numbers
+
+
+def _kpi_bands(snaps: list[dict]) -> list[dict]:
+    bands = []
+    for low, high in KPI_BANDS:
+        rates = {}
+        for key, (code, target, north) in RATE_TARGETS.items():
+            samples = _metric_numbers(snaps, key, False)
+            kept = percentile_band(samples, low / 100, high / 100)
+            mean = _mean(kept)
+            row = {
+                "code": code,
+                "value": rate(mean) if mean is not None else None,
+                "target": target,
+                "kept": len(kept),
+                "samples": len(samples),
+            }
+            if north:
+                row["north_star"] = True
+            rates[key] = row
+        timings = {}
+        for key in TIMING_TARGETS:
+            samples = _metric_numbers(snaps, key, True)
+            kept = percentile_band(samples, low / 100, high / 100)
+            mean = _mean(kept)
+            timings[key] = {"value": round(float(mean), 3) if mean is not None else None, "kept": len(kept), "samples": len(samples)}
+        bands.append({"band": f"{low}-{high}", "users": len(snaps), "rates": rates, "timings": timings})
+    return bands
 
 
 def _p50(values: list[float]):

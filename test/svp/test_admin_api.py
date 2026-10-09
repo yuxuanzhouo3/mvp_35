@@ -5,6 +5,57 @@ from fastapi.testclient import TestClient
 from test.support import register
 
 
+def test_page_behavior_ranks_sections_and_cohort_has_three_kpi_bands(client: TestClient):
+    headers = register(client, "behavior-anchor@example.com")
+    for _ in range(3):
+        dwell = client.post("/api/v1/behavior", json={"path": "/", "section": "path-a", "kind": "dwell", "duration_ms": 8000})
+        assert dwell.status_code == 200, dwell.text
+        clicks = client.post("/api/v1/behavior", json={"path": "/", "section": "path-a", "kind": "click", "duration_ms": 4000, "clicks": 6})
+        assert clicks.status_code == 200, clicks.text
+    for duration in (400, 500):
+        left = client.post("/api/v1/behavior", json={"path": "/", "section": "faq", "kind": "leave", "duration_ms": duration})
+        assert left.status_code == 200, left.text
+    rejected = client.post("/api/v1/behavior", json={"path": "/", "section": "not a section", "kind": "dwell", "duration_ms": 1000})
+    assert rejected.status_code == 400
+
+    behavior = client.get("/api/v1/admin/analytics?window_days=30", headers=headers).json()["data"]["behavior"]
+    assert behavior["best"]["section"] == "path-a"
+    assert behavior["worst"]["section"] == "faq"
+    assert behavior["sections"][0]["clicks"] == 18
+
+    child = client.post(
+        "/api/v1/behavior",
+        json={"path": "/workspace/acquire/ecommerce", "section": "acquire-ecommerce", "kind": "dwell", "duration_ms": 5000},
+    )
+    assert child.status_code == 200, child.text
+    pages = client.get("/api/v1/admin/search", headers=headers, params={"q": "电商平台"}).json()["data"]["pages"]
+    assert any(item["id"] == "acquire-ecommerce" and item["dwell_ms"] == 5000 for item in pages)
+    billing = client.get("/api/v1/admin/search", headers=headers, params={"q": "账单"}).json()["data"]["pages"]
+    assert any(item["id"] == "workspace-billing" and item["dwell_ms"] == 0 for item in billing)
+
+    for kind, filename in (
+        ("overview", "overview.json"),
+        ("ads", "ads.csv"),
+        ("users", "users.csv"),
+        ("analytics", "analytics.json"),
+        ("invitations", "invitations.csv"),
+        ("recall", "recall.csv"),
+        ("audit", "audit.csv"),
+        ("settings", "settings.json"),
+    ):
+        exported = client.post(f"/api/v1/admin/exports/{kind}", headers=headers)
+        assert exported.status_code == 200, exported.text
+        assert exported.json()["data"]["filename"] == filename
+    settings_export = client.post("/api/v1/admin/exports/settings", headers=headers).json()["data"]["body"]
+    assert "password" not in settings_export
+
+    cohort = client.get("/api/v1/admin/metrics/cohort", headers=headers).json()["data"]
+    assert [item["band"] for item in cohort["bands"]] == ["10-90", "20-80", "30-70"]
+    assert "net_margin" in cohort["bands"][0]["rates"]
+    assert set(cohort["bands"][0]["rates"]) == {"net_margin", "act_r", "tr", "open_r", "ar", "qr", "act_r_cold", "rec_r"}
+    assert set(cohort["bands"][0]["timings"]) == {"ana_t", "lead_t", "acq_t", "act_t", "rec_t"}
+
+
 def test_flags_are_public_and_closed(client: TestClient):
     response = client.get("/api/v1/flags")
     assert response.status_code == 200
@@ -49,6 +100,9 @@ def test_admin_lists_are_empty_until_created_and_recall_stays_separate(client: T
     funnel = {item["label"]: item["value"] for item in analytics.json()["data"]["funnel"]}
     assert funnel["完成注册"] == 1
     assert analytics.json()["data"]["retention"] == []
+    behavior = analytics.json()["data"]["behavior"]
+    assert behavior["best"] is None
+    assert any(row["section"] == "home" and row["dwells"] == 0 for row in behavior["sections"])
 
 
 def test_platform_admin_login_and_operator_actions(client: TestClient):

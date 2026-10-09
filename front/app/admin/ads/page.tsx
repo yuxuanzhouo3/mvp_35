@@ -169,7 +169,7 @@ export default function AdsPage() {
                         <button className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label={`更多 ${ad.title}`} onClick={() => setMenuId(menuId === ad.id ? '' : ad.id)}><MoreHorizontal className="size-4" /></button>
                       </div>
                       {menuId === ad.id && (
-                        <div className="absolute right-4 z-10 mt-1 w-36 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                        <div className="absolute bottom-full right-0 z-20 mb-1 w-36 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
                           <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => { setMenuId(''); setPublishAd(ad); setPublishLink(ad.link_url || '') }}>上架</button>
                           <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => void setAdStatus(ad, 'paused')}>暂停</button>
                           <button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => void setAdStatus(ad, 'ended')}>结束</button>

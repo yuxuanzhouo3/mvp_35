@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { api, percent } from '@/lib/api'
 import { AdSlot } from '@/components/ad-slot'
 import { ReportDialog } from '@/components/report-dialog'
+import { TermHint, type SelectionTermId } from '@/components/term-hint'
 
 type Report = {
   id: string
@@ -44,7 +45,7 @@ export default function ReportPage() {
       <ReportDialog title="选品报告" onClose={() => router.push('/workspace/products')}>
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <p className="text-xs text-muted-foreground">规则版本 {report?.rules_version || '—'} · 解释模型 {report?.explanation_model || '—'}</p>
+            <div className="text-xs text-muted-foreground inline-flex items-center">规则版本 {report?.rules_version || '—'}<TermHint id="rules" /> · 解释模型 {report?.explanation_model || '—'}</div>
             <button
               disabled={!report || report.stale || busy}
               className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
@@ -57,14 +58,15 @@ export default function ReportPage() {
                   .finally(() => setBusy(false))
               }}
             >一键获客</button>
+            <TermHint id="acquire" />
           </div>
           {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
-          {report?.stale && <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">市场或成本已经变更。这份历史报告只读，需要重新分析后才能获客。</p>}
+          {report?.stale && <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">市场或成本已经变更。这份历史报告只读<TermHint id="stale" />，需要重新分析后才能获客。</div>}
           <div className="grid grid-cols-2 gap-3">
-            <Metric label="利润率 N%" value={percent(String(metrics?.net_margin ?? ''))} />
-            <Metric label="净利润" value={metrics ? `$${metrics.net_profit_usd}` : '—'} />
-            <Metric label="机会分" value={metrics ? String(metrics.opportunity_score) : '—'} />
-            <Metric label="风险" value={metrics ? String(metrics.risk_level) : '—'} />
+            <Metric label="利润率 N%" hint="margin" value={percent(String(metrics?.net_margin ?? ''))} />
+            <Metric label="净利润" hint="profit" value={metrics ? `$${metrics.net_profit_usd}` : '—'} />
+            <Metric label="机会分" hint="score" value={metrics ? String(metrics.opportunity_score) : '—'} />
+            <Metric label="风险" hint="risk" value={metrics ? String(metrics.risk_level) : '—'} />
           </div>
           <div className="flex gap-1 overflow-x-auto border-b border-border">
             {tabs.map(([key, label]) => (
@@ -72,11 +74,11 @@ export default function ReportPage() {
             ))}
           </div>
           <div className="text-sm leading-7">
-            {tab === 'market' && <p>路线 {metrics?.route} · 货源 {metrics?.origin_country} · 市场 {metrics?.target_market} · 术语 {metrics?.incoterm}。机会分 {metrics?.opportunity_score}，由利润率规则折算，不是模型打分。</p>}
-            {tab === 'profit' && <p>R ${metrics?.target_price_usd} − C ${metrics?.landed_cost_usd}（采购 {metrics?.purchase_usd} + 包装 {metrics?.packaging_usd} + 国内 {metrics?.domestic_usd} + 国际 {metrics?.international_usd}）− F ${metrics?.channel_fee_usd} − T ${metrics?.tax_usd} = N ${metrics?.net_profit_usd}。汇率 {metrics?.fx_usd_cny}。</p>}
-            {tab === 'tax' && <p>税务口径 {metrics?.tax_regime}。关税率 {metrics?.duty_rate}，增值税率 {metrics?.vat_rate}，税费合计 ${metrics?.tax_usd}。</p>}
-            {tab === 'logistics' && <p>预计时效 {metrics?.transit_days_min}–{metrics?.transit_days_max} 天。国际段 ${metrics?.international_usd}。</p>}
-            {tab === 'risk' && <p>风险等级 {metrics?.risk_level}。推荐线是利润率 15%。低于该线时先复核成本或售价。</p>}
+            {tab === 'market' && <div>路线<TermHint id="route" /> {metrics?.route} · 货源<TermHint id="origin" /> {metrics?.origin_country} · 市场<TermHint id="market" /> {metrics?.target_market} · 术语<TermHint id="incoterm" /> {metrics?.incoterm}。机会分<TermHint id="score" /> {metrics?.opportunity_score}，由利润率规则折算，不是模型打分。</div>}
+            {tab === 'profit' && <div>售价<TermHint id="price" /> ${metrics?.target_price_usd} − 到岸成本 ${metrics?.landed_cost_usd}（采购<TermHint id="cost" /> {metrics?.purchase_usd} + 包装<TermHint id="packaging" /> {metrics?.packaging_usd} + 国内段<TermHint id="domestic" /> {metrics?.domestic_usd} + 国际段<TermHint id="international" /> {metrics?.international_usd}）− 渠道费<TermHint id="fee" /> ${metrics?.channel_fee_usd} − 税费 ${metrics?.tax_usd} = 净利润<TermHint id="profit" /> ${metrics?.net_profit_usd}。汇率<TermHint id="fx" /> {metrics?.fx_usd_cny}。</div>}
+            {tab === 'tax' && <div>税务口径<TermHint id="tax" /> {metrics?.tax_regime}。关税<TermHint id="duty" /> {metrics?.duty_rate}，增值税<TermHint id="vat" /> {metrics?.vat_rate}，税费合计 ${metrics?.tax_usd}。</div>}
+            {tab === 'logistics' && <div>预计时效<TermHint id="transit" /> {metrics?.transit_days_min}–{metrics?.transit_days_max} 天。国际段<TermHint id="international" /> ${metrics?.international_usd}。</div>}
+            {tab === 'risk' && <div>风险<TermHint id="risk" /> {metrics?.risk_level}。推荐线是利润率<TermHint id="margin" /> 15%<TermHint id="floor" />。低于该线时先复核成本或售价。</div>}
           </div>
           <p className="rounded-xl border border-border bg-muted/40 p-3 text-sm leading-6">{report?.explanation}</p>
           <AdSlot placement="report_footer" />
@@ -86,6 +88,6 @@ export default function ReportPage() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return <article className="rounded-2xl border border-border bg-card p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-semibold">{value || '—'}</p></article>
+function Metric({ label, hint, value }: { label: string; hint?: SelectionTermId; value: string }) {
+  return <article className="rounded-2xl border border-border bg-card p-4"><div className="text-xs text-muted-foreground inline-flex items-center">{label}{hint && <TermHint id={hint} />}</div><p className="mt-2 text-2xl font-semibold">{value || '—'}</p></article>
 }

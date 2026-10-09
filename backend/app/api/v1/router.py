@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from algorithm.product_pricer import assert_product_pricer
 from algorithm.selection_assist import catalog_payload
+from algorithm.shelf import lookup_shelf
 from app.api.deps import bind
 from app.core.errors import AppError
 from app.core.timeutil import iso
@@ -29,7 +30,8 @@ from app.services.common import (
     sign_ledger,
 )
 from app.services.identity import bootstrap, parse_principal, profile
-from app.services.metrics import snapshot
+from app.services.trade_route import market_fields, resolve_route
+from app.services.metrics import cohort_average, has_acquirers, snapshot
 from app.workers.execute import _audience, enqueue, execute_job
 
 
@@ -78,10 +80,12 @@ class ProductPatch(BaseModel):
 class CsvIn(BaseModel):
     csv: str
     algorithm: str | None = None
+    route: str | None = None
 
 
 class AdoptIn(BaseModel):
     catalog_id: str
+    route: str | None = None
 
 
 class LeadSearchIn(BaseModel):
@@ -89,6 +93,29 @@ class LeadSearchIn(BaseModel):
     platform: str | None = None
     query: str = ""
     seed_analysis_id: str | None = None
+    route: str | None = None
+
+
+class AnalysisIn(BaseModel):
+    route: str | None = None
+
+
+class TradeRouteIn(BaseModel):
+    route: str
+
+
+class AgencyLeadIn(BaseModel):
+    company: str
+    contact_name: str = ""
+    email: str | None = None
+    market: str = "US"
+    external_id: str = ""
+
+
+class AgencyPushIn(BaseModel):
+    platform: str
+    parent_channel_account_id: str = ""
+    items: list[AgencyLeadIn]
 
 
 class LeadPatch(BaseModel):
@@ -186,6 +213,27 @@ def _channel_order(settings, store, prof, plan: dict, provider: str, *, scene: s
     )
 
 
+def _shelf_info(store, tenant_id: str) -> dict:
+    from app.modules.shelf_refresh import policy
+
+    return policy(store, tenant_id)
+
+
+def _shelf_payload(query: str, algorithm: str | None, settings, spec: dict | None, route: str | None, info: dict, *, force: bool = False) -> dict:
+    return catalog_payload(
+        query,
+        algorithm,
+        settings.rules_version,
+        settings,
+        spec["target_market"] if spec else None,
+        route,
+        refresh_after=info["interval_seconds"],
+        force=force,
+        premium=info["premium"],
+        manual_left=info["manual_left"],
+    )
+
+
 def create_router() -> APIRouter:
     router = APIRouter(prefix="/api/v1")
 
@@ -258,6 +306,15 @@ def create_router() -> APIRouter:
         _settings, _store, prof = ctx(request, authorization)
         return respond(request, prof["tenant"] | {"role": prof["role"]})
 
+    @router.patch("/tenants/current/trade-route")
+    def set_trade_route(request: Request, body: TradeRouteIn, authorization: str | None = Header(default=None)):
+        _settings, store, prof = ctx(request, authorization, write=True)
+        spec = resolve_route(body.route)
+        if not spec:
+            raise AppError("UNKNOWN_ROUTE", "不支持的路线")
+        store.touch("tenants", prof["tenant"]["id"], {"trade_route": body.route})
+        return respond(request, {"route": body.route, **market_fields(body.route), "market_pack": spec["market_pack"]})
+
     @router.get("/tenants/current/usage")
     def current_usage(request: Request, authorization: str | None = Header(default=None)):
         _settings, _store, prof = ctx(request, authorization)
@@ -269,17 +326,48 @@ def create_router() -> APIRouter:
         return respond(request, {"channels": CHANNELS, "providers": "mock"})
 
     @router.get("/catalog/search")
-    def catalog_search(request: Request, q: str = "", algorithm: str | None = None, authorization: str | None = Header(default=None)):
-        settings, _store, _prof = ctx(request, authorization)
-        return respond(request, catalog_payload(q, algorithm, settings.rules_version))
+    def catalog_search(request: Request, q: str = "", algorithm: str | None = None, route: str | None = None, authorization: str | None = Header(default=None)):
+        settings, store, prof = ctx(request, authorization)
+        spec = resolve_route(route)
+        info = _shelf_info(store, prof["tenant"]["id"])
+        return respond(request, _shelf_payload(q, algorithm, settings, spec, route, info))
+
+    @router.post("/catalog/refresh")
+    def catalog_refresh(request: Request, q: str = "", route: str | None = None, authorization: str | None = Header(default=None)):
+        settings, store, prof = ctx(request, authorization, write=True)
+        spec = resolve_route(route)
+        market = spec["target_market"] if spec else "US"
+        info = _shelf_info(store, prof["tenant"]["id"])
+        from algorithm.shelf import goods_age
+
+        age = goods_age(q, market)
+        due = age is None or age >= info["interval_seconds"]
+        if not due and not (info["premium"] and info["manual_left"] > 0):
+            raise AppError(
+                "SHELF_REFRESH_WAIT",
+                "价格还在刷新间隔内。免费每小时更新；支付成长或规模后每 15 分钟更新，并有 10 次随时刷新。",
+                403,
+                {"manual_left": info["manual_left"], "interval_seconds": info["interval_seconds"]},
+            )
+        payload = _shelf_payload(q, "selection-assist", settings, spec, route, info, force=not due)
+        fresh_hit = any(
+            row.get("id") == "1688" and row.get("status") == "ok"
+            for row in (payload.get("sources") or {}).get("platforms") or []
+        )
+        if not due and fresh_hit:
+            from app.modules.shelf_refresh import spend
+
+            left = spend(store, prof["tenant"]["id"])
+            payload["sources"]["refresh"]["manual_left"] = left
+        return respond(request, payload)
 
     @router.post("/catalog/adopt")
     def catalog_adopt(request: Request, body: AdoptIn, authorization: str | None = Header(default=None)):
         _settings, store, prof = ctx(request, authorization, write=True)
-        item = next((row for row in search_catalog("") if row["id"] == body.catalog_id), None)
+        item = next((row for row in search_catalog("") if row["id"] == body.catalog_id), None) or lookup_shelf(body.catalog_id)
         if not item:
             raise AppError("CATALOG_NOT_FOUND", "货源目录中没有这个商品", 404)
-        fields = product_from_body(item, source="catalog")
+        fields = product_from_body({**item, **market_fields(body.route)}, source="catalog")
         existing = store.find_global("products", tenant_id=prof["tenant"]["id"], normalized_sku=fields["normalized_sku"])
         if existing:
             return respond(request, existing)
@@ -292,8 +380,8 @@ def create_router() -> APIRouter:
                 prof["user"]["id"],
                 id=new_id("src"),
                 product_id=doc["id"],
-                provider="mock_catalog",
-                external_id=item["id"],
+                provider=item.get("platform") or "mock_catalog",
+                external_id=item.get("external_id") or item["id"],
             ),
         )
         return respond(request, doc)
@@ -351,7 +439,7 @@ def create_router() -> APIRouter:
     ):
         settings, store, prof = ctx(request, authorization, write=True)
         assert_product_pricer(body.algorithm)
-        payload = {"csv": body.csv}
+        payload = {"csv": body.csv, **market_fields(body.route)}
         if body.algorithm:
             payload["algorithm"] = body.algorithm
         job = start_job(store, settings, prof, "product_import", payload, None, idempotency_key)
@@ -364,17 +452,20 @@ def create_router() -> APIRouter:
         product_id: str,
         request: Request,
         background: BackgroundTasks,
+        body: AnalysisIn | None = None,
         authorization: str | None = Header(default=None),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
         settings, store, prof = ctx(request, authorization, write=True)
         require_doc(store, "products", product_id, prof["tenant"]["id"], "PRODUCT_NOT_FOUND", "商品不存在")
+        chosen = body.route if body else None
+        resolve_route(chosen)
         job = start_job(
             store,
             settings,
             prof,
             "product_analysis",
-            {"product_id": product_id},
+            {"product_id": product_id, "route": chosen},
             "analysis",
             idempotency_key,
         )
@@ -421,19 +512,55 @@ def create_router() -> APIRouter:
         settings, store, prof = ctx(request, authorization, write=True)
         if body.channel not in CHANNELS:
             raise AppError("UNKNOWN_CHANNEL", "未知获客通道")
-        mock_leads(body.channel, body.platform, body.query, body.seed_analysis_id)
+        spec = resolve_route(body.route)
+        mock_leads(body.channel, body.platform, body.query, body.seed_analysis_id, spec["target_market"] if spec else None)
+        payload = body.model_dump()
+        if spec:
+            payload["target_market"] = spec["target_market"]
+            payload["market_pack"] = spec["market_pack"]
         job = start_job(
             store,
             settings,
             prof,
             "lead_discovery",
-            body.model_dump(),
+            payload,
             "discovery",
             idempotency_key,
         )
         if job["status"] == "queued":
             schedule(background, store, settings, job["id"])
         return respond(request, {"job_id": job["id"], "status": job["status"]})
+
+    @router.post("/agency/leads")
+    def agency_leads(request: Request, body: AgencyPushIn, authorization: str | None = Header(default=None)):
+        settings, store, prof = ctx(request, authorization, write=True)
+        parent = body.parent_channel_account_id or settings.agency_parent_account_id
+        if body.platform not in CHANNELS["agency"]:
+            raise AppError("UNKNOWN_PLATFORM", "该通道没有这个平台", details={"platform": body.platform})
+        if not parent:
+            raise AppError("AGENCY_PARENT_REQUIRED", "二级代理必须挂在一级代理下面", 400)
+        saved = 0
+        for item in body.items:
+            company = item.company.strip()
+            if not company:
+                continue
+            store.insert(
+                "agency_inbox",
+                base_doc(
+                    prof["tenant"]["id"],
+                    prof["user"]["id"],
+                    id=new_id("inbox"),
+                    platform=body.platform,
+                    parent_channel_account_id=parent,
+                    company=company,
+                    contact_name=item.contact_name,
+                    email=item.email,
+                    market=item.market,
+                    external_id=item.external_id or company,
+                ),
+            )
+            saved += 1
+        return respond(request, {"saved": saved, "platform": body.platform})
 
     @router.get("/leads")
     def list_leads(
@@ -679,7 +806,13 @@ def create_router() -> APIRouter:
     @router.get("/metrics")
     def metrics(request: Request, window_days: int = 30, authorization: str | None = Header(default=None)):
         settings, store, prof = ctx(request, authorization)
-        return respond(request, snapshot(store, prof["tenant"]["id"], settings, window_days))
+        snap = snapshot(store, prof["tenant"]["id"], settings, window_days)
+        if has_acquirers(snap):
+            snap["display_source"] = "tenant"
+        else:
+            snap["benchmark"] = cohort_average(store, settings, window_days)
+            snap["display_source"] = "platform_average"
+        return respond(request, snap)
 
     @router.get("/billing/plans")
     def plans(request: Request, authorization: str | None = Header(default=None)):

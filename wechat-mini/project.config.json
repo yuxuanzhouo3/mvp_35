@@ -1,0 +1,31 @@
+{
+  "description": "PickGlobal 微信小程序。用微信开发者工具打开 wechat-mini 目录后上传。",
+  "miniprogramRoot": "./",
+  "projectname": "pickglobal-miniprogram",
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "libVersion": "3.6.6",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "condition": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {
+    "tabIndent": "insertSpaces",
+    "tabSize": 2
+  }
+}

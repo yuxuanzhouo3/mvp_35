@@ -1,0 +1,32 @@
+<view class="page">
+  <block wx:if="{{!signedIn}}">
+    <view class="h1">我的</view>
+    <view class="copy">登录后查看订阅、微信支付、邀请和业务助手。</view>
+    <button class="wx-btn" bindtap="goLogin">
+      <image class="wx-logo" src="/assets/wechat.png" mode="aspectFit" />
+      <text>微信登录</text>
+    </button>
+  </block>
+  <block wx:else>
+    <view class="h1">{{name}}</view>
+    <view class="copy">{{contact}} · {{plan}}</view>
+    <view class="err" wx:if="{{error}}">{{error}}</view>
+    <view class="ok" wx:if="{{notice}}">{{notice}}</view>
+    <button class="btn" bindtap="goBilling">订阅与微信支付</button>
+    <button class="btn-line" bindtap="goChat">业务助手</button>
+    <button class="btn-line" bindtap="loadInvite">邀请链接</button>
+    <view class="card" wx:if="{{invite}}">
+      <view class="h2">邀请码 {{invite.invite_code}}</view>
+      <view class="muted">待兑现 {{owed}} · 折扣 {{discount}} · 抽奖 {{invite.draw_chances}} 次 · 连续登录 {{invite.login_streak}} 天</view>
+      <button class="btn" open-type="share">微信分享邀请</button>
+      <button class="btn-line" bindtap="copyInvite">复制邀请路径</button>
+      <button class="btn-line" bindtap="claimCash">申请兑现</button>
+      <button class="btn-line" bindtap="drawOnce">抽一次</button>
+      <view class="item" wx:for="{{invite.events}}" wx:key="key">
+        <view>{{item.invitee_name}}</view>
+        <view class="muted">奖励 {{item.reward}}</view>
+      </view>
+    </view>
+    <button class="btn-line" bindtap="logout">退出</button>
+  </block>
+</view>

@@ -24,6 +24,7 @@ export function ResultDesk<T>({
   pageSize = 5,
   empty,
   onSearch,
+  searching,
   render,
 }: {
   items: T[]
@@ -34,6 +35,7 @@ export function ResultDesk<T>({
   pageSize?: number
   empty: string
   onSearch?: (query: string) => void
+  searching?: boolean
   render: (item: T) => React.ReactNode
 }) {
   const [draft, setDraft] = useState('')
@@ -64,6 +66,7 @@ export function ResultDesk<T>({
   const slice = filtered.slice(current * size, current * size + size)
 
   function search() {
+    if (searching) return
     setQuery(draft)
     setPage(0)
     onSearch?.(draft)
@@ -73,7 +76,7 @@ export function ResultDesk<T>({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <input
-          className="h-10 min-w-40 flex-1 rounded-xl border border-border bg-background px-3 text-sm"
+          className="h-10 min-w-40 flex-1 rounded-xl border-0 bg-muted px-3 text-sm outline-none"
           value={draft}
           placeholder={placeholder}
           aria-label={placeholder}
@@ -82,11 +85,11 @@ export function ResultDesk<T>({
             if (event.key === 'Enter') search()
           }}
         />
-        <button type="button" className="h-10 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={search}>搜索</button>
+        <button type="button" className="h-10 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60" disabled={searching} onClick={search}>{searching ? '询价中' : '搜索'}</button>
         {filters.length > 0 && (
           <button type="button" className={`h-10 rounded-xl border px-4 text-sm ${openFilter ? 'border-primary text-primary' : 'border-border'}`} onClick={() => setOpenFilter((value) => !value)}>筛选</button>
         )}
-        <label className="flex h-10 items-center gap-1 rounded-xl border border-border bg-background px-2 text-sm">
+        <label className="flex h-10 items-center gap-1 rounded-xl bg-muted px-2 text-sm">
           最多
           <input
             className="w-12 bg-transparent text-center outline-none"
@@ -103,7 +106,7 @@ export function ResultDesk<T>({
           />
         </label>
         <select
-          className="h-10 rounded-xl border border-border bg-background px-3 text-sm"
+          className="h-10 rounded-xl border-0 bg-muted px-3 text-sm outline-none"
           aria-label="排序"
           value={sortId}
           onChange={(event) => {
@@ -121,7 +124,7 @@ export function ResultDesk<T>({
             return (
               <select
                 key={filter.key}
-                className="h-10 rounded-xl border border-border bg-background px-3 text-sm"
+                className="h-10 rounded-xl border-0 bg-muted px-3 text-sm outline-none"
                 aria-label={filter.label}
                 value={picked[filter.key] || ''}
                 onChange={(event) => {

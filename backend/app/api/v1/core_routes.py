@@ -57,7 +57,7 @@ def feature_flags(request: Request):
 @router.post("/catalog/search")
 def catalog_search(request: Request, body: CatalogIn, authorization: str | None = Header(default=None)):
     settings, _store, _prof = bind(request, authorization)
-    return respond(request, catalog_payload(body.q, body.algorithm, settings.rules_version))
+    return respond(request, catalog_payload(body.q, body.algorithm, settings.rules_version, settings))
 
 
 @router.post("/products/import", status_code=202)

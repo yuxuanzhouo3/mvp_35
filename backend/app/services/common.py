@@ -109,9 +109,9 @@ CATALOG = [
 CHANNELS = {
     "ecommerce": ["amazon", "temu", "walmart", "taobao", "pinduoduo"],
     "social": ["linkedin", "facebook", "wechat_mini", "douyin", "xiaohongshu", "kuaishou"],
-    "expo": ["online_expo"],
+    "expo": ["online_expo", "alibaba_com", "canton_fair", "global_sources", "ciie"],
     "agency": [f"agent_{index}" for index in range(1, 13)],
-    "enrichment": ["qichacha", "tianyancha"],
+    "enrichment": ["qichacha", "tianyancha", "qixin"],
     "geo_seo": ["landing"],
     "content_dh": ["content_factory", "digital_human_placeholder", "offline_qr"],
     "cross_border": ["cn_us", "cn_hk", "cn_au", "domestic"],
@@ -155,7 +155,7 @@ def search_catalog(query: str) -> list[dict]:
     return rows
 
 
-def mock_leads(channel: str, platform: str | None, query: str, seed: str | None) -> list[dict]:
+def mock_leads(channel: str, platform: str | None, query: str, seed: str | None, market: str | None = None) -> list[dict]:
     if channel not in CHANNELS:
         raise AppError("UNKNOWN_CHANNEL", "未知获客通道", details={"channel": channel})
     platforms = CHANNELS[channel]
@@ -171,7 +171,7 @@ def mock_leads(channel: str, platform: str | None, query: str, seed: str | None)
     leads = []
     for index, company in enumerate(companies[:5]):
         score = [88, 74, 66, 58, 47][index]
-        market = markets[index]
+        chosen_market = market or markets[index]
         email = None if index == 4 else f"{chosen}.{index}@buyer.example"
         if index == 3:
             email = f"bounce.{chosen}.{index}@buyer.example"
@@ -180,7 +180,7 @@ def mock_leads(channel: str, platform: str | None, query: str, seed: str | None)
                 "company": f"{company}-{chosen}",
                 "contact_name": f"联系人{index + 1}",
                 "email": email,
-                "market": market,
+                "market": chosen_market,
                 "quality_score": score,
                 "platform": chosen,
                 "source_channel": channel,

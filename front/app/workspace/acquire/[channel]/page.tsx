@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { api, waitJob } from '@/lib/api'
 import { ResultDesk } from '@/components/result-desk'
+import { RouteBar } from '@/components/route-bar'
+import { DEFAULT_ROUTE, readTradeRoute, TRADE_ROUTES, type RouteId } from '@/lib/trade-route'
 import { channels, sameButton } from '../channels'
 
 type Lead = {
@@ -54,6 +56,16 @@ function ChannelDesk() {
   const [pop, setPop] = useState<Pop | null>(null)
   const [view, setView] = useState<'discover' | 'leads' | 'outreach' | 'activation' | 'recall' | 'ledger'>(params.channel === 'raas' ? 'ledger' : 'discover')
   const [reach, setReach] = useState<ReachId>('email')
+  const [route, setRoute] = useState<RouteId>(DEFAULT_ROUTE)
+
+  useEffect(() => {
+    function sync() {
+      setRoute(readTradeRoute())
+    }
+    sync()
+    window.addEventListener('pickglobal-route', sync)
+    return () => window.removeEventListener('pickglobal-route', sync)
+  }, [])
 
   async function reload() {
     const [leadData, campaignData, activationData] = await Promise.all([
@@ -103,7 +115,7 @@ function ChannelDesk() {
     )
   }
 
-  const mine = leads.filter((lead) => lead.source_channel === channel.id)
+  const mine = leads.filter((lead) => lead.source_channel === channel.id && lead.market === TRADE_ROUTES[route].target_market)
   const baseViews = [
     { id: 'discover', name: '发现线索' },
     { id: 'leads', name: '线索池' },
@@ -115,37 +127,37 @@ function ChannelDesk() {
   const views = channel.id === 'raas' ? [baseViews[5], ...baseViews.slice(0, 5)] : baseViews
 
   return (
-    <div className="flex h-[calc(100dvh-11rem)] flex-col gap-3 overflow-hidden md:h-[calc(100dvh-9rem)]">
+    <div className="work-desk flex flex-col gap-2 overflow-hidden">
+      <RouteBar />
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
           <Link href="/workspace/acquire" className="text-sm text-primary">返回九路</Link>
           <h1 className="text-2xl font-semibold tracking-tight">{channel.code} {channel.name}</h1>
         </div>
-        <p className="max-w-xl text-xs leading-5 text-muted-foreground">{channel.copy}。六个功能在这一屏切换。{seed ? ` 种子报告 ${seed}。` : ''}</p>
+        <p className="max-w-xl text-xs leading-5 text-muted-foreground">{channel.copy}{seed ? ` · 种子报告 ${seed}` : ''}</p>
       </div>
       {error && <p className="shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
       {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
       <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-6">
         {views.map((item) => (
-          <button key={item.id} type="button" className={`h-11 rounded-xl px-2 text-sm font-medium ${view === item.id ? 'bg-primary text-primary-foreground' : 'border border-border bg-card'}`} onClick={() => setView(item.id)}>
+          <button key={item.id} type="button" className={`h-11 rounded-xl px-2 text-sm font-medium ${view === item.id ? 'bg-blue-600 text-white' : 'border border-border bg-white text-slate-700 dark:bg-card dark:text-foreground'}`} onClick={() => setView(item.id)}>
             {item.name}
           </button>
         ))}
       </div>
-      <section className="min-h-0 flex-1 overflow-y-auto rounded-3xl border border-border bg-card p-4 md:p-5">
+      <section className="panel-frame min-h-0 flex-1 overflow-y-auto rounded-3xl bg-card p-4 md:p-5">
         {view === 'discover' && (
           <div>
             <h2 className="font-semibold">发现线索</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{channel.copy}</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-              <select className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm" value={platform} aria-label="平台" onChange={(event) => setPlatform(event.target.value)}>
+              <select className="h-11 w-full rounded-xl border-0 bg-muted px-3 text-sm outline-none" value={platform} aria-label="平台" onChange={(event) => setPlatform(event.target.value)}>
                 {channel.platforms.map((item) => <option key={item}>{item}</option>)}
               </select>
               <button type="button" disabled={busy} className="h-11 rounded-xl bg-primary text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => {
                 void run(async () => {
                   const created = await api<{ job_id: string }>('/lead-searches', {
                     method: 'POST',
-                    body: JSON.stringify({ channel: channel.id, platform, query: platform, seed_analysis_id: seed || null }),
+                    body: JSON.stringify({ channel: channel.id, platform, query: platform, seed_analysis_id: seed || null, route }),
                   })
                   const job = await waitJob(created.job_id)
                   if (job.status === 'failed') throw new Error(job.error?.message || '发现失败')
@@ -213,7 +225,7 @@ function ChannelDesk() {
                 void run(async () => {
                   await api<Campaign>('/campaigns', {
                     method: 'POST',
-                    body: JSON.stringify({ name: `${channel.code} ${new Date().toLocaleString('zh-CN')}`, lead_ids: picked, seed_analysis_id: seed || null, market_pack: 'cn_us' }),
+                    body: JSON.stringify({ name: `${channel.code} ${new Date().toLocaleString('zh-CN')}`, lead_ids: picked, seed_analysis_id: seed || null, market_pack: TRADE_ROUTES[route].market_pack }),
                   })
                   setMessage('活动已创建。未批准不能发送。')
                 })
@@ -282,13 +294,13 @@ function ChannelDesk() {
         {view === 'recall' && (
           <div className="max-w-2xl">
             <h2 className="font-semibold">流失召回</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">打开过、但没有回复的线索，由规则扫进召回队列。必须先人工批准，才能发送。召回率单独计算，不和冷启、普通获客率混在一起。这一页只说明规则，不在这里操作任务。</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">打开过但没回复的线索，由规则进入召回。必须先批准才能发送。这里只说明规则。</p>
           </div>
         )}
         {view === 'ledger' && (
           <div className="max-w-2xl">
             <h2 className="font-semibold">{channel.id === 'raas' ? '结果分佣' : '分成入账'}</h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">代理分成和 RaaS 抽成由服务端验签后入账。这一页不发起收款，也不代发支付回调。RaaS 抽成不计入普通获客率。未开通的微信收款、自动成交和数智人购买不会出现在这里。</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">代理分成和 RaaS 抽成由服务端验签后入账。这里不收款。</p>
           </div>
         )}
       </section>
