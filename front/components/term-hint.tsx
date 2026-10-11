@@ -7,6 +7,12 @@ type Term = { title: string; body: string }
 
 export const selectionTerms = {
   sku: { title: 'SKU', body: '商品编号。同一账号里不能重复。平台选品时，没有单独编号就用平台商品号。' },
+  category: { title: '类目', body: '用来和货架报价对上同类商品。名称对不上时，类目里的词也能匹配。' },
+  spec: { title: '规格', body: '容量、尺寸或颜色。不参加利润计算，方便以后认这件货。' },
+  material: { title: '材质', body: '主要材料。海关归类和货架匹配时会用到，不改变利润公式。' },
+  supplier: { title: '供应商', body: '供货方名称。只作记录，不进入成本。采购成本仍单独填写。' },
+  weight: { title: '单件重量', body: '克。用来判断国际运费是否合理。运费本身仍以国际段的美元金额为准。' },
+  moq: { title: '起订量', body: '供应商要求的最少件数。不参加单件利润计算。' },
   cost: { title: '采购成本', body: '付给国内供应商的货款，单位是人民币。选品排序用它当成本，不把美国标价当成进货价。' },
   price: { title: '售价', body: '准备在目标市场卖出的价格，单位是美元。利润率用净利润除以这个售价。' },
   packaging: { title: '包装', body: '包装费，人民币。和采购、国内运费一起按汇率换成美元，算进到岸成本。' },

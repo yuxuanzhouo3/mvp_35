@@ -25,8 +25,8 @@ function amount(price: string) {
   return Number.isFinite(value) ? value : 0
 }
 
-function SiteCard({ site }: { site: PriceSite }) {
-  const offers = site.offers || []
+function SiteCard({ site, offerLimit }: { site: PriceSite; offerLimit: number }) {
+  const offers = (site.offers || []).slice(0, offerLimit)
   const peak = Math.max(0, ...offers.map((offer) => amount(offer.price)))
   const tone = site.status === 'ok' ? 'bg-emerald-600' : site.status === 'failed' || site.status === 'reauth' ? 'bg-amber-500' : 'bg-slate-400'
   return (
@@ -65,10 +65,12 @@ function SiteCard({ site }: { site: PriceSite }) {
 export function PriceCompareDialog({
   query,
   sites,
+  offerLimit = 5,
   onClose,
 }: {
   query: string
   sites: PriceSite[]
+  offerLimit?: number
   onClose: () => void
 }) {
   useEffect(() => {
@@ -78,6 +80,7 @@ export function PriceCompareDialog({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+  const limit = Math.min(30, Math.max(1, offerLimit))
   const supply = sites.filter((site) => site.region === 'CN')
   const shelf = sites.filter((site) => site.region !== 'CN')
   const priced = sites.filter((site) => (site.offers || []).length > 0).length
@@ -88,18 +91,18 @@ export function PriceCompareDialog({
           <div>
             <p className="text-xs text-muted-foreground">各站价格对照</p>
             <h2 className="mt-1 text-lg font-semibold">{query || '这次搜索'}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{priced > 0 ? `${priced} 个站点返回了价格。蓝条是人民币进价，橙条是美元标价。` : '各站点都没有返回价格。下面是每个接口这次的结果。'}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{priced > 0 ? `${priced} 个站点返回了价格。每个站点最多 ${limit} 条。蓝条是人民币进价，橙条是美元标价。` : '各站点都没有返回价格。下面是每个接口这次的结果。'}</p>
           </div>
           <button type="button" className="h-9 shrink-0 rounded-xl border border-border px-3 text-sm" onClick={onClose}>关闭</button>
         </div>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <section>
             <h3 className="mb-2 text-sm font-medium">中国供货</h3>
-            <div className="flex flex-col gap-2">{supply.map((site) => <SiteCard key={site.id} site={site} />)}</div>
+            <div className="flex flex-col gap-2">{supply.map((site) => <SiteCard key={site.id} site={site} offerLimit={limit} />)}</div>
           </section>
           <section>
             <h3 className="mb-2 text-sm font-medium">美国货架</h3>
-            <div className="flex flex-col gap-2">{shelf.map((site) => <SiteCard key={site.id} site={site} />)}</div>
+            <div className="flex flex-col gap-2">{shelf.map((site) => <SiteCard key={site.id} site={site} offerLimit={limit} />)}</div>
           </section>
         </div>
       </div>

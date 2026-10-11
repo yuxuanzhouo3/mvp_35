@@ -150,9 +150,12 @@ def test_selection_assist_ranks_catalog_source(client: TestClient):
     assert body["algorithm"] == "selection-assist"
     assert body["sources"]["catalog"] == "/api/v1/sources/catalog"
     assert body["items"]
+    assert len(body["items"]) <= 5
+    assert body["sources"]["shelf_limit"] == 5
+    assert body["items"][0]["searched_at"]
     assert body["items"][0]["selection"]["reason"]
-    scores = [item["selection"]["score"] for item in body["items"]]
-    assert scores == sorted(scores, reverse=True)
+    profits = [item["selection"]["net_profit_usd"] for item in body["items"]]
+    assert profits == sorted(profits, key=lambda value: __import__("decimal").Decimal(value), reverse=True)
 
     posted = client.post("/api/v1/algorithms/selection-assist", headers=auth(), json={"q": "宠物"})
     assert posted.status_code == 200
@@ -231,6 +234,35 @@ def test_selection_ranks_china_supply_against_us_shelf(client: TestClient, monke
     adopted = client.post("/api/v1/catalog/adopt", headers=auth(), json={"catalog_id": "1688:99"})
     assert adopted.status_code == 200, adopted.text
     assert adopted.json()["data"]["sku"] == "99"
+
+
+def test_catalog_adopt_accepts_a_live_item_snapshot(client: TestClient):
+    item = {
+        "id": "ebay:v1|123|0",
+        "name": "Apple iPhone 6",
+        "sku": "v1|123|0",
+        "category": "未分类",
+        "cost_cny": "288.00",
+        "target_price_usd": "40.00",
+        "packaging_cny": "0.00",
+        "domestic_freight_cny": "0.00",
+        "international_freight_usd": "0.00",
+        "supplier": "seller",
+        "platform": "ebay",
+        "external_id": "v1|123|0",
+        "fx_usd_cny": "7.20",
+        "price_basis": "us_shelf",
+    }
+    adopted = client.post(
+        "/api/v1/catalog/adopt",
+        headers=auth(),
+        json={"catalog_id": "ebay:v1|123|0", "route": "cn_us", "item": item},
+    )
+    assert adopted.status_code == 200, adopted.text
+    body = adopted.json()["data"]
+    assert body["name"] == "Apple iPhone 6"
+    assert body["sku"] == "V1|123|0"
+    assert body["source"] == "catalog"
 
 
 def test_alibaba_refresh_replaces_a_rejected_access_token(monkeypatch):

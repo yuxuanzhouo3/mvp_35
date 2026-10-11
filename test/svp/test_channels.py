@@ -128,7 +128,16 @@ def test_payment_test_amount_overrides_paid_plans(client: TestClient):
     plans = {item["id"]: item["amount_fen"] for item in summary["plans"]}
     assert plans["free"] == 0
     assert plans["growth"] == 10
+    assert plans["growth_year"] == 10
     assert plans["scale"] == 10
+    assert plans["scale_year"] == 10
+    listed = {item["id"]: item for item in summary["plans"]}
+    assert listed["growth"]["list_fen"] == 29900
+    assert listed["growth_year"]["list_fen"] == 251160
+    assert listed["scale"]["list_fen"] == 99900
+    assert listed["scale_year"]["list_fen"] == 839160
+    assert listed["growth"]["name"] == "专业版"
+    assert "每 15 分钟" in " ".join(listed["growth"]["features"])
     assert summary["payment_testing"] is True
     payment = client.post(
         "/api/v1/payments/checkout",

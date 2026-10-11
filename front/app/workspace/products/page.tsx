@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, percent, waitJob } from '@/lib/api'
 import { ProductLibrary } from '@/components/product-library'
 import { PriceCompareDialog, type PriceSite } from '@/components/price-compare-dialog'
@@ -22,7 +22,12 @@ type PlatformStatus = PriceSite
 
 type ShelfRefresh = { interval_seconds: number; premium: boolean; manual_left: number; fresh: boolean }
 
-type ShelfPayload = { items: CatalogItem[]; sources?: { provider?: string; platforms?: PlatformStatus[]; refresh?: ShelfRefresh } }
+type SelectionAi = { plan: string; shelf_limit: number; ai_daily: number; ai_left: number }
+
+type ShelfPayload = {
+  items: CatalogItem[]
+  sources?: { provider?: string; platforms?: PlatformStatus[]; refresh?: ShelfRefresh; ai?: SelectionAi; ai_note?: string; shelf_limit?: number }
+}
 
 type CatalogItem = {
   id: string
@@ -34,7 +39,13 @@ type CatalogItem = {
   supplier: string
   platform?: string
   price_basis?: string
+  searched_at?: string
   selection?: Selection
+}
+
+function placeReturned(previous: CatalogItem[], incoming: CatalogItem[]) {
+  const seen = new Set(incoming.map((item) => item.id))
+  return [...incoming, ...previous.filter((item) => !seen.has(item.id))]
 }
 
 type Quote = {
@@ -68,9 +79,14 @@ const positionLabel: Record<string, string> = {
 }
 
 const emptyForm = {
-  name: '样品杯',
-  sku: 'CUP-1',
+  name: '',
+  sku: '',
   category: '家居',
+  spec: '',
+  material: '',
+  supplier: '',
+  weight_g: '',
+  moq: '',
   cost_cny: '72',
   packaging_cny: '4',
   domestic_freight_cny: '6',
@@ -116,7 +132,8 @@ async function spreadsheetToCsv(file: File) {
 export default function ProductsPage() {
   const [tab, setTab] = useState<'entry' | 'catalog' | 'library'>('entry')
   const [form, setForm] = useState(emptyForm)
-  const [csv, setCsv] = useState('sku,name,cost_cny,target_price_usd,international_freight_usd\nCUP-1,样品杯,72,40,2\n')
+  const [csv, setCsv] = useState('sku,name,cost_cny,target_price_usd\nCUP-1,样品杯,72,39\n')
+  const csvBox = useRef<HTMLTextAreaElement>(null)
   const [csvFile, setCsvFile] = useState('')
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [provider, setProvider] = useState('')
@@ -132,6 +149,20 @@ export default function ProductsPage() {
   const [quoteOpen, setQuoteOpen] = useState(false)
   const [quoteIndex, setQuoteIndex] = useState(0)
   const [route, setRoute] = useState(readTradeRoute())
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiNeed, setAiNeed] = useState('')
+  const [ai, setAi] = useState<SelectionAi | null>(null)
+
+  useEffect(() => {
+    void api<SelectionAi>('/catalog/selection-allowance').then(setAi).catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    const node = csvBox.current
+    if (!node) return
+    node.style.height = '0px'
+    node.style.height = `${node.scrollHeight}px`
+  }, [csv, tab])
 
   useEffect(() => {
     function apply() {
@@ -176,24 +207,25 @@ export default function ProductsPage() {
   ] as const
 
   return (
-    <div className="work-desk flex flex-col gap-2 overflow-hidden">
+    <div className="flex flex-col gap-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-[12px] leading-4 md:h-[calc(100dvh-7.25rem)] md:gap-2 md:overflow-hidden md:pb-0 md:text-sm md:leading-5">
       <RouteBar />
       <div className="shrink-0">
-        <h1 className="text-lg font-semibold tracking-tight sm:text-xl">双向入口，同一商品库</h1>
-        <p className="hidden text-xs leading-5 text-muted-foreground sm:block">一条一条写，或用 CSV、TSV、Excel 一次导入。</p>
+        <span className="eyebrow">路径 A · 选品与分析报告</span>
+        <h1 className="text-base font-semibold tracking-tight md:text-xl">双向入口，同一商品库</h1>
+        <p className="mt-1 text-[11px] leading-4 text-muted-foreground md:text-xs md:leading-5">一条一条写，或用 CSV、TSV、Excel 一次导入。改市场后要重新分析。</p>
       </div>
-      {error && <p className="shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-      {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
-      <div className="grid shrink-0 grid-cols-3 gap-2">
+      {error && <p className="shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive md:text-sm">{error}</p>}
+      {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 md:text-sm">{message}</p>}
+      <div className="grid shrink-0 grid-cols-3 gap-1.5 md:gap-2">
         {views.map((item) => (
-          <button key={item.id} type="button" className={`h-9 rounded-xl px-2 text-sm font-medium ${tab === item.id ? 'bg-blue-600 text-white' : 'border border-border bg-white text-slate-700 dark:bg-card dark:text-foreground'}`} onClick={() => setTab(item.id)}>
+          <button key={item.id} type="button" className={`h-8 rounded-xl px-2 text-[11px] font-medium md:h-10 md:text-sm ${tab === item.id ? 'bg-blue-600 text-white' : 'border border-border bg-white text-slate-700 dark:bg-card dark:text-foreground'}`} onClick={() => setTab(item.id)}>
             {item.name}
           </button>
         ))}
       </div>
-      <section className="panel-frame min-h-0 flex-1 overflow-y-auto rounded-2xl bg-card p-3 md:p-4">
+      <section className="panel-frame rounded-2xl bg-card p-3 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-y-contain md:rounded-3xl md:p-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {tab === 'entry' ? (
-          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <div className="grid gap-3 lg:grid-cols-2 lg:items-start lg:gap-4">
           <form onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
@@ -202,22 +234,22 @@ export default function ProductsPage() {
             })
           }}>
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold">手动录入</h2>
-              <button disabled={busy} className="h-8 shrink-0 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-50">写入商品库</button>
+              <h2 className="text-xs font-semibold md:text-sm">手动录入</h2>
+              <button disabled={busy} className="h-8 shrink-0 rounded-xl bg-primary px-3 text-[11px] font-semibold text-primary-foreground disabled:opacity-50 md:h-9 md:px-4 md:text-sm">写入商品库</button>
             </div>
-            <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5 lg:grid-cols-2 xl:grid-cols-3">
-              <Field label="名称" value={form.name} onChange={(value) => setField('name', value)} />
-              <Field label="SKU" hint="sku" value={form.sku} onChange={(value) => setField('sku', value)} />
-              <Field label="采购成本 CNY" hint="cost" value={form.cost_cny} onChange={(value) => setField('cost_cny', value)} />
-              <Field label="售价 USD" hint="price" value={form.target_price_usd} onChange={(value) => setField('target_price_usd', value)} />
-              <Field label="包装 CNY" hint="packaging" value={form.packaging_cny} onChange={(value) => setField('packaging_cny', value)} />
-              <Field label="国内段 CNY" hint="domestic" value={form.domestic_freight_cny} onChange={(value) => setField('domestic_freight_cny', value)} />
-              <Field label="国际段 USD" hint="international" value={form.international_freight_usd} onChange={(value) => setField('international_freight_usd', value)} />
-              <Field label="汇率 USD/CNY" hint="fx" value={form.fx_usd_cny} onChange={(value) => setField('fx_usd_cny', value)} />
-              <Field label="贸易术语" hint="incoterm" value={form.incoterm} onChange={(value) => setField('incoterm', value)} />
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Field label="名称" name="name" autoComplete="off" placeholder="样品杯" required maxLength={80} value={form.name} onChange={(value) => setField('name', value)} />
+              <Field label="SKU" name="sku" hint="sku" autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder="CUP-1" required maxLength={40} value={form.sku} onChange={(value) => setField('sku', value)} />
+              <Field label="采购成本 CNY" name="cost_cny" hint="cost" inputMode="decimal" placeholder="72" required value={form.cost_cny} onChange={(value) => setField('cost_cny', value)} />
+              <Field label="售价 USD" name="target_price_usd" hint="price" inputMode="decimal" placeholder="39" required value={form.target_price_usd} onChange={(value) => setField('target_price_usd', value)} />
+              <Field label="包装 CNY" name="packaging_cny" hint="packaging" inputMode="decimal" placeholder="4" value={form.packaging_cny} onChange={(value) => setField('packaging_cny', value)} />
+              <Field label="国内段 CNY" name="domestic_freight_cny" hint="domestic" inputMode="decimal" placeholder="6" value={form.domestic_freight_cny} onChange={(value) => setField('domestic_freight_cny', value)} />
+              <Field label="国际段 USD" name="international_freight_usd" hint="international" inputMode="decimal" placeholder="3.2" value={form.international_freight_usd} onChange={(value) => setField('international_freight_usd', value)} />
+              <Field label="汇率 USD/CNY" name="fx_usd_cny" hint="fx" inputMode="decimal" placeholder="7.20" value={form.fx_usd_cny} onChange={(value) => setField('fx_usd_cny', value)} />
             </div>
+            <p className="mt-2 text-[11px] leading-4 text-muted-foreground">贸易术语默认 DDP。类目、规格、材质等可在表格导入里补。</p>
           </form>
-          <form className="border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0" onSubmit={(event) => {
+          <form className="border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0" onSubmit={(event) => {
             event.preventDefault()
             void run(async () => {
               const created = await api<{ job_id: string }>('/products/imports', { method: 'POST', body: JSON.stringify({ csv, algorithm: 'product-pricer', route }) })
@@ -231,11 +263,19 @@ export default function ProductsPage() {
               setMessage(`表格导入完成：成功 ${priced?.imported ?? 0}，失败 ${priced?.failed ?? 0}。定价算法已比对国内外报价。`)
             })
           }}>
-            <h2 className="text-sm font-semibold">表格导入</h2>
-            <p className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-muted-foreground">表头要有 sku、name、cost_cny、target_price_usd。写入当前起源地和目标地。</p>
-            <textarea className="mt-1.5 h-12 w-full rounded-lg bg-muted p-2 font-mono text-xs sm:h-24" value={csv} onChange={(event) => setCsv(event.target.value)} />
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-border px-3 text-sm">
+            <h2 className="text-xs font-semibold md:text-sm">表格导入</h2>
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground md:text-xs md:leading-5">必填 sku、name、cost_cny、target_price_usd。可加 packaging_cny、运费、汇率。导入写入当前路线。</p>
+            <textarea
+              ref={csvBox}
+              rows={3}
+              className="mt-2 w-full resize-none overflow-hidden rounded-xl bg-muted p-2 font-mono text-[11px] leading-4 outline-none [scrollbar-width:none] md:text-xs md:leading-5 [&::-webkit-scrollbar]:hidden"
+              spellCheck={false}
+              autoComplete="off"
+              value={csv}
+              onChange={(event) => setCsv(event.target.value)}
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-xl border border-border px-3 text-[11px] md:h-9 md:text-sm">
                 上传文件
                 <input
                   type="file"
@@ -250,12 +290,18 @@ export default function ProductsPage() {
                   }}
                 />
               </label>
-              <button disabled={busy} className="h-8 rounded-lg bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50">开始导入</button>
-              <button
-                type="button"
-                disabled={busy}
-                className="h-8 rounded-lg border border-border px-3 text-sm disabled:opacity-50"
-                onClick={() => {
+              <button disabled={busy} className="h-8 rounded-xl bg-primary px-3 text-[11px] text-primary-foreground disabled:opacity-50 md:h-9 md:text-sm">开始导入</button>
+              {csvFile && <span className="text-[11px] text-muted-foreground md:text-xs">{csvFile}</span>}
+            </div>
+            <div className="mt-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+              <p className="text-[11px] font-semibold text-primary md:text-xs">算法 · 国内外商品定价</p>
+              <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground md:text-xs md:leading-5">建议售价<TermHint id="recommended" />不低于 15% 利润线<TermHint id="floor" />。</div>
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              className="mt-2 h-8 w-full rounded-xl border border-border px-3 text-[11px] disabled:opacity-50 sm:w-auto md:h-9 md:text-sm"
+              onClick={() => {
                 void run(async () => {
                   const priced = await api<{ items: Quote[] }>('/algorithms/product-pricer', { method: 'POST', body: JSON.stringify({ csv, route_id: route }) })
                   setQuotes(priced.items)
@@ -264,12 +310,9 @@ export default function ProductsPage() {
                   setMessage(priced.items.length ? `已比对 ${priced.items.length} 条售价。` : '没有可比对的商品行。')
                 })
               }}
-              >先比价，不入库</button>
-              {csvFile && <span className="text-xs text-muted-foreground">{csvFile}</span>}
-            </div>
-            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground"><span className="font-semibold text-primary">国内外商品定价</span> 对照货架价给建议售价<TermHint id="recommended" />，不低于 15% 利润线<TermHint id="floor" />。</p>
+            >先比价，不入库</button>
             {quotes.length > 0 && (
-              <button type="button" className="mt-3 text-sm text-primary" onClick={() => setQuoteOpen(true)}>
+              <button type="button" className="mt-2 text-[11px] text-primary md:text-sm" onClick={() => setQuoteOpen(true)}>
                 阅读利润报告（{quotes.length}）
               </button>
             )}
@@ -278,7 +321,7 @@ export default function ProductsPage() {
       ) : tab === 'catalog' ? (
         <div>
           <h2 className="font-semibold inline-flex items-center">帮我选品<TermHint id="selection" /></h2>
-          <div className="mt-1 text-sm text-muted-foreground">按{TRADE_ROUTES[route].label}比价。利润率<TermHint id="margin" />达到 15% 且风险<TermHint id="risk" />不是高的商品优先<TermHint id="pick" />。</div>
+          <div className="mt-1 text-sm text-muted-foreground">按{TRADE_ROUTES[route].label}比价。利润率<TermHint id="margin" />达到 15% 且风险<TermHint id="risk" />不是高的商品优先<TermHint id="pick" />。排序选「搜索时间」时，刚返回的商品在上面。免费保留海外利润最高的 5 条，专业版 10 条，企业版 30 条。</div>
           {platforms.length > 0 && (
             <div className="mt-2 text-xs leading-5 text-muted-foreground">
               {platforms.map((item) => `${item.name}${item.status === 'ok' ? ` ${item.count}` : item.status === 'failed' ? ' 失败' : item.status === 'reauth' ? ' 需重新授权' : ' 未配置'}`).join(' · ')}
@@ -286,7 +329,7 @@ export default function ProductsPage() {
             </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{refresh?.premium ? '1688 价格每 15 分钟更新。' : '1688 价格每小时更新。支付成长或规模后改为每 15 分钟，并有 10 次随时刷新。'}</span>
+            <span>{refresh?.premium ? '1688、拼多多、eBay、速卖通货价每 15 分钟更新。' : '各平台货价每小时更新。支付专业版或企业版后改为每 15 分钟，并有 10 次随时刷新。'}</span>
             {refresh?.premium ? <span>还可随时刷新 {refresh.manual_left} 次。</span> : <a className="text-primary" href="/workspace/billing">去支付</a>}
             {refresh?.premium && shelfQuery && (
               <button
@@ -301,7 +344,7 @@ export default function ProductsPage() {
                     setPlatforms(data.sources?.platforms || [])
                     setRefresh(data.sources?.refresh || null)
                     setCompareOpen(true)
-                    setMessage(data.sources?.refresh?.fresh ? '已向 1688 要到新价格。' : '用的是刚才的价格。')
+                    setMessage(data.sources?.refresh?.fresh ? '已向各平台要到新价格。' : '用的是刚才的价格。')
                   })
                 }}
               >立即刷新</button>
@@ -316,15 +359,23 @@ export default function ProductsPage() {
                 void run(async () => {
                   const data = await api<ShelfPayload>(`/catalog/search?q=${encodeURIComponent(next)}&algorithm=selection-assist&route=${route}`)
                   setShelfQuery(next)
-                  setCatalog(data.items)
+                  setCatalog((current) => placeReturned(current, data.items))
                   setProvider(data.sources?.provider || '')
                   setPlatforms(data.sources?.platforms || [])
                   setRefresh(data.sources?.refresh || null)
+                  if (data.sources?.ai) setAi(data.sources.ai)
                   setCompareOpen(true)
                 })
               }}
-              filters={[{ key: 'pick', label: '建议', value: (item) => item.selection?.pick ? '优先' : '暂缓' }]}
+              afterSearch={(
+                <button type="button" className="h-10 rounded-xl border border-border px-4 text-sm" onClick={() => setAiOpen((open) => !open)}>
+                  AI 选品{ai ? ` ${ai.ai_left}/${ai.ai_daily}` : ''}
+                </button>
+              )}
+              pageSize={ai?.shelf_limit || 5}
+              maxPageSize={ai?.shelf_limit || 5}
               sorts={[
+                { id: 'searched', label: '搜索时间', compare: (left, right) => (right.searched_at || '').localeCompare(left.searched_at || '') },
                 { id: 'score', label: '机会分', compare: (left, right) => (right.selection?.score || 0) - (left.selection?.score || 0) },
                 { id: 'margin', label: '利润率', compare: (left, right) => (right.selection?.net_margin || '').localeCompare(left.selection?.net_margin || '') },
                 { id: 'name', label: '名称', compare: (left, right) => left.name.localeCompare(right.name, 'zh') },
@@ -336,12 +387,13 @@ export default function ProductsPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="font-medium">{item.name}</h3>
-                      <div className="mt-1 text-xs text-muted-foreground">{item.platform === 'ebay' && item.price_basis === 'us_shelf' ? `${item.supplier || 'eBay'} · $${item.target_price_usd} 美国货架` : <>{item.platform || item.supplier} · <span className="inline-flex items-center">SKU {item.sku}<TermHint id="sku" /></span> · ¥{item.cost_cny} · ${item.target_price_usd}{item.price_basis === 'us_shelf' ? ' 美国货架' : item.price_basis === 'floor_reference' ? ' 利润线' : ''}</>}</div>
-                      {item.selection && <div className="mt-1 text-xs text-muted-foreground">{item.selection.pick ? '优先' : '暂缓'}<TermHint id="pick" /> · 机会分 {item.selection.score}<TermHint id="score" /> · 利润率 {item.selection.net_margin}<TermHint id="margin" /> · 风险 {item.selection.risk_level}<TermHint id="risk" /></div>}
+                      <div className="mt-1 text-xs text-muted-foreground">{item.platform || item.supplier} · <span className="inline-flex items-center">SKU {item.sku}<TermHint id="sku" /></span> · ¥{item.cost_cny} · ${item.target_price_usd}{item.price_basis === 'us_shelf' ? ' 美国货架' : item.price_basis === 'floor_reference' ? ' 利润线' : ''}</div>
+                      {item.selection && <div className="mt-1 text-xs text-muted-foreground">{item.selection.pick ? '优先' : '暂缓'}<TermHint id="pick" /> · 机会分 {item.selection.score}<TermHint id="score" /> · 利润率 {item.selection.net_margin}<TermHint id="margin" /> · 风险 {item.selection.risk_level}<TermHint id="risk" />{item.searched_at ? ` · ${item.searched_at.slice(5, 16).replace('T', ' ')}` : ''}</div>}
                     </div>
                     <button type="button" disabled={busy} className="h-9 rounded-lg border border-border px-3 text-sm" onClick={() => {
                       void run(async () => {
-                        await api('/catalog/adopt', { method: 'POST', body: JSON.stringify({ catalog_id: item.id, route }) })
+                        await api('/catalog/adopt', { method: 'POST', body: JSON.stringify({ catalog_id: item.id, route, item }) })
+                        setLibraryKey((key) => key + 1)
                         setMessage(`${item.name} 已进入商品库。`)
                       })
                     }}>入库</button>
@@ -350,7 +402,33 @@ export default function ProductsPage() {
               )}
             />
           </div>
-          {compareOpen && <PriceCompareDialog query={shelfQuery} sites={platforms} onClose={() => setCompareOpen(false)} />}
+          {aiOpen && (
+            <form
+              className="mt-3 rounded-xl border border-border p-3"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void run(async () => {
+                  const data = await api<ShelfPayload>('/catalog/ai-pick', { method: 'POST', body: JSON.stringify({ need: aiNeed, route }) })
+                  setShelfQuery(aiNeed)
+                  setCatalog((current) => placeReturned(current, data.items))
+                  setProvider(data.sources?.provider || '')
+                  setPlatforms(data.sources?.platforms || [])
+                  setRefresh(data.sources?.refresh || null)
+                  if (data.sources?.ai) setAi(data.sources.ai)
+                  setCompareOpen(true)
+                  setMessage(data.sources?.ai_note || 'AI 选品已返回。')
+                })
+              }}
+            >
+              <p className="text-sm font-medium">AI 选品</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {ai ? `当前每天 ${ai.ai_daily} 次，还剩 ${ai.ai_left} 次。免费 0 次，专业版 5 次，企业版 20 次。金额仍由规则引擎计算。` : '正在读取今天的次数。'}
+              </p>
+              <textarea className="mt-2 h-20 w-full rounded-lg bg-muted p-2 text-sm" value={aiNeed} placeholder="例如：美国站 100 美元以内的二手 iPhone" onChange={(event) => setAiNeed(event.target.value)} />
+              <button disabled={busy || (ai?.ai_left || 0) <= 0} className="mt-2 h-10 rounded-xl bg-primary px-4 text-sm text-primary-foreground disabled:opacity-50">{busy ? '处理中' : '让 AI 选品'}</button>
+            </form>
+          )}
+          {compareOpen && <PriceCompareDialog query={shelfQuery} sites={platforms} offerLimit={ai?.shelf_limit || 5} onClose={() => setCompareOpen(false)} />}
         </div>
       ) : (
         <div>
@@ -418,10 +496,52 @@ function ProfitReport({
   )
 }
 
-function Field({ label, hint, value, onChange }: { label: string; hint?: SelectionTermId; value: string; onChange: (value: string) => void }) {
+function Field({
+  label,
+  hint,
+  name,
+  value,
+  onChange,
+  inputMode = 'text',
+  autoComplete = 'off',
+  placeholder,
+  maxLength,
+  required,
+  list,
+  autoCapitalize,
+  spellCheck,
+}: {
+  label: string
+  hint?: SelectionTermId
+  name: string
+  value: string
+  onChange: (value: string) => void
+  inputMode?: 'text' | 'decimal' | 'numeric'
+  autoComplete?: string
+  placeholder?: string
+  maxLength?: number
+  required?: boolean
+  list?: string
+  autoCapitalize?: 'off' | 'characters'
+  spellCheck?: boolean
+}) {
   return (
-    <label className="text-[11px] text-muted-foreground sm:text-xs"><span className="inline-flex items-center whitespace-nowrap">{label}{hint && <TermHint id={hint} />}</span>
-      <input className="mt-0.5 h-8 w-full rounded-lg border-0 bg-muted px-2 text-sm text-foreground outline-none" value={value} onChange={(event) => onChange(event.target.value)} />
+    <label className="text-[11px] leading-4 text-muted-foreground md:text-xs"><span className="inline-flex items-center">{label}{hint && <TermHint id={hint} />}</span>
+      <input
+        name={name}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        autoCapitalize={autoCapitalize}
+        spellCheck={spellCheck}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        required={required}
+        list={list}
+        enterKeyHint="next"
+        className="mt-1 h-7 w-full rounded-lg border-0 bg-muted px-2 text-[12px] leading-4 text-foreground outline-none placeholder:text-slate-400 md:h-8 md:text-[13px] md:leading-5"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </label>
   )
 }

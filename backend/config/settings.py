@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     aliexpress_app_secret: str = ""
     aliexpress_tracking_id: str = ""
     reply_interval_hours: int = 24
+    amazon_sp_application_id: str = ""
     amazon_sp_client_id: str = ""
     amazon_sp_client_secret: str = ""
     amazon_sp_refresh_token: str = ""

@@ -39,7 +39,7 @@ type Invite = {
   coupons: Coupon[]
 }
 
-const planLabel: Record<string, string> = { free: '免费', growth: '成长', scale: '规模' }
+const planLabel: Record<string, string> = { free: '免费体验', growth: '专业版', growth_year: '专业版', scale: '企业版', scale_year: '企业版' }
 
 function yuan(fen: number) {
   return `¥${(fen / 100).toFixed(2)}`

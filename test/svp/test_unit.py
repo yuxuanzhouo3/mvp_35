@@ -308,6 +308,63 @@ def test_agency_push_needs_a_parent_then_discovery_uses_it(client):
     assert second["result"]["updated"] == 1
 
 
+def test_free_plan_cannot_use_selection_ai(client):
+    denied = client.post("/api/v1/catalog/ai-pick", headers={"Authorization": "Bearer demo"}, json={"need": "水杯", "route": "cn_us"})
+    assert denied.status_code == 403
+    assert "每天不能使用" in denied.json()["error"]["message"]
+    allowance = client.get("/api/v1/catalog/selection-allowance", headers={"Authorization": "Bearer demo"})
+    assert allowance.json()["data"]["ai_daily"] == 0
+    assert allowance.json()["data"]["shelf_limit"] == 5
+
+
+def test_demo_premium_login_gets_growth_selection_limits(client):
+    logged = client.post(
+        "/api/v1/auth/login",
+        json={"username": "premium", "password": "premium"},
+    )
+    assert logged.status_code == 200, logged.text
+    token = logged.json()["data"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    me = client.get("/api/v1/users/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["data"]["tenant"]["plan_id"] == "growth"
+    allowance = client.get("/api/v1/catalog/selection-allowance", headers=headers)
+    body = allowance.json()["data"]
+    assert body["plan"] == "growth"
+    assert body["shelf_limit"] == 10
+    assert body["ai_daily"] == 5
+    assert body["ai_left"] == 5
+
+
+def test_growth_ai_pick_spends_one_daily_turn(client):
+    headers = {"Authorization": "Bearer demo"}
+    me = client.get("/api/v1/users/me", headers=headers)
+    tenant_id = me.json()["data"]["tenant"]["id"]
+    client.app.state.store.touch("tenants", tenant_id, {"plan_id": "growth"})
+    picked = client.post("/api/v1/catalog/ai-pick", headers=headers, json={"need": "宠物", "route": "cn_us"})
+    assert picked.status_code == 200, picked.text
+    body = picked.json()["data"]
+    assert body["sources"]["ai"]["ai_left"] == 4
+    assert body["sources"]["ai_note"]
+    assert len(body["items"]) <= 10
+    assert body["items"][0]["name"]
+
+
+def test_overseas_profit_cap_follows_the_plan():
+    from decimal import Decimal
+
+    from algorithm.overseas_rank import top_by_overseas_profit
+
+    rows = [
+        {"sku": str(index), "selection": {"net_profit_usd": str(Decimal(index) - Decimal("40"))}}
+        for index in range(40)
+    ]
+    assert [row["sku"] for row in top_by_overseas_profit(rows, "free")] == [str(index) for index in range(39, 34, -1)]
+    assert len(top_by_overseas_profit(rows, "growth")) == 10
+    assert len(top_by_overseas_profit(rows, "scale")) == 30
+    assert len(top_by_overseas_profit(rows, "unknown")) == 5
+
+
 def test_sms_daily_limit_is_explained():
     from app.modules.messages import sms_failure_message
 

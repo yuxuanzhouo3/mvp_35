@@ -184,7 +184,7 @@ R ≥ (C + fixed_tax) / (1 − fee_rate − 增值税率 − 0.15)
 
 1688 的 `access_token` 大约 10 小时有效。进程里发现它失效后，用 `ALIBABA_REFRESH_TOKEN` 调 `system.oauth2/getToken`（`grant_type=refresh_token`）换一张新的，并记下返回的 `expires_in` 和 `refresh_token_timeout`。到了 `ALIBABA_REFRESH_TOKEN_TIMEOUT`（或接口返回的同一时刻）之后，刷新会被拒绝。这时 1688 这一路标成 `reauth`，选品继续用其他已配置平台；要恢复 1688，卖家必须再打开一次授权页，用新的 `code` 换一套 `access_token` 和 `refresh_token`。
 
-同一关键词的 1688 价格不会每次搜索都重打官方接口。免费账号每 1 小时拉一次。已支付且未过期的 `growth` 或 `scale` 每 15 分钟拉一次，另外有 10 次随时刷新，用 `POST /catalog/refresh` 扣 1 次；这 10 次只在间隔还没到时才扣，1688 没有返回商品则不扣。套餐标价仍是免费 0、成长 29900 分、规模 99900 分。新的一笔会费入账后，这 10 次重新记满。
+同一关键词在 1688、拼多多、eBay、速卖通上的价格不会每次搜索都重打官方接口，四家共用一次缓存。免费体验每 1 小时拉一次。已支付且未过期的专业版（`growth`）或企业版（`scale`）每 15 分钟拉一次，另外有 10 次随时刷新，用 `POST /catalog/refresh` 扣 1 次；这 10 次只在间隔还没到时才扣，1688 没有返回商品则不扣。套餐标价是免费体验 0、专业版每月 29900 分、专业版年付 251160 分（0.7 × 299 × 12）、企业版每月 99900 分、企业版年付 839160 分（0.7 × 999 × 12）。年付套餐 id 是 `growth_year` 和 `scale_year`，权益与对应月付相同。新的一笔会费入账后，这 10 次重新记满。
 
 ### 海外货架平台
 
@@ -378,7 +378,15 @@ B4 的二级代理不另申请一套店铺钥匙，用租户已经授权的店�
 
 ## B1 电商
 
-`channel=ecommerce`。询盘、订单买家、沉默买家都进 `leads`。`POST /acquisition/ecommerce` 在开关 `acquisition.ecommerce` 打开前保持未开通，发现走 `POST /lead-searches`。
+`channel=ecommerce`。卖家先登录自己的店铺账号。登录时必须选定一种做法，记在 `channel_accounts.mode`。获客任务下一步再接，登录本身不拉订单、不发消息。
+
+| mode | 卖家要的结果 |
+| --- | --- |
+| `analyze` | 分析已有订单，从订单里的买家找出更多客户 |
+| `half` | 半托管。相关平台承接一部分订单和客户，卖家留下另一部分 |
+| `full` | 全托管。平台接单运营，卖家只收钱 |
+
+`POST /acquisition/ecommerce` 在开关 `acquisition.ecommerce` 打开前保持未开通，发现走 `POST /lead-searches`。询盘、订单买家、沉默买家都进 `leads`。
 
 | 平台 id | 平台 | 官方接口 | 用来取线索 | 归一化 |
 | --- | --- | --- | --- | --- |
@@ -432,7 +440,7 @@ B4 的二级代理不另申请一套店铺钥匙，用租户已经授权的店�
 | 一级代理 | 通讯录里邀请来的上级账户，id 由系统生成，不占用 `agent_n`，也不进 `CHANNELS` | 不直接发现线索。下级成交后单独入一笔分成 |
 | 二级代理 | `agent_1` … `agent_12`，每个租户最多这 12 个 | 报备线索、跟进成交。平台 id 必须是这 12 个之一 |
 
-每个二级代理必须挂在一个一级代理下面。线索由该二级代理用表格或 webhook 推送公司名单，本系统不登录对方后台。推送字段：`company`、`contact_name`、`email`、`market`、`external_id`。入库时 `platform=agent_n`，`source_channel=agency`，并记下 `parent_channel_account_id`。没有上级的推送拒绝，错误 `AGENCY_PARENT_REQUIRED`，不入库。
+每个二级代理必须挂在一个一级代理下面。当前租户在 B4 确认某个 `agent_n` 槽位后，该槽位记为已登录，不打开对方后台。线索由该二级代理用表格或 webhook 推送公司名单。推送字段：`company`、`contact_name`、`email`、`market`、`external_id`。入库时 `platform=agent_n`，`source_channel=agency`，并记下 `parent_channel_account_id`。没有上级的推送拒绝，错误 `AGENCY_PARENT_REQUIRED`，不入库。
 
 | 平台 id | 层级 | 线索从哪来 | 账本记在谁名下 |
 | --- | --- | --- | --- |
@@ -459,7 +467,7 @@ signature = HMAC-SHA256(ledger_hmac_secret, f"{idempotency_key}:{amount_fen}:age
 
 ## B5 全部客源
 
-`channel=enrichment`。这一路负责把客源收齐，不种草，不自动回复。一次发现会合并：B1 订单买家、B2 表单和粉丝、B3 展会询盘、B4 代理推送的名单，再加上下面三家工商接口按关键词补到的企业。去重仍是 `source_channel:公司:市场`，同一 `external_id` 只更新。这些接口补公司是否存在、行业、地区，不改已经由规则写下的 `quality_score`。
+`channel=enrichment`。租户在这一路打开企查查、天眼查或启信宝。钥匙已配置则记为已登录，钥匙为空则保持未登录。这一路负责把客源收齐，不种草，不自动回复。一次发现会合并：B1 订单买家、B2 表单和粉丝、B3 展会询盘、B4 代理推送的名单，再加上下面三家工商接口按关键词补到的企业。去重仍是 `source_channel:公司:市场`，同一 `external_id` 只更新。这些接口补公司是否存在、行业、地区，不改已经由规则写下的 `quality_score`。
 
 | 平台 id | 平台 | 官方接口 | 检索 | 取用字段 |
 | --- | --- | --- | --- | --- |
@@ -537,7 +545,7 @@ signature = HMAC-SHA256(ledger_hmac_secret, f"{idempotency_key}:{amount_fen}:age
 
 改抽成比例必须换 `share_rules_version`。已经入账的行保持旧版本，不重算。模型不能改月费、抽成或账本金额。
 
-当前代码里的套餐仍是 `free`、`growth`（299 元/月）、`scale`（999 元/年）。实现本规则时，账单页改列下面六档，不再出售 `growth` 和 `scale`。已在生效中的旧订阅维持到 `period_end`，到期后按免费档抽成。
+当前出售的套餐是免费体验、专业版（`growth` 299 元/月，`growth_year` 2511.60 元/年）、企业版（`scale` 999 元/月，`scale_year` 8391.60 元/年）。年付是月费 × 12 × 0.7。实现本规则时，账单页改列下面六档，不再出售 `growth` 和 `scale`。已在生效中的旧订阅维持到 `period_end`，到期后按免费档抽成。
 
 ### 六档
 

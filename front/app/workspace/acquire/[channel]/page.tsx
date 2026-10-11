@@ -4,10 +4,13 @@ import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { api, waitJob } from '@/lib/api'
+import { ChannelLogin } from '@/components/channel-login'
 import { ResultDesk } from '@/components/result-desk'
 import { RouteBar } from '@/components/route-bar'
 import { DEFAULT_ROUTE, readTradeRoute, TRADE_ROUTES, type RouteId } from '@/lib/trade-route'
 import { channels, sameButton } from '../channels'
+
+const loginChannels = new Set(['ecommerce', 'social', 'expo', 'agency', 'enrichment'])
 
 type Lead = {
   id: string
@@ -148,12 +151,18 @@ function ChannelDesk() {
       <section className="panel-frame min-h-0 flex-1 overflow-y-auto rounded-3xl bg-card p-4 md:p-5">
         {view === 'discover' && (
           <div>
-            <h2 className="font-semibold">发现线索</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-              <select className="h-11 w-full rounded-xl border-0 bg-muted px-3 text-sm outline-none" value={platform} aria-label="平台" onChange={(event) => setPlatform(event.target.value)}>
+            {loginChannels.has(channel.id) && <ChannelLogin channel={channel.id} platforms={channel.platforms} />}
+            <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold">发现线索</h2>
+                <p className="text-xs text-muted-foreground">{loginChannels.has(channel.id) ? '登录后下一步再获客；现在可用演示线索。' : '这一路不需要店铺登录。'}</p>
+              </div>
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
+              <select className="h-9 w-full rounded-lg border-0 bg-muted px-3 text-sm outline-none" value={platform} aria-label="平台" onChange={(event) => setPlatform(event.target.value)}>
                 {channel.platforms.map((item) => <option key={item}>{item}</option>)}
               </select>
-              <button type="button" disabled={busy} className="h-11 rounded-xl bg-primary text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => {
+              <button type="button" disabled={busy} className="h-9 rounded-lg bg-primary text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => {
                 void run(async () => {
                   const created = await api<{ job_id: string }>('/lead-searches', {
                     method: 'POST',

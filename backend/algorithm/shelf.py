@@ -161,7 +161,7 @@ def _amount(value) -> Decimal | None:
 
 def _attach_offers(rows: list, status: dict) -> dict:
     offers = []
-    for row in rows[:3]:
+    for row in rows[:30]:
         if status.get("region") == "CN" and row.get("cost_cny"):
             offers.append({"name": str(row.get("name") or ""), "price": str(row["cost_cny"]), "currency": "CNY"})
         elif row.get("usd") is not None:
@@ -551,7 +551,7 @@ def _us_shelf_items(rows: list[dict], fx: str, target_market: str) -> list[dict]
     rate = Decimal(fx)
     market = target_market if target_market != "CN" else "US"
     items = []
-    for row in rows[:8]:
+    for row in rows[:30]:
         usd = row.get("usd")
         if not isinstance(usd, Decimal):
             continue
@@ -688,7 +688,7 @@ def _ebay(query: str, settings) -> tuple[list, dict]:
         return _fail("ebay", "eBay", "US")
     body = _get(
         "https://api.ebay.com/buy/browse/v1/item_summary/search",
-        params={"q": query, "limit": "8"},
+        params={"q": query, "limit": "30"},
         headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
     )
     if body is None:
@@ -707,7 +707,7 @@ def _ebay(query: str, settings) -> tuple[list, dict]:
             continue
         seller = (product.get("seller") or {}).get("username") or "eBay"
         rows.append(_us("ebay", external, title, amount, str(seller), str(product.get("itemWebUrl") or "")))
-    return rows[:8], _status("ebay", "eBay", "US", "ok", len(rows[:8]))
+    return rows[:30], _status("ebay", "eBay", "US", "ok", len(rows[:30]))
 
 
 def _aliexpress(query: str, settings) -> tuple[list, dict]:
@@ -725,7 +725,7 @@ def _aliexpress(query: str, settings) -> tuple[list, dict]:
         "sign_method": "md5",
         "keywords": query,
         "page_no": "1",
-        "page_size": "8",
+        "page_size": "30",
         "target_currency": "USD",
         "target_language": "EN",
         "ship_to_country": "US",
@@ -755,7 +755,7 @@ def _aliexpress(query: str, settings) -> tuple[list, dict]:
                 str(product.get("promotion_link") or product.get("product_detail_url") or ""),
             )
         )
-    return rows[:8], _status("aliexpress", "速卖通", "US", "ok", len(rows[:8]))
+    return rows[:30], _status("aliexpress", "速卖通", "US", "ok", len(rows[:30]))
 
 
 def _aliexpress_products(body: dict | None):

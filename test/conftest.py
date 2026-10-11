@@ -74,6 +74,7 @@ def client(tmp_path, monkeypatch):
         "ALIEXPRESS_APP_KEY",
         "ALIEXPRESS_APP_SECRET",
         "ALIEXPRESS_TRACKING_ID",
+        "AMAZON_SP_APPLICATION_ID",
         "AMAZON_SP_CLIENT_ID",
         "AMAZON_SP_CLIENT_SECRET",
         "AMAZON_SP_REFRESH_TOKEN",

@@ -118,27 +118,84 @@ CHANNELS = {
     "raas": ["site_success", "app_account"],
 }
 
+
+def yearly_fen(month_yuan: int) -> int:
+    """Annual list price in fen: 0.7 × monthly yuan × 12."""
+    return month_yuan * 12 * 70
+
+
+def plan_tier(plan_id: str | None) -> str:
+    raw = str(plan_id or "")
+    if raw.endswith("_year"):
+        raw = raw[: -len("_year")]
+    return raw if raw in {"free", "growth", "scale"} else "free"
+
+
+_GROWTH_FEATURES = [
+    "选品分析 500 次、货源发现 500 次、获客发送 2,000 次",
+    "购买后，1688、拼多多、eBay、速卖通同一商品价格每 15 分钟刷新",
+    "另有 10 次随时刷新",
+    "帮我选品返回海外利润最高的 10 条",
+    "AI 选品每天 5 次",
+]
+_SCALE_FEATURES = [
+    "选品分析 5,000 次、货源发现 5,000 次、获客发送 20,000 次",
+    "含专业版：各平台货价每 15 分钟刷新，另有 10 次随时刷新",
+    "帮我选品返回海外利润最高的 30 条",
+    "AI 选品每天 20 次",
+]
+_YEAR_NOTE = "年付按月费 × 12 × 0.7，开通 365 天"
+
 PLANS = [
     {
         "id": "free",
+        "tier": "free",
         "name": "免费体验",
         "amount_fen": 0,
         "period": "month",
         "quota": {"analysis": 50, "discovery": 50, "send": 100},
+        "features": [
+            "选品分析 50 次、货源发现 50 次、获客发送 100 次",
+            "1688、拼多多、eBay、速卖通货价每小时更新",
+            "帮我选品返回海外利润最高的 5 条",
+            "AI 选品每天 0 次",
+        ],
     },
     {
         "id": "growth",
-        "name": "成长",
+        "tier": "growth",
+        "name": "专业版",
         "amount_fen": 29900,
         "period": "month",
         "quota": {"analysis": 500, "discovery": 500, "send": 2000},
+        "features": _GROWTH_FEATURES,
+    },
+    {
+        "id": "growth_year",
+        "tier": "growth",
+        "name": "专业版",
+        "amount_fen": yearly_fen(299),
+        "period": "year",
+        "quota": {"analysis": 500, "discovery": 500, "send": 2000},
+        "features": [*_GROWTH_FEATURES, _YEAR_NOTE],
     },
     {
         "id": "scale",
-        "name": "规模",
+        "tier": "scale",
+        "name": "企业版",
         "amount_fen": 99900,
+        "period": "month",
+        "quota": {"analysis": 5000, "discovery": 5000, "send": 20000},
+        "features": _SCALE_FEATURES,
+    },
+    {
+        "id": "scale_year",
+        "tier": "scale",
+        "name": "企业版",
+        "amount_fen": yearly_fen(999),
         "period": "year",
         "quota": {"analysis": 5000, "discovery": 5000, "send": 20000},
+        "features": [*_SCALE_FEATURES, _YEAR_NOTE],
     },
 ]
 
@@ -192,6 +249,18 @@ def mock_leads(channel: str, platform: str | None, query: str, seed: str | None,
     return leads
 
 
+def product_attributes(body: dict) -> dict:
+    raw = body.get("attributes") if isinstance(body.get("attributes"), dict) else {}
+    values = {
+        "supplier": body.get("supplier") or raw.get("supplier") or "",
+        "material": body.get("material") or raw.get("material") or "",
+        "spec": body.get("spec") or raw.get("spec") or "",
+        "weight_g": body.get("weight_g") or raw.get("weight_g") or "",
+        "moq": body.get("moq") or raw.get("moq") or "",
+    }
+    return {key: str(value).strip() for key, value in values.items() if str(value).strip()}
+
+
 def product_from_body(body: dict, *, source: str) -> dict:
     sku = normalize_sku(body.get("sku") or "")
     name = (body.get("name") or "").strip()
@@ -208,6 +277,7 @@ def product_from_body(body: dict, *, source: str) -> dict:
         "international_freight_usd": str(body.get("international_freight_usd") or "0"),
         "target_price_usd": str(body.get("target_price_usd") or "0"),
         "hs_code_hint": body.get("hs_code_hint") or "",
+        "attributes": product_attributes(body),
         "source": source,
         "context_version": 1,
         **MARKET_DEFAULTS,

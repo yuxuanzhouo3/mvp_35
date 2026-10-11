@@ -47,8 +47,17 @@ def test_front_modules_roundtrip(client: TestClient):
 
     summary = client.get("/api/v1/billing/summary", headers=headers)
     assert summary.status_code == 200
-    plans = {item["id"]: item["amount_fen"] for item in summary.json()["data"]["plans"]}
-    assert plans == {"free": 0, "growth": 29900, "scale": 99900}
+    rows = {item["id"]: item for item in summary.json()["data"]["plans"]}
+    plans = {key: item["amount_fen"] for key, item in rows.items()}
+    assert plans == {"free": 0, "growth": 29900, "growth_year": 251160, "scale": 99900, "scale_year": 839160}
+    assert rows["growth"]["period"] == "month"
+    assert rows["growth_year"]["period"] == "year"
+    assert rows["scale"]["period"] == "month"
+    assert rows["scale_year"]["period"] == "year"
+    assert rows["growth"]["name"] == "专业版"
+    assert rows["scale"]["name"] == "企业版"
+    assert "每 15 分钟" in " ".join(rows["growth"]["features"])
+    assert "每 15 分钟" in " ".join(rows["scale"]["features"])
 
     checkout = client.post(
         "/api/v1/payments/checkout",

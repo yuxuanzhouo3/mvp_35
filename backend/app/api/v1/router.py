@@ -1,12 +1,12 @@
 import json
 
 from fastapi import APIRouter, BackgroundTasks, Header, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from algorithm.product_pricer import assert_product_pricer
 from algorithm.selection_assist import catalog_payload
-from algorithm.shelf import lookup_shelf
+from algorithm.shelf import lookup_shelf, remember_shelf
 from app.api.deps import bind
 from app.core.errors import AppError
 from app.core.timeutil import iso
@@ -43,6 +43,11 @@ class ProductIn(BaseModel):
     name: str
     sku: str
     category: str | None = None
+    supplier: str | None = None
+    material: str | None = None
+    spec: str | None = None
+    weight_g: str | None = None
+    moq: str | None = None
     cost_cny: str = "0"
     packaging_cny: str = "0"
     domestic_freight_cny: str = "0"
@@ -86,6 +91,7 @@ class CsvIn(BaseModel):
 class AdoptIn(BaseModel):
     catalog_id: str
     route: str | None = None
+    item: dict | None = None
 
 
 class LeadSearchIn(BaseModel):
@@ -134,6 +140,11 @@ class CampaignIn(BaseModel):
     market_pack: str | None = "cn_us"
 
 
+class AiPickIn(BaseModel):
+    need: str
+    route: str | None = None
+
+
 class OrderIn(BaseModel):
     plan_id: str
     provider: str | None = None
@@ -153,6 +164,17 @@ class SignIn(BaseModel):
     idempotency_key: str
     amount_fen: int
     subject: str
+
+
+class ChannelLoginIn(BaseModel):
+    channel: str
+    platform: str
+    mode: str = ""
+
+
+class ChannelCallbackIn(BaseModel):
+    state: str
+    code: str
 
 
 class ChatIn(BaseModel):
@@ -219,8 +241,11 @@ def _shelf_info(store, tenant_id: str) -> dict:
     return policy(store, tenant_id)
 
 
-def _shelf_payload(query: str, algorithm: str | None, settings, spec: dict | None, route: str | None, info: dict, *, force: bool = False) -> dict:
-    return catalog_payload(
+def _shelf_payload(query: str, algorithm: str | None, settings, spec: dict | None, route: str | None, info: dict, store, tenant_id: str, *, force: bool = False) -> dict:
+    from algorithm.overseas_rank import active_plan, allowance
+
+    plan = active_plan(store, tenant_id)
+    payload = catalog_payload(
         query,
         algorithm,
         settings.rules_version,
@@ -231,7 +256,11 @@ def _shelf_payload(query: str, algorithm: str | None, settings, spec: dict | Non
         force=force,
         premium=info["premium"],
         manual_left=info["manual_left"],
+        plan=plan,
     )
+    if algorithm == "selection-assist":
+        payload.setdefault("sources", {})["ai"] = allowance(store, tenant_id)
+    return payload
 
 
 def create_router() -> APIRouter:
@@ -325,12 +354,61 @@ def create_router() -> APIRouter:
         ctx(request, authorization)
         return respond(request, {"channels": CHANNELS, "providers": "mock"})
 
+    @router.get("/channel-accounts")
+    def channel_accounts(request: Request, channel: str, authorization: str | None = Header(default=None)):
+        from app.modules.channel_login import list_accounts
+
+        _settings, store, prof = ctx(request, authorization)
+        return respond(request, {"items": list_accounts(store, prof["tenant"]["id"], channel)})
+
+    @router.post("/channel-accounts/login")
+    def channel_account_login(request: Request, body: ChannelLoginIn, authorization: str | None = Header(default=None)):
+        from app.modules.channel_login import begin_login
+
+        settings, store, prof = ctx(request, authorization, write=True)
+        return respond(request, begin_login(store, settings, prof, channel=body.channel, platform=body.platform, mode=body.mode))
+
+    @router.post("/channel-accounts/callback")
+    def channel_account_callback(request: Request, body: ChannelCallbackIn, authorization: str | None = Header(default=None)):
+        from app.modules.channel_login import complete_login
+
+        settings, store, prof = ctx(request, authorization, write=True)
+        return respond(request, complete_login(store, settings, prof, state=body.state, code=body.code))
+
     @router.get("/catalog/search")
     def catalog_search(request: Request, q: str = "", algorithm: str | None = None, route: str | None = None, authorization: str | None = Header(default=None)):
         settings, store, prof = ctx(request, authorization)
         spec = resolve_route(route)
         info = _shelf_info(store, prof["tenant"]["id"])
-        return respond(request, _shelf_payload(q, algorithm, settings, spec, route, info))
+        return respond(request, _shelf_payload(q, algorithm, settings, spec, route, info, store, prof["tenant"]["id"]))
+
+    @router.get("/catalog/selection-allowance")
+    def selection_allowance(request: Request, authorization: str | None = Header(default=None)):
+        _settings, store, prof = ctx(request, authorization)
+        from algorithm.overseas_rank import allowance
+
+        return respond(request, allowance(store, prof["tenant"]["id"]))
+
+    @router.post("/catalog/ai-pick")
+    def catalog_ai_pick(request: Request, body: AiPickIn, authorization: str | None = Header(default=None)):
+        settings, store, prof = ctx(request, authorization, write=True)
+        from algorithm.overseas_rank import allowance, spend_ai
+
+        need = " ".join(body.need.split())[:80]
+        if not need:
+            raise AppError("SELECTION_AI_EMPTY", "先写下要找的商品或需求")
+        gate = allowance(store, prof["tenant"]["id"])
+        if gate["ai_daily"] <= 0 or gate["ai_left"] <= 0:
+            spend_ai(store, prof["tenant"]["id"])
+        spec = resolve_route(body.route)
+        info = _shelf_info(store, prof["tenant"]["id"])
+        payload = _shelf_payload(need, "selection-assist", settings, spec, body.route, info, store, prof["tenant"]["id"])
+        gate = spend_ai(store, prof["tenant"]["id"])
+        payload.setdefault("sources", {})["ai"] = gate
+        payload["sources"]["ai_note"] = (
+            f"按「{need}」检索。金额和利润仍由规则引擎计算，返回海外利润最高的 {len(payload.get('items') or [])} 条。"
+        )
+        return respond(request, payload)
 
     @router.post("/catalog/refresh")
     def catalog_refresh(request: Request, q: str = "", route: str | None = None, authorization: str | None = Header(default=None)):
@@ -345,11 +423,11 @@ def create_router() -> APIRouter:
         if not due and not (info["premium"] and info["manual_left"] > 0):
             raise AppError(
                 "SHELF_REFRESH_WAIT",
-                "价格还在刷新间隔内。免费每小时更新；支付成长或规模后每 15 分钟更新，并有 10 次随时刷新。",
+                "价格还在刷新间隔内。免费体验每小时更新；支付专业版或企业版后，各平台货价每 15 分钟更新，并有 10 次随时刷新。",
                 403,
                 {"manual_left": info["manual_left"], "interval_seconds": info["interval_seconds"]},
             )
-        payload = _shelf_payload(q, "selection-assist", settings, spec, route, info, force=not due)
+        payload = _shelf_payload(q, "selection-assist", settings, spec, route, info, store, prof["tenant"]["id"], force=not due)
         fresh_hit = any(
             row.get("id") == "1688" and row.get("status") == "ok"
             for row in (payload.get("sources") or {}).get("platforms") or []
@@ -364,7 +442,13 @@ def create_router() -> APIRouter:
     @router.post("/catalog/adopt")
     def catalog_adopt(request: Request, body: AdoptIn, authorization: str | None = Header(default=None)):
         _settings, store, prof = ctx(request, authorization, write=True)
-        item = next((row for row in search_catalog("") if row["id"] == body.catalog_id), None) or lookup_shelf(body.catalog_id)
+        if body.item and str(body.item.get("id") or "") == body.catalog_id:
+            remember_shelf([body.item])
+        item = (
+            next((row for row in search_catalog("") if row["id"] == body.catalog_id), None)
+            or lookup_shelf(body.catalog_id)
+            or (body.item if body.item and str(body.item.get("id") or "") == body.catalog_id else None)
+        )
         if not item:
             raise AppError("CATALOG_NOT_FOUND", "货源目录中没有这个商品", 404)
         fields = product_from_body({**item, **market_fields(body.route)}, source="catalog")
@@ -946,23 +1030,6 @@ def create_router() -> APIRouter:
         _settings, store, prof = ctx(request, authorization, write=True)
         doc = base_doc(prof["tenant"]["id"], prof["user"]["id"], id=new_id("sup"), email=body.email.strip().lower())
         return respond(request, store.insert("suppressions", doc))
-
-    @router.get("/webhooks/ebay-account-deletion")
-    def ebay_account_deletion_challenge(request: Request, challenge_code: str = ""):
-        from app.modules.ebay_notify import challenge_response
-
-        settings = request.app.state.settings
-        token = settings.ebay_deletion_verification_token
-        endpoint = settings.ebay_deletion_endpoint
-        if not challenge_code or not token or not endpoint:
-            raise AppError("EBAY_DELETION_NOT_READY", "eBay 注销通知尚未配置", 503)
-        digest = challenge_response(challenge_code, token, endpoint)
-        return JSONResponse({"challengeResponse": digest})
-
-    @router.post("/webhooks/ebay-account-deletion")
-    async def ebay_account_deletion_notice(request: Request):
-        await request.body()
-        return Response(status_code=204)
 
     @router.post("/webhooks/alipay")
     async def alipay_webhook(request: Request):

@@ -48,13 +48,19 @@ Page({
         this.setData({
           testing: Boolean(summary.payment_testing),
           active: active ? (active.plan_id || active.plan || '生效中') : '',
-          plans: (summary.plans || []).map((plan) => ({
-            id: plan.id,
-            name: plan.name,
-            price: yuan(plan.amount_fen),
-            period: plan.period === 'year' ? '年' : '月',
-            payable: Number(plan.amount_fen) > 0,
-          })),
+          plans: (summary.plans || []).map((plan) => {
+            const listed = Number(plan.list_fen != null ? plan.list_fen : plan.amount_fen)
+            const charge = Number(plan.amount_fen)
+            return {
+              id: plan.id,
+              name: plan.name,
+              price: yuan(listed),
+              testPrice: summary.payment_testing && listed !== charge ? yuan(charge) : '',
+              period: plan.period === 'year' ? '年' : '月',
+              payable: charge > 0,
+              features: plan.features || [],
+            }
+          }),
           payments: (summary.payments.items || []).map((item) => ({
             id: item.id,
             amount: yuan(item.amount),

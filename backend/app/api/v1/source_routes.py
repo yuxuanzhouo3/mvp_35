@@ -94,5 +94,10 @@ def run_product_pricer(request: Request, body: PricerIn, authorization: str | No
 
 @router.post("/algorithms/selection-assist")
 def run_selection_assist(request: Request, body: SelectionIn, authorization: str | None = Header(default=None)):
-    settings, _store, _prof = bind(request, authorization)
-    return respond(request, rank_query(body.q, settings.rules_version, body.target_market, settings))
+    settings, store, prof = bind(request, authorization)
+    from algorithm.overseas_rank import active_plan
+
+    return respond(
+        request,
+        rank_query(body.q, settings.rules_version, body.target_market, settings, plan=active_plan(store, prof["tenant"]["id"])),
+    )
