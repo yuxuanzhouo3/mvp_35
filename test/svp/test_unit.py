@@ -309,10 +309,16 @@ def test_agency_push_needs_a_parent_then_discovery_uses_it(client):
 
 
 def test_free_plan_cannot_use_selection_ai(client):
-    denied = client.post("/api/v1/catalog/ai-pick", headers={"Authorization": "Bearer demo"}, json={"need": "水杯", "route": "cn_us"})
+    headers = {"Authorization": "Bearer demo"}
+    me = client.get("/api/v1/users/me", headers=headers)
+    tenant_id = me.json()["data"]["tenant"]["id"]
+    client.app.state.store.touch("tenants", tenant_id, {"plan_id": "free", "plan": "free"})
+    for row in client.app.state.store.query("subscriptions", tenant_id=tenant_id, limit=50)["items"]:
+        client.app.state.store.touch("subscriptions", row["id"], {"status": "canceled"})
+    denied = client.post("/api/v1/catalog/ai-pick", headers=headers, json={"need": "水杯", "route": "cn_us"})
     assert denied.status_code == 403
     assert "每天不能使用" in denied.json()["error"]["message"]
-    allowance = client.get("/api/v1/catalog/selection-allowance", headers={"Authorization": "Bearer demo"})
+    allowance = client.get("/api/v1/catalog/selection-allowance", headers=headers)
     assert allowance.json()["data"]["ai_daily"] == 0
     assert allowance.json()["data"]["shelf_limit"] == 5
 

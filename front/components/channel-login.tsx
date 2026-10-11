@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { tintForPlatform } from '@/lib/brand-tints'
 
 const names: Record<string, string> = {
   amazon: '亚马逊',
@@ -108,8 +109,9 @@ export function ChannelLogin({ channel, platforms }: { channel: string; platform
         {platforms.map((platform) => {
           const account = row(platform)
           const connected = account?.status === 'connected'
+          const tint = tintForPlatform(platform)
           return (
-            <div key={platform} className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1.5">
+            <div key={platform} className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 ${tint.card}`}>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium leading-tight">{names[platform] || platform}</p>
                 <p className="truncate text-[10px] leading-tight text-muted-foreground">{connected ? '已登录' : '未登录'}</p>
@@ -117,7 +119,7 @@ export function ChannelLogin({ channel, platforms }: { channel: string; platform
               <button
                 type="button"
                 disabled={busy === platform}
-                className="h-7 shrink-0 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+                className={`h-7 shrink-0 rounded-md px-2 text-[11px] font-medium text-white disabled:opacity-50 ${tint.button}`}
                 onClick={() => void login(platform)}
               >
                 {connected ? '重登' : '登录'}

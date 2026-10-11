@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     hunyuan_enabled: bool = False
     tongyi_enabled: bool = False
     hunyuan_api_key: str = ""
+    tongyi_api_key: str = ""
+    # Real LLM for 客服 / AI 选品. OpenAI-compatible: hunyuan | tongyi | openai.
+    ai_enabled: bool = False
+    ai_provider: str = "hunyuan"
+    ai_api_key: str = ""
+    ai_base_url: str = ""
+    ai_model: str = ""
     ses_mode: str = "mock"
     wechat_pay_mode: str = "disabled"
     wechat_pay_appid: str = ""

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Camera, Mic, MicOff, Paperclip, X } from 'lucide-react'
 import { api, percent, waitJob } from '@/lib/api'
 import { ProductLibrary } from '@/components/product-library'
 import { PriceCompareDialog, type PriceSite } from '@/components/price-compare-dialog'
@@ -9,6 +10,17 @@ import { ResultDesk } from '@/components/result-desk'
 import { RouteBar } from '@/components/route-bar'
 import { TermHint, type SelectionTermId } from '@/components/term-hint'
 import { readTradeRoute, TRADE_ROUTES } from '@/lib/trade-route'
+
+type SpeechRec = {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  start: () => void
+  stop: () => void
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+  onerror: (() => void) | null
+  onend: (() => void) | null
+}
 
 type Selection = {
   pick: boolean
@@ -152,10 +164,65 @@ export default function ProductsPage() {
   const [aiOpen, setAiOpen] = useState(false)
   const [aiNeed, setAiNeed] = useState('')
   const [ai, setAi] = useState<SelectionAi | null>(null)
+  const [aiPreview, setAiPreview] = useState<string | null>(null)
+  const [aiFileName, setAiFileName] = useState('')
+  const [recording, setRecording] = useState(false)
+  const uploadRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const speechRef = useRef<SpeechRec | null>(null)
 
   useEffect(() => {
     void api<SelectionAi>('/catalog/selection-allowance').then(setAi).catch(() => undefined)
   }, [])
+
+  useEffect(() => () => {
+    speechRef.current?.stop()
+  }, [])
+
+  function attachAiImage(file: File | undefined) {
+    if (!file || !file.type.startsWith('image/')) return
+    setAiPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
+    setAiFileName(file.name)
+    setAiNeed((current) => current.trim() || `参考图选品：${file.name.replace(/\.[^.]+$/, '')}`)
+  }
+
+  function clearAiImage() {
+    setAiPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    setAiFileName('')
+  }
+
+  function toggleVoice() {
+    const Speech = (window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec }).SpeechRecognition
+      || (window as unknown as { webkitSpeechRecognition?: new () => SpeechRec }).webkitSpeechRecognition
+    if (!Speech) {
+      setMessage('当前浏览器不支持语音输入，请改用文字或上传图片。')
+      return
+    }
+    if (recording) {
+      speechRef.current?.stop()
+      setRecording(false)
+      return
+    }
+    const rec = new Speech()
+    rec.lang = 'zh-CN'
+    rec.continuous = false
+    rec.interimResults = false
+    rec.onresult = (event) => {
+      const text = Array.from(event.results).map((row) => row[0]?.transcript || '').join('').trim()
+      if (text) setAiNeed((current) => (current ? `${current.trim()} ${text}` : text))
+    }
+    rec.onerror = () => setRecording(false)
+    rec.onend = () => setRecording(false)
+    speechRef.current = rec
+    setRecording(true)
+    rec.start()
+  }
 
   useEffect(() => {
     const node = csvBox.current
@@ -420,12 +487,48 @@ export default function ProductsPage() {
                 })
               }}
             >
-              <p className="text-sm font-medium">AI 选品</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {ai ? `当前每天 ${ai.ai_daily} 次，还剩 ${ai.ai_left} 次。免费 0 次，专业版 5 次，企业版 20 次。金额仍由规则引擎计算。` : '正在读取今天的次数。'}
-              </p>
-              <textarea className="mt-2 h-20 w-full rounded-lg bg-muted p-2 text-sm" value={aiNeed} placeholder="例如：美国站 100 美元以内的二手 iPhone" onChange={(event) => setAiNeed(event.target.value)} />
-              <button disabled={busy || (ai?.ai_left || 0) <= 0} className="mt-2 h-10 rounded-xl bg-primary px-4 text-sm text-primary-foreground disabled:opacity-50">{busy ? '处理中' : '让 AI 选品'}</button>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">AI 选品</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {ai ? `当前每天 ${ai.ai_daily} 次，还剩 ${ai.ai_left} 次。免费 0 次，专业版 5 次，企业版 20 次。金额仍由规则引擎计算。` : '正在读取今天的次数。'}
+                  </p>
+                </div>
+                <button type="submit" disabled={busy || (ai?.ai_left || 0) <= 0} className="h-10 shrink-0 rounded-xl bg-primary px-4 text-sm text-primary-foreground disabled:opacity-50">{busy ? '处理中' : '让 AI 选品'}</button>
+              </div>
+              <div className="mt-3 flex items-stretch gap-2">
+                <div className="flex shrink-0 flex-col justify-center gap-1.5">
+                  <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={(event) => {
+                    attachAiImage(event.target.files?.[0])
+                    event.target.value = ''
+                  }} />
+                  <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => {
+                    attachAiImage(event.target.files?.[0])
+                    event.target.value = ''
+                  }} />
+                  <button type="button" title="上传图片" className="flex size-8 items-center justify-center rounded-full border border-border bg-background text-foreground transition hover:bg-muted" onClick={() => uploadRef.current?.click()}>
+                    <Paperclip className="size-3.5" />
+                  </button>
+                  <button type="button" title={recording ? '停止语音' : '语音输入'} className={`flex size-8 items-center justify-center rounded-full border transition ${recording ? 'animate-pulse border-rose-300 bg-rose-50 text-rose-600' : 'border-border bg-background text-foreground hover:bg-muted'}`} onClick={toggleVoice}>
+                    {recording ? <MicOff className="size-3.5" /> : <Mic className="size-3.5" />}
+                  </button>
+                  <button type="button" title="拍照" className="flex size-8 items-center justify-center rounded-full border border-border bg-background text-foreground transition hover:bg-muted" onClick={() => cameraRef.current?.click()}>
+                    <Camera className="size-3.5" />
+                  </button>
+                </div>
+                <div className="min-w-0 flex-1">
+                  {aiPreview && (
+                    <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-secondary/40 px-2 py-1.5">
+                      <img src={aiPreview} alt={aiFileName || '参考图'} className="size-10 rounded-md object-cover" />
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{aiFileName || '参考图'}</span>
+                      <button type="button" className="flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" onClick={clearAiImage} title="移除图片">
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  <textarea className="h-20 w-full rounded-lg bg-muted p-2 text-sm" value={aiNeed} placeholder="例如：美国站 100 美元以内的二手 iPhone" onChange={(event) => setAiNeed(event.target.value)} />
+                </div>
+              </div>
             </form>
           )}
           {compareOpen && <PriceCompareDialog query={shelfQuery} sites={platforms} offerLimit={ai?.shelf_limit || 5} onClose={() => setCompareOpen(false)} />}

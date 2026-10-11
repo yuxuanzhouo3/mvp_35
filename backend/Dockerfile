@@ -4,6 +4,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY app ./app
 COPY algorithm ./algorithm
+COPY AI ./AI
 COPY config ./config
 COPY db ./db
 COPY cloudbase-auth.json /root/.config/.cloudbase/auth.json
@@ -18,6 +19,8 @@ ENV PORT=8000 \
     DATA_PATH=/tmp/store.json \
     HUNYUAN_ENABLED=false \
     TONGYI_ENABLED=false \
+    AI_ENABLED=false \
+    AI_PROVIDER=hunyuan \
     SES_MODE=mock \
     DEMO_SIGNING_HELPER=false \
     CORS_ORIGINS=https://pickglobal.mornscience.top

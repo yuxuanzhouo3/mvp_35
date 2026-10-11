@@ -73,7 +73,7 @@ export function ChatSidebar({ open, onClose }: { open: boolean; onClose: () => v
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div>
           <p className="text-sm font-semibold">客服</p>
-          <p className="text-xs text-muted-foreground">解释最近的报告，金额仍由规则引擎计算</p>
+          <p className="text-xs text-muted-foreground">大模型解释最近的报告，金额仍由规则引擎锁定</p>
         </div>
         <button type="button" className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="关闭客服" onClick={onClose}>
           <X className="size-4" />

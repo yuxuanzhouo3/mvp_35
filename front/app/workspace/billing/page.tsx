@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { api } from '@/lib/api'
+import { payTint } from '@/lib/brand-tints'
 import { readClient } from '@/lib/client-adapter'
+import { PayBrandMark } from '@/components/pay-brand-mark'
 import { ResultDesk } from '@/components/result-desk'
 import { sharePlan } from '../acquire/share-plans'
 
@@ -273,12 +275,16 @@ export default function BillingPage() {
             ) : (
               <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5">
                 <p className="text-[11px] font-medium text-muted-foreground">选择支付方式</p>
-                {(['wechat', 'alipay'] as const).map((method) => (
-                  <button key={method} type="button" className={`flex h-8 items-center justify-between rounded-lg border px-2 text-left text-xs ${provider === method ? 'border-primary bg-primary/5 text-foreground ring-1 ring-primary/20' : 'border-border bg-card text-foreground'}`} onClick={() => setProvider(method)}>
-                    <span>{method === 'wechat' ? '微信支付' : '支付宝'}</span>
-                    {method === 'wechat' && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">推荐</span>}
-                  </button>
-                ))}
+                {(['wechat', 'alipay'] as const).map((method) => {
+                  const tint = payTint[method]
+                  const active = provider === method
+                  return (
+                    <button key={method} type="button" className={`flex h-9 items-center gap-2 rounded-lg border px-2.5 text-left text-xs font-medium ${active ? tint.active : tint.idle}`} onClick={() => setProvider(method)}>
+                      <PayBrandMark method={method} className="size-5 shrink-0" />
+                      <span>{method === 'wechat' ? '微信支付' : '支付宝'}</span>
+                    </button>
+                  )
+                })}
                 {summary?.payment_testing && <p className="text-[11px] leading-4 text-muted-foreground">测试实付 ¥0.10</p>}
                 {qr && (
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-lg border border-border bg-secondary/40 px-2 py-1.5">

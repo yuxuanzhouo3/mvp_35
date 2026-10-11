@@ -392,6 +392,7 @@ def create_router() -> APIRouter:
     @router.post("/catalog/ai-pick")
     def catalog_ai_pick(request: Request, body: AiPickIn, authorization: str | None = Header(default=None)):
         settings, store, prof = ctx(request, authorization, write=True)
+        from AI.selection import refine_need
         from algorithm.overseas_rank import allowance, spend_ai
 
         need = " ".join(body.need.split())[:80]
@@ -401,13 +402,18 @@ def create_router() -> APIRouter:
         if gate["ai_daily"] <= 0 or gate["ai_left"] <= 0:
             spend_ai(store, prof["tenant"]["id"])
         spec = resolve_route(body.route)
+        route_label = (spec or {}).get("route") or body.route or ""
+        refined = refine_need(settings, need, route_label=str(route_label))
+        query = refined.get("query") or need
         info = _shelf_info(store, prof["tenant"]["id"])
-        payload = _shelf_payload(need, "selection-assist", settings, spec, body.route, info, store, prof["tenant"]["id"])
+        payload = _shelf_payload(query, "selection-assist", settings, spec, body.route, info, store, prof["tenant"]["id"])
         gate = spend_ai(store, prof["tenant"]["id"])
         payload.setdefault("sources", {})["ai"] = gate
-        payload["sources"]["ai_note"] = (
-            f"按「{need}」检索。金额和利润仍由规则引擎计算，返回海外利润最高的 {len(payload.get('items') or [])} 条。"
-        )
+        count = len(payload.get("items") or [])
+        note = refined.get("note") or f"按「{query}」检索。金额和利润仍由规则引擎计算。"
+        payload["sources"]["ai_note"] = f"{note} 返回海外利润最高的 {count} 条。"
+        payload["sources"]["ai_model"] = refined.get("model")
+        payload["sources"]["ai_provider"] = refined.get("provider")
         return respond(request, payload)
 
     @router.post("/catalog/refresh")
@@ -1113,6 +1119,13 @@ def create_router() -> APIRouter:
     def post_message(conversation_id: str, request: Request, body: MessageIn, authorization: str | None = Header(default=None)):
         settings, store, prof = ctx(request, authorization, write=True)
         require_doc(store, "ai_conversations", conversation_id, prof["tenant"]["id"], "CHAT_NOT_FOUND", "会话不存在")
+        prior = store.query(
+            "ai_messages",
+            tenant_id=prof["tenant"]["id"],
+            filters={"conversation_id": conversation_id},
+            limit=40,
+        )["items"]
+        history = [{"role": row["role"], "content": row["content"]} for row in reversed(prior) if row.get("role") in {"user", "assistant"}]
         user_message = base_doc(
             prof["tenant"]["id"],
             prof["user"]["id"],
@@ -1122,15 +1135,16 @@ def create_router() -> APIRouter:
             content=body.content[:4000],
         )
         store.insert("ai_messages", user_message)
-        reply = _copilot_reply(store, prof["tenant"]["id"], settings)
+        answered = _copilot_reply(store, prof["tenant"]["id"], settings, body.content, history=history)
         assistant = base_doc(
             prof["tenant"]["id"],
             prof["user"]["id"],
             id=new_id("msg"),
             conversation_id=conversation_id,
             role="assistant",
-            content=reply,
-            model="rules" if not settings.hunyuan_enabled else "hunyuan",
+            content=answered["reply"],
+            model=answered["model"],
+            provider=answered.get("provider"),
         )
         store.insert("ai_messages", assistant)
         return respond(request, {"user": user_message, "assistant": assistant})
@@ -1139,11 +1153,11 @@ def create_router() -> APIRouter:
     def chat_events(conversation_id: str, request: Request, authorization: str | None = Header(default=None)):
         settings, store, prof = ctx(request, authorization)
         require_doc(store, "ai_conversations", conversation_id, prof["tenant"]["id"], "CHAT_NOT_FOUND", "会话不存在")
-        reply = _copilot_reply(store, prof["tenant"]["id"], settings)
+        answered = _copilot_reply(store, prof["tenant"]["id"], settings, "", history=[])
 
         def stream():
             yield "event: start\ndata: {}\n\n"
-            yield f"event: delta\ndata: {json.dumps({'text': reply}, ensure_ascii=False)}\n\n"
+            yield f"event: delta\ndata: {json.dumps({'text': answered['reply']}, ensure_ascii=False)}\n\n"
             yield "event: done\ndata: {}\n\n"
 
         return StreamingResponse(stream(), media_type="text/event-stream")
@@ -1151,18 +1165,21 @@ def create_router() -> APIRouter:
     return router
 
 
-def _copilot_reply(store, tenant_id: str, settings) -> str:
+def _copilot_reply(store, tenant_id: str, settings, content: str, *, history: list[dict] | None = None) -> dict:
+    from AI.support import support_reply
+
     reports = store.query("analysis_reports", tenant_id=tenant_id, limit=1)["items"]
-    if not reports:
-        return "还没有完成的选品报告。可以先导入商品并开始分析。混元当前关闭，金额只会由规则引擎计算。"
-    report = reports[0]
-    metrics = report["metrics"]
-    return (
-        f"最近一份报告利润率 {metrics['net_margin']}，净利润 {metrics['net_profit_usd']} USD，"
-        f"风险 {metrics['risk_level']}。规则版本 {metrics['rules_version']}。"
-        f"混元{'开启' if settings.hunyuan_enabled else '关闭'}，我不会改这些数字。"
-        "若要获客，请在报告页使用「一键获客」，发送前仍需人工批准。"
-    )
+    facts = None
+    if reports:
+        metrics = reports[0]["metrics"]
+        facts = {
+            "report_id": reports[0]["id"],
+            "rules_version": metrics.get("rules_version"),
+            "net_margin": metrics.get("net_margin"),
+            "net_profit_usd": metrics.get("net_profit_usd"),
+            "risk_level": metrics.get("risk_level"),
+        }
+    return support_reply(settings, content, history=history or [], facts=facts)
 
 
 def _apply_signal(store, tenant_id: str, lead: dict, kind: str) -> None:
