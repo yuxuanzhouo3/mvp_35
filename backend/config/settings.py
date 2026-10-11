@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     walmart_consumer_id: str = ""
     ebay_client_id: str = ""
     ebay_client_secret: str = ""
+    ebay_deletion_verification_token: str = ""
+    ebay_deletion_endpoint: str = "https://pickglobal.mornscience.top/api/v1/webhooks/ebay-account-deletion"
+    aliexpress_app_key: str = ""
+    aliexpress_app_secret: str = ""
+    aliexpress_tracking_id: str = ""
     reply_interval_hours: int = 24
     amazon_sp_client_id: str = ""
     amazon_sp_client_secret: str = ""

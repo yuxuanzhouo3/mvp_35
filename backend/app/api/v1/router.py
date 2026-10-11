@@ -1,7 +1,7 @@
 import json
 
 from fastapi import APIRouter, BackgroundTasks, Header, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from algorithm.product_pricer import assert_product_pricer
@@ -946,6 +946,23 @@ def create_router() -> APIRouter:
         _settings, store, prof = ctx(request, authorization, write=True)
         doc = base_doc(prof["tenant"]["id"], prof["user"]["id"], id=new_id("sup"), email=body.email.strip().lower())
         return respond(request, store.insert("suppressions", doc))
+
+    @router.get("/webhooks/ebay-account-deletion")
+    def ebay_account_deletion_challenge(request: Request, challenge_code: str = ""):
+        from app.modules.ebay_notify import challenge_response
+
+        settings = request.app.state.settings
+        token = settings.ebay_deletion_verification_token
+        endpoint = settings.ebay_deletion_endpoint
+        if not challenge_code or not token or not endpoint:
+            raise AppError("EBAY_DELETION_NOT_READY", "eBay 注销通知尚未配置", 503)
+        digest = challenge_response(challenge_code, token, endpoint)
+        return JSONResponse({"challengeResponse": digest})
+
+    @router.post("/webhooks/ebay-account-deletion")
+    async def ebay_account_deletion_notice(request: Request):
+        await request.body()
+        return Response(status_code=204)
 
     @router.post("/webhooks/alipay")
     async def alipay_webhook(request: Request):

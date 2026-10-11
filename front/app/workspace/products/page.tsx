@@ -336,7 +336,7 @@ export default function ProductsPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0">
                       <h3 className="font-medium">{item.name}</h3>
-                      <div className="mt-1 text-xs text-muted-foreground">{item.platform || item.supplier} · <span className="inline-flex items-center">SKU {item.sku}<TermHint id="sku" /></span> · ¥{item.cost_cny} · ${item.target_price_usd}{item.price_basis === 'us_shelf' ? ' 美国货架' : item.price_basis === 'floor_reference' ? ' 利润线' : ''}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{item.platform === 'ebay' && item.price_basis === 'us_shelf' ? `${item.supplier || 'eBay'} · $${item.target_price_usd} 美国货架` : <>{item.platform || item.supplier} · <span className="inline-flex items-center">SKU {item.sku}<TermHint id="sku" /></span> · ¥{item.cost_cny} · ${item.target_price_usd}{item.price_basis === 'us_shelf' ? ' 美国货架' : item.price_basis === 'floor_reference' ? ' 利润线' : ''}</>}</div>
                       {item.selection && <div className="mt-1 text-xs text-muted-foreground">{item.selection.pick ? '优先' : '暂缓'}<TermHint id="pick" /> · 机会分 {item.selection.score}<TermHint id="score" /> · 利润率 {item.selection.net_margin}<TermHint id="margin" /> · 风险 {item.selection.risk_level}<TermHint id="risk" /></div>}
                     </div>
                     <button type="button" disabled={busy} className="h-9 rounded-lg border border-border px-3 text-sm" onClick={() => {

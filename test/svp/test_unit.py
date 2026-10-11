@@ -314,3 +314,19 @@ def test_sms_daily_limit_is_explained():
     assert "今天的短信次数已用完" in sms_failure_message("LimitExceeded.PhoneNumberDailyLimit")
     assert sms_failure_message("LimitExceeded.PhoneNumberThirtySecondLimit").startswith("短信发送太频繁")
     assert sms_failure_message("FailedOperation.SignatureIncorrectOrUnapproved") == "验证码短信没有发出"
+
+
+def test_ebay_deletion_challenge_uses_the_registered_endpoint(client):
+    import hashlib
+
+    endpoint = "https://pickglobal.mornscience.top/api/v1/webhooks/ebay-account-deletion"
+    token = "pickglobal-ebay-deletion-token-0001"
+    client.app.state.settings.ebay_deletion_verification_token = token
+    client.app.state.settings.ebay_deletion_endpoint = endpoint
+    got = client.get("/api/v1/webhooks/ebay-account-deletion", params={"challenge_code": "abc"})
+    assert got.status_code == 200
+    body = got.json()
+    assert set(body) == {"challengeResponse"}
+    assert body["challengeResponse"] == hashlib.sha256(f"abc{token}{endpoint}".encode()).hexdigest()
+    assert client.post("/api/v1/webhooks/ebay-account-deletion", json={"notification": {}}).status_code == 204
+    assert client.get("/api/v1/webhooks/ebay-account-deletion").status_code == 503

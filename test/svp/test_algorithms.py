@@ -161,7 +161,37 @@ def test_selection_assist_ranks_catalog_source(client: TestClient):
     assert "algorithm" not in plain.json()["data"]
     assert "selection" not in plain.json()["data"]["items"][0]
     assert ranked.json()["data"]["sources"]["provider"] == "local-book"
-    assert {row["id"] for row in ranked.json()["data"]["sources"]["platforms"]} >= {"1688", "taobao", "amazon", "ebay"}
+    assert {row["id"] for row in ranked.json()["data"]["sources"]["platforms"]} == {"1688", "pinduoduo", "ebay", "aliexpress"}
+
+
+def test_ebay_listings_fill_selection_when_china_supply_is_empty(monkeypatch):
+    from decimal import Decimal
+
+    from algorithm import shelf
+
+    skipped = {"status": "skipped", "count": 0}
+
+    def quiet(platform, name, region):
+        return [], {"id": platform, "name": name, "region": region, **skipped}
+
+    monkeypatch.setattr(shelf, "fetch_usd_cny", lambda _url: "7.20")
+    monkeypatch.setattr(shelf, "_alibaba", lambda *_args: quiet("1688", "1688", "CN"))
+    monkeypatch.setattr(shelf, "_pinduoduo", lambda *_args: quiet("pinduoduo", "拼多多", "CN"))
+    monkeypatch.setattr(shelf, "_aliexpress", lambda *_args: quiet("aliexpress", "速卖通", "US"))
+    monkeypatch.setattr(
+        shelf,
+        "_ebay",
+        lambda *_args: (
+            [{"id": "ebay:v1|1|0", "name": "iPhone 6", "usd": Decimal("40.00"), "supplier": "seller", "source_url": "https://www.ebay.com/itm/1"}],
+            {"id": "ebay", "name": "eBay", "region": "US", "status": "ok", "count": 1},
+        ),
+    )
+    items, _statuses = shelf.collect_goods("iphone 6", object(), "US")
+    assert items[0]["name"] == "iPhone 6"
+    assert items[0]["platform"] == "ebay"
+    assert items[0]["target_price_usd"] == "40.00"
+    assert items[0]["price_basis"] == "us_shelf"
+    assert items[0]["cost_cny"] == "288.00"
 
 
 def test_selection_ranks_china_supply_against_us_shelf(client: TestClient, monkeypatch):
@@ -400,6 +430,46 @@ def test_free_refresh_waits_and_paid_refresh_spends_one(client: TestClient, monk
     assert pulled.json()["data"]["sources"]["refresh"]["manual_left"] == 9
     assert pulled.json()["data"]["sources"]["refresh"]["interval_seconds"] == 900
     clear_goods_cache()
+
+
+def test_aliexpress_usd_price_is_a_us_shelf_row(monkeypatch):
+    from algorithm.shelf import _aliexpress
+
+    class Settings:
+        aliexpress_app_key = "key"
+        aliexpress_app_secret = "secret"
+        aliexpress_tracking_id = "pid"
+
+    def fake_post(url, data=None, content=None, headers=None):
+        del content, headers
+        assert "api-sg.aliexpress.com" in url
+        assert data["method"] == "aliexpress.affiliate.product.query"
+        assert data["target_currency"] == "USD"
+        assert data["tracking_id"] == "pid"
+        return {
+            "aliexpress_affiliate_product_query_response": {
+                "resp_result": {
+                    "result": {
+                        "products": {
+                            "product": [
+                                {
+                                    "product_title": "Glass cup",
+                                    "product_id": "88",
+                                    "target_sale_price": "9.50",
+                                    "shop_name": "CupStore",
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+
+    monkeypatch.setattr("algorithm.shelf._post", fake_post)
+    rows, status = _aliexpress("cup", Settings())
+    assert status["status"] == "ok"
+    assert status["region"] == "US"
+    assert rows[0]["usd"] == Decimal("9.50")
 
 
 def test_platform_status_carries_sample_prices():
