@@ -31,6 +31,7 @@ Add a row when a merge lands. Newest row first.
 
 | Day | Step | Pull request | Result |
 | --- | --- | --- | --- |
+| 9 Oct 2026 | `yzcmf` → `test` | [#13](https://github.com/yuxuanzhouo3/mvp_35/pull/13) | `1.7` on `test` (`378fe20`). Tip `1faa275`. `pro` stays `1.2`. |
 | 4 Oct 2026 | `yzcmf` → `test` | [#11](https://github.com/yuxuanzhouo3/mvp_35/pull/11) | `1.6` on `test` (`433cabe`). Tip `e9faa82`. `pro` stays `1.2`. |
 | 3 Oct 2026 | `yzcmf` → `test` | [#10](https://github.com/yuxuanzhouo3/mvp_35/pull/10) | `1.5` on `test` (`1698cc7`). Tip `6704ca4`. `pro` stays `1.2`. |
 | 2 Oct 2026 | `yzcmf` → `test` | [#9](https://github.com/yuxuanzhouo3/mvp_35/pull/9) | `1.4` on `test` (`951b554`). Tip `e31c5d7`. `pro` stays `1.2`. |
@@ -42,6 +43,14 @@ Add a row when a merge lands. Newest row first.
 ## Pace
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
+
+### 11 October 2026
+
+`b6c9b04` is on `origin/yzcmf` only. `test` stays `1.7` ([#13](https://github.com/yuxuanzhouo3/mvp_35/pull/13), `378fe20`, tip `1faa275`). `pro` stays `1.2`. Selection now asks four shelves: 1688 and Pinduoduo for the CNY cost, eBay and AliExpress for the USD median (`price_basis=us_shelf`). With no China price, an eBay or AliExpress row still shows as a US shelf item. eBay account deletion answers the challenge and accepts the notice. A Redis catalog holds sessions, codes, rate limits, and shared shelf prices. The public Yunjian guide matches `docs/demo3`. Next: merge to `test` when you agree. CloudBase `tcb` with git still waits. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Hunyuan and live SES stay unwired.
+
+### 9 October 2026
+
+`yzcmf` through `1faa275` is on `test` as `1.7` ([#13](https://github.com/yuxuanzhouo3/mvp_35/pull/13), `378fe20`). `pro` stays `1.2`. Test now has the WeChat mini program, route-aware shelf and lead feeds, legal consent before sign-in, the shared legal pages, and the 1688 price cache: hourly on the free plan, every 15 minutes on a paid plan, with 10 manual pulls. Next: CloudBase `tcb` with git. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) is already open from `test` to `pro`, titled `1.3`, and now includes this test update. It waits until you agree. Hunyuan and live SES stay unwired.
 
 ### 4 October 2026
 
