@@ -1,13 +1,18 @@
+from datetime import timedelta
+
 from config.settings import Settings
 from db.store import DocumentStore
 
 from app.core.errors import AppError
+from app.core.timeutil import iso, utcnow
 from app.modules.passwords import hash_password
 from app.modules.tokens import read_access
-from app.services.common import PLANS, base_doc, new_id
+from app.services.common import PLANS, base_doc, new_id, plan_tier
 
 PLATFORM_ADMIN_USERNAME = "admin"
 PLATFORM_ADMIN_PASSWORD = "admin"
+DEMO_PREMIUM_USERNAME = "premium"
+DEMO_PREMIUM_PASSWORD = "premium"
 
 PERMISSIONS = [
     "analysis.read",
@@ -201,6 +206,73 @@ def ensure_platform_admin(store: DocumentStore) -> None:
         status="active",
         username=PLATFORM_ADMIN_USERNAME,
     )
+
+
+def ensure_demo_premium(store: DocumentStore) -> None:
+    """Seed a mock 专业版 login for selection limits and AI quota."""
+    named = store.find_global("users", username=DEMO_PREMIUM_USERNAME)
+    if not named:
+        existing = store.find_global("users", cloudbase_user_id="local:premium")
+        if existing:
+            if not existing.get("username"):
+                store.touch("users", existing["id"], {"username": DEMO_PREMIUM_USERNAME})
+            named = store.get("users", existing["id"])
+        else:
+            prof = bootstrap(
+                store,
+                "local:premium",
+                "专业版演示",
+                password_hash=hash_password(DEMO_PREMIUM_PASSWORD, min_length=1),
+                status="active",
+                username=DEMO_PREMIUM_USERNAME,
+            )
+            named = store.get("users", prof["user"]["id"])
+    _ensure_paid_plan(store, named["tenant_id"], named["id"], "growth")
+
+
+def _ensure_paid_plan(store: DocumentStore, tenant_id: str, user_id: str, plan_id: str) -> None:
+    plan = next((item for item in PLANS if item["id"] == plan_id), None)
+    if not plan:
+        return
+    store.touch("tenants", tenant_id, {"plan_id": plan_id, "plan": plan_id})
+    quota = store.find_global("quota_balances", tenant_id=tenant_id)
+    if quota:
+        store.touch("quota_balances", quota["id"], {"available": dict(plan["quota"]), "plan_id": plan_id})
+    entitlement = store.find_global("entitlements", tenant_id=tenant_id)
+    if entitlement:
+        store.touch("entitlements", entitlement["id"], {"plan_id": plan_id})
+    now = iso()
+    found = store.query("subscriptions", tenant_id=tenant_id, limit=20)
+    for row in found.get("items") or []:
+        if plan_tier(str(row.get("plan_id") or row.get("plan") or "")) != plan_id:
+            continue
+        if row.get("status") != "active":
+            continue
+        end = row.get("period_end") or ""
+        if end and end < now:
+            continue
+        from app.modules.shelf_refresh import grant
+
+        grant(store, tenant_id)
+        return
+    store.insert(
+        "subscriptions",
+        base_doc(
+            tenant_id,
+            user_id,
+            id=new_id("sub"),
+            plan=plan_id,
+            plan_id=plan_id,
+            status="active",
+            period_start=now,
+            period_end=iso(utcnow() + timedelta(days=365)),
+            payment_id="demo-premium",
+            source="demo",
+        ),
+    )
+    from app.modules.shelf_refresh import grant
+
+    grant(store, tenant_id)
 
 
 def require_permission(role: str, permission: str) -> None:

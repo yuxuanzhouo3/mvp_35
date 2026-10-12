@@ -73,15 +73,12 @@ def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list
         return [], _planned(settings, called=False)
     jobs = (
         _alibaba,
-        _taobao,
-        _tmall,
         _pinduoduo,
-        _jd,
-        _amazon,
-        _walmart,
         _ebay,
+        _aliexpress,
     )
     domestic: list[dict] = []
+    us_rows: list[dict] = []
     us_prices: list[Decimal] = []
     statuses: list[dict] = []
     with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
@@ -92,10 +89,11 @@ def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list
             if status["region"] == "CN":
                 domestic.extend(rows)
             else:
+                us_rows.extend(rows)
                 us_prices.extend(row["usd"] for row in rows if row.get("usd"))
     statuses.sort(key=lambda row: row["id"])
     if not domestic:
-        return [], statuses
+        return _us_shelf_items(us_rows, fx, target_market), statuses
     median = _median(us_prices)
     items = []
     for row in domestic:
@@ -132,13 +130,9 @@ def _planned(settings, *, called: bool) -> list[dict]:
 
 _PLATFORMS = (
     ("1688", "1688", "CN"),
-    ("taobao", "淘宝", "CN"),
-    ("tmall", "天猫", "CN"),
     ("pinduoduo", "拼多多", "CN"),
-    ("jd", "京东", "CN"),
-    ("amazon", "亚马逊", "US"),
-    ("walmart", "沃尔玛", "US"),
     ("ebay", "eBay", "US"),
+    ("aliexpress", "速卖通", "US"),
 )
 
 
@@ -167,7 +161,7 @@ def _amount(value) -> Decimal | None:
 
 def _attach_offers(rows: list, status: dict) -> dict:
     offers = []
-    for row in rows[:3]:
+    for row in rows[:30]:
         if status.get("region") == "CN" and row.get("cost_cny"):
             offers.append({"name": str(row.get("name") or ""), "price": str(row["cost_cny"]), "currency": "CNY"})
         elif row.get("usd") is not None:
@@ -553,6 +547,43 @@ def _us(platform: str, external_id: str, name: str, usd: Decimal, supplier: str,
     return {"id": f"{platform}:{external_id}", "name": name, "usd": usd, "supplier": supplier, "source_url": url}
 
 
+def _us_shelf_items(rows: list[dict], fx: str, target_market: str) -> list[dict]:
+    rate = Decimal(fx)
+    market = target_market if target_market != "CN" else "US"
+    items = []
+    for row in rows[:30]:
+        usd = row.get("usd")
+        if not isinstance(usd, Decimal):
+            continue
+        external = str(row["id"]).split(":", 1)[-1]
+        platform = str(row["id"]).split(":", 1)[0]
+        items.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "sku": external,
+                "category": "未分类",
+                "cost_cny": money(usd * rate),
+                "target_price_usd": money(usd),
+                "price_basis": "us_shelf",
+                "supplier": row.get("supplier") or platform,
+                "platform": platform,
+                "external_id": external,
+                "source_url": row.get("source_url") or "",
+                "packaging_cny": "0.00",
+                "domestic_freight_cny": "0.00",
+                "international_freight_usd": "0.00",
+                "origin_country": "US",
+                "target_market": market,
+                "route": f"CN-{market}",
+                "incoterm": "DDP",
+                "tax_regime": {"US": "cn_us", "HK": "cn_hk", "AU": "cn_au"}.get(market, "cn_us"),
+                "fx_usd_cny": fx,
+            }
+        )
+    return items
+
+
 def _amazon(query: str, settings) -> tuple[list, dict]:
     access = getattr(settings, "amazon_access_key", "") or ""
     secret = getattr(settings, "amazon_secret_key", "") or ""
@@ -657,7 +688,7 @@ def _ebay(query: str, settings) -> tuple[list, dict]:
         return _fail("ebay", "eBay", "US")
     body = _get(
         "https://api.ebay.com/buy/browse/v1/item_summary/search",
-        params={"q": query, "limit": "8"},
+        params={"q": query, "limit": "30"},
         headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
     )
     if body is None:
@@ -676,7 +707,72 @@ def _ebay(query: str, settings) -> tuple[list, dict]:
             continue
         seller = (product.get("seller") or {}).get("username") or "eBay"
         rows.append(_us("ebay", external, title, amount, str(seller), str(product.get("itemWebUrl") or "")))
-    return rows[:8], _status("ebay", "eBay", "US", "ok", len(rows[:8]))
+    return rows[:30], _status("ebay", "eBay", "US", "ok", len(rows[:30]))
+
+
+def _aliexpress(query: str, settings) -> tuple[list, dict]:
+    app_key = getattr(settings, "aliexpress_app_key", "") or ""
+    secret = getattr(settings, "aliexpress_app_secret", "") or ""
+    tracking = getattr(settings, "aliexpress_tracking_id", "") or ""
+    if not (app_key and secret and tracking):
+        return _skip("aliexpress", "速卖通", "US")
+    params = {
+        "method": "aliexpress.affiliate.product.query",
+        "app_key": app_key,
+        "timestamp": str(int(time.time() * 1000)),
+        "format": "json",
+        "v": "2.0",
+        "sign_method": "md5",
+        "keywords": query,
+        "page_no": "1",
+        "page_size": "30",
+        "target_currency": "USD",
+        "target_language": "EN",
+        "ship_to_country": "US",
+        "tracking_id": tracking,
+    }
+    params["sign"] = _md5_sign(secret, params)
+    body = _post("https://api-sg.aliexpress.com/sync", data=params)
+    products = _aliexpress_products(body)
+    if products is None:
+        return _fail("aliexpress", "速卖通", "US")
+    rows = []
+    for product in products:
+        if not isinstance(product, dict):
+            continue
+        title = str(product.get("product_title") or "")
+        external = str(product.get("product_id") or "")
+        price = _amount(product.get("target_sale_price") or product.get("sale_price"))
+        if not title or not external or price is None:
+            continue
+        rows.append(
+            _us(
+                "aliexpress",
+                external,
+                title,
+                price,
+                str(product.get("shop_name") or "AliExpress"),
+                str(product.get("promotion_link") or product.get("product_detail_url") or ""),
+            )
+        )
+    return rows[:30], _status("aliexpress", "速卖通", "US", "ok", len(rows[:30]))
+
+
+def _aliexpress_products(body: dict | None):
+    if not isinstance(body, dict) or body.get("error_response"):
+        return None
+    resp = body.get("aliexpress_affiliate_product_query_response") or {}
+    result = ((resp.get("resp_result") or {}).get("result")) or {}
+    products = result.get("products") or {}
+    if isinstance(products, dict):
+        rows = products.get("product") or []
+    elif isinstance(products, list):
+        rows = products
+    else:
+        rows = []
+    if isinstance(rows, dict):
+        return [rows]
+    return rows if isinstance(rows, list) else None
 
 
 def _ebay_token(client_id: str, secret: str) -> str:

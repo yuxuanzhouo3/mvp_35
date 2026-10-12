@@ -1,6 +1,7 @@
 import time
 from decimal import Decimal
 
+from AI.support import support_reply
 from app.modules.events import emit
 from app.modules.scale import needs_rule_fallback
 from app.services.common import base_doc, new_id
@@ -31,32 +32,51 @@ def _record_call(store, prof: dict, settings, *, model: str, status: str, prompt
     return doc
 
 
-def chat(store, settings, prof: dict, content: str, context_id: str | None) -> dict:
-    started = time.perf_counter()
+def _report_facts(store, prof: dict, context_id: str | None) -> dict | None:
     reports = store.query("analysis_reports", tenant_id=prof["tenant"]["id"], limit=1)["items"]
     if context_id:
         chosen = store.get("analysis_reports", context_id, prof["tenant"]["id"])
         if chosen:
             reports = [chosen]
     if not reports:
-        text = "还没有完成的选品报告。可以先导入商品并开始分析。金额只会由规则引擎计算。"
-    else:
-        metrics = reports[0]["metrics"]
-        text = (
-            f"规则版本 {metrics['rules_version']}。利润率 {metrics['net_margin']}，"
-            f"净利润 {metrics['net_profit_usd']} USD，风险 {metrics['risk_level']}。"
-            "这些问题里的金额要求已被忽略，模型不能改利润、评分或是否流失。"
-        )
-    model = "rules"
-    status = "succeeded"
-    if settings.hunyuan_enabled and not settings.hunyuan_api_key:
-        model = "rules"
+        return None
+    metrics = reports[0]["metrics"]
+    return {
+        "report_id": reports[0]["id"],
+        "rules_version": metrics.get("rules_version"),
+        "net_margin": metrics.get("net_margin"),
+        "net_profit_usd": metrics.get("net_profit_usd"),
+        "risk_level": metrics.get("risk_level"),
+    }
+
+
+def chat(store, settings, prof: dict, content: str, context_id: str | None) -> dict:
+    started = time.perf_counter()
+    facts = _report_facts(store, prof, context_id)
+    answered = support_reply(settings, content, facts=facts)
+    model = answered["model"]
+    status = "succeeded" if model != "rules" else ("degraded" if getattr(settings, "ai_enabled", False) or settings.hunyuan_enabled else "succeeded")
+    if (getattr(settings, "ai_enabled", False) or settings.hunyuan_enabled) and model == "rules" and not (getattr(settings, "ai_api_key", "") or settings.hunyuan_api_key):
         status = "degraded"
-        text = f"{text} 混元未配置，已降级到规则说明。"
-    elif settings.hunyuan_enabled:
-        model = "hunyuan"
-    call = _record_call(store, prof, settings, model=model, status=status, prompt=content, completion=text, started=started)
-    return {"reply": text, "model": model, "status": status, "ai_call_id": call["id"], "numbers_locked": True}
+        answered["reply"] = f"{answered['reply']} 混元/大模型未配置，已降级到规则说明。"
+    call = _record_call(
+        store,
+        prof,
+        settings,
+        model=model,
+        status=status,
+        prompt=content,
+        completion=answered["reply"],
+        started=started,
+    )
+    return {
+        "reply": answered["reply"],
+        "model": model,
+        "status": status,
+        "ai_call_id": call["id"],
+        "numbers_locked": True,
+        "provider": answered.get("provider"),
+    }
 
 
 def contract_stub(store, settings, prof: dict, kind: str, text: str) -> dict:

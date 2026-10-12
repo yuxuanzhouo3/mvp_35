@@ -1,12 +1,13 @@
-"""How often 1688 shelf prices may be fetched again.
+"""How often shelf prices may be fetched again.
 
-Free accounts reuse the last live prices for one hour. A paid growth or scale
-subscription refreshes every 15 minutes and may spend 10 extra pulls that ignore
-that wait. The plan prices themselves stay on PLANS.
+Free accounts reuse the last live prices for one hour. A paid 专业版 (growth)
+or 企业版 (scale) subscription refreshes 1688, Pinduoduo, eBay, and AliExpress
+every 15 minutes and may spend 10 extra pulls that ignore that wait.
 """
 
 from app.core.errors import AppError
 from app.core.timeutil import iso
+from app.services.common import plan_tier
 
 FREE_INTERVAL = 3600
 PREMIUM_INTERVAL = 900
@@ -49,7 +50,7 @@ def _premium(store, tenant_id: str) -> bool:
     found = store.query("subscriptions", tenant_id=tenant_id, limit=20)
     now = iso()
     for row in found.get("items") or []:
-        plan = row.get("plan_id") or row.get("plan")
+        plan = plan_tier(str(row.get("plan_id") or row.get("plan") or ""))
         if row.get("status") != "active" or plan not in PREMIUM_PLANS:
             continue
         end = row.get("period_end") or ""

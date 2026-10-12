@@ -9,7 +9,7 @@ from app.core.errors import AppError
 from app.core.timeutil import iso, utcnow
 from app.modules.events import emit
 from app.modules.state import transition
-from app.services.common import PLANS, base_doc, new_id
+from app.services.common import PLANS, base_doc, new_id, plan_tier
 
 
 def sign_payment_event(secret: str, event_id: str, payment_id: str, status: str) -> str:
@@ -278,8 +278,9 @@ def _grant(store: DocumentStore, payment: dict) -> None:
                 payment_id=payment["id"],
             ),
         )
-        store.touch("tenants", payment["tenant_id"], {"plan_id": plan["id"]})
-        if plan["id"] in {"growth", "scale"}:
+        tier = plan_tier(plan["id"])
+        store.touch("tenants", payment["tenant_id"], {"plan_id": tier})
+        if tier in {"growth", "scale"}:
             from app.modules.shelf_refresh import grant
 
             grant(store, payment["tenant_id"])

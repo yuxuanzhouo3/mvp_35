@@ -84,6 +84,7 @@ def rank_query(
     force: bool = False,
     premium: bool = False,
     manual_left: int = 0,
+    plan: str = "free",
 ) -> dict:
     market = target_market or "US"
     live: list[dict] = []
@@ -105,8 +106,18 @@ def rank_query(
             for item in items
         ]
     ranked = rank_items(items, rules_version)
+    from algorithm.overseas_rank import cap_for, top_by_overseas_profit
+    from app.core.timeutil import iso as stamp_now
+
+    stamp = stamp_now()
+    kept = top_by_overseas_profit(ranked["items"], plan)
+    for row in kept:
+        row["searched_at"] = stamp
+    ranked["items"] = kept
+    ranked["picked"] = sum(1 for row in kept if row["selection"]["pick"])
     ranked["sources"]["provider"] = provider
     ranked["sources"]["platforms"] = platforms
+    ranked["sources"]["shelf_limit"] = cap_for(plan)
     ranked["sources"]["refresh"] = {
         "interval_seconds": refresh_after,
         "premium": premium,
@@ -128,6 +139,7 @@ def catalog_payload(
     force: bool = False,
     premium: bool = False,
     manual_left: int = 0,
+    plan: str = "free",
 ) -> dict:
     if algorithm and algorithm != SELECTION_ASSIST:
         raise AppError(
@@ -145,6 +157,7 @@ def catalog_payload(
             force=force,
             premium=premium,
             manual_left=manual_left,
+            plan=plan,
         )
         if route:
             from app.services.trade_route import market_fields

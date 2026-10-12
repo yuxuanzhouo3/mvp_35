@@ -1,7 +1,7 @@
 const { request, accessToken, clearSession } = require('../../utils/request')
 const { yuan, failMessage } = require('../../utils/format')
 
-const planLabel = { free: '免费', growth: '成长', scale: '规模' }
+const planLabel = { free: '免费体验', growth: '专业版', growth_year: '专业版', scale: '企业版', scale_year: '企业版' }
 
 Page({
   data: {

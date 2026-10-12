@@ -1,12 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Check } from 'lucide-react'
 import { api } from '@/lib/api'
+import { payTint } from '@/lib/brand-tints'
 import { readClient } from '@/lib/client-adapter'
+import { PayBrandMark } from '@/components/pay-brand-mark'
 import { ResultDesk } from '@/components/result-desk'
 import { sharePlan } from '../acquire/share-plans'
 
-type Plan = { id: string; name: string; amount_fen: number; period: string }
+type Plan = { id: string; name: string; amount_fen: number; list_fen?: number; period: string; features?: string[]; tier?: string }
 type JsapiPay = {
   appId: string
   timeStamp: string
@@ -39,6 +42,47 @@ type Summary = {
 
 function yuan(fen: number) {
   return `¥${(fen / 100).toFixed(2)}`
+}
+
+function listedFen(plan: Plan) {
+  return plan.list_fen ?? plan.amount_fen
+}
+
+const tiers = ['free', 'growth', 'scale'] as const
+
+const tierCopy: Record<(typeof tiers)[number], { blurb: string; features: string[] }> = {
+  free: {
+    blurb: '先试用选品和获客',
+    features: ['分析 50 · 发现 50 · 发送 100', '货价每小时更新', '选品最多 5 条'],
+  },
+  growth: {
+    blurb: '适合正在出单的卖家',
+    features: ['分析 500 · 发现 500 · 发送 2,000', '货价每 15 分钟，另有 10 次刷新', '选品 10 条 · AI 每天 5 次'],
+  },
+  scale: {
+    blurb: '适合要更高额度的团队',
+    features: ['分析 5,000 · 发现 5,000 · 发送 20,000', '含专业版的货价刷新', '选品 30 条 · AI 每天 20 次'],
+  },
+}
+
+function tierOf(plan: Plan) {
+  if (plan.tier === 'free' || plan.tier === 'growth' || plan.tier === 'scale') return plan.tier
+  const raw = plan.id.endsWith('_year') ? plan.id.slice(0, -5) : plan.id
+  return raw === 'growth' || raw === 'scale' ? raw : 'free'
+}
+
+function planFor(plans: Plan[], tier: (typeof tiers)[number], cycle: 'month' | 'year') {
+  if (tier === 'free') return plans.find((plan) => tierOf(plan) === 'free' && plan.period !== 'year')
+  const id = cycle === 'year' ? `${tier}_year` : tier
+  return plans.find((plan) => plan.id === id) || plans.find((plan) => tierOf(plan) === tier && plan.period === cycle)
+}
+
+function subscribedName(plans: Plan[], planId?: string) {
+  const plan = plans.find((item) => item.id === planId)
+  if (!plan) return planId || '付费套餐'
+  if (plan.period === 'year') return `${plan.name} · 年付`
+  if ((plan.list_fen ?? plan.amount_fen) > 0) return `${plan.name} · 月付`
+  return plan.name
 }
 
 function invokeMiniProgramPay(params: JsapiPay) {
@@ -82,6 +126,9 @@ export default function BillingPage() {
   const [pickedPlan, setPickedPlan] = useState('')
   const [ordersOpen, setOrdersOpen] = useState(false)
   const [invoicesOpen, setInvoicesOpen] = useState(false)
+  const [cycle, setCycle] = useState<'month' | 'year'>('month')
+  const [tier, setTier] = useState<(typeof tiers)[number]>('growth')
+  const [provider, setProvider] = useState<'wechat' | 'alipay'>('wechat')
 
   async function load() {
     const data = await api<Summary>('/billing/summary')
@@ -185,33 +232,82 @@ export default function BillingPage() {
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {notice && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
-      {qr && (
-        <section className="flex max-w-sm flex-col items-start gap-3 rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-semibold">微信扫码支付</h2>
-          {qrImage ? <img src={qrImage} alt="微信支付二维码" width={220} height={220} /> : <p className="text-sm text-muted-foreground">正在生成二维码…</p>}
-          <p className="text-sm text-muted-foreground">用微信扫一扫。支付结果以签名回调为准，完成后点下方查询。</p>
-        </section>
-      )}
-      <section className="grid gap-4 md:grid-cols-3">
-        {picked && <h2 className="md:col-span-3 font-semibold">已接通的支付套餐</h2>}
-        {(summary?.plans || []).map((plan) => (
-          <article key={plan.id} className="soft-card p-5">
-            <h2 className="font-semibold">{plan.name}</h2>
-            <p className="mt-2 text-2xl font-semibold">{yuan(plan.amount_fen)}<span className="text-sm font-normal text-muted-foreground"> / {plan.period === 'year' ? '年' : '月'}</span></p>
-            {plan.amount_fen > 0 ? (
-              <div className="mt-4 flex gap-2">
-                <button disabled={busy} className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50" onClick={() => void checkout(plan.id, 'wechat')}>微信支付</button>
-                <button disabled={busy} className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50" onClick={() => void checkout(plan.id, 'alipay')}>支付宝</button>
-              </div>
+      <section className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button type="button" className={`h-9 min-w-[5.5rem] flex-1 rounded-full border text-sm sm:h-8 sm:flex-none sm:w-24 ${cycle === 'month' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground'}`} onClick={() => setCycle('month')}>月付</button>
+          <button type="button" className={`relative h-9 min-w-[5.5rem] flex-1 rounded-full border text-sm sm:h-8 sm:flex-none sm:w-24 ${cycle === 'year' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground'}`} onClick={() => setCycle('year')}>
+            年付
+            <span className="absolute -right-1 -top-2 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] leading-none text-white sm:-right-2">省 30%</span>
+          </button>
+        </div>
+        <div className="grid grid-cols-1 items-stretch gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {tiers.map((item) => {
+            const plan = planFor(summary?.plans || [], item, cycle)
+            const copy = tierCopy[item]
+            const selected = tier === item
+            const listed = plan ? listedFen(plan) : 0
+            const perMonth = cycle === 'year' && item !== 'free' ? Math.round(listed / 12) : listed
+            return (
+              <article key={item} className={`soft-card relative flex h-full flex-col p-3 ${selected ? 'is-focus ring-2 ring-primary/25' : ''}`}>
+                {item === 'growth' && <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">最受欢迎</span>}
+                <h2 className="text-center text-sm font-semibold">{plan?.name || copy.blurb}</h2>
+                <p className="mt-0.5 text-center text-[11px] text-muted-foreground">{copy.blurb}</p>
+                <p className="mt-2 text-center text-2xl font-bold leading-none text-primary">{yuan(perMonth)}<span className="text-xs font-normal text-muted-foreground"> / 月</span></p>
+                {cycle === 'year' && item !== 'free' && <p className="mt-1 text-center text-[11px] text-emerald-600">{yuan(listed)} / 年</p>}
+                <ul className="mt-2 flex flex-1 flex-col gap-1">
+                  {copy.features.map((line) => (
+                    <li key={line} className="flex items-start gap-1.5 text-[11px] leading-4 text-muted-foreground">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" className={`mt-3 h-8 rounded-full text-sm ${selected ? 'bg-primary text-primary-foreground' : 'border border-border bg-secondary text-secondary-foreground'}`} onClick={() => setTier(item)}>
+                  {item === 'free' ? '当前默认' : '选择此套餐'}
+                </button>
+              </article>
+            )
+          })}
+          <aside className="soft-card flex h-full flex-col p-3">
+            <h2 className="text-center text-sm font-semibold leading-5">{tier === 'free' ? '免费体验' : `完成${planFor(summary?.plans || [], tier, cycle)?.name || ''}购买`}</h2>
+            {tier === 'free' ? (
+              <p className="mt-auto pt-2 text-center text-[11px] text-muted-foreground">免费档不产生支付单。</p>
             ) : (
-              <p className="mt-4 text-sm text-muted-foreground">当前默认套餐</p>
+              <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1.5">
+                <p className="text-[11px] font-medium text-muted-foreground">选择支付方式</p>
+                {(['wechat', 'alipay'] as const).map((method) => {
+                  const tint = payTint[method]
+                  const active = provider === method
+                  return (
+                    <button key={method} type="button" className={`flex h-9 items-center gap-2 rounded-lg border px-2.5 text-left text-xs font-medium ${active ? tint.active : tint.idle}`} onClick={() => setProvider(method)}>
+                      <PayBrandMark method={method} className="size-5 shrink-0" />
+                      <span>{method === 'wechat' ? '微信支付' : '支付宝'}</span>
+                    </button>
+                  )
+                })}
+                {summary?.payment_testing && <p className="text-[11px] leading-4 text-muted-foreground">测试实付 ¥0.10</p>}
+                {qr && (
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-lg border border-border bg-secondary/40 px-2 py-1.5">
+                    {qrImage ? (
+                      <img src={qrImage} alt="微信支付二维码" width={112} height={112} className="size-[112px] rounded-md bg-white p-0.5" />
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">正在生成二维码…</p>
+                    )}
+                    <p className="mt-1 text-center text-[10px] leading-3 text-muted-foreground">微信扫码，付完后查询入账</p>
+                  </div>
+                )}
+                <button disabled={busy} className="mt-auto h-8 rounded-full bg-primary text-sm text-primary-foreground disabled:opacity-50" onClick={() => {
+                  const plan = planFor(summary?.plans || [], tier, cycle)
+                  if (plan) void checkout(plan.id, provider)
+                }}>{qr ? '重新下单' : '立即订阅'}</button>
+              </div>
             )}
-          </article>
-        ))}
+          </aside>
+        </div>
       </section>
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="font-semibold">订阅</h2>
-        <p className="mt-2 text-sm text-muted-foreground">{active ? `${active.plan_id || active.plan} · ${statusLabel[active.status] || active.status}` : '还没有生效中的付费订阅。'}</p>
+        <p className="mt-2 text-sm text-muted-foreground">{active ? `${subscribedName(summary?.plans || [], active.plan_id || active.plan)} · ${statusLabel[active.status] || active.status}` : '还没有生效中的付费订阅。'}</p>
       </section>
       <section className="rounded-2xl border border-border bg-card p-5">
         <button type="button" className="flex w-full items-center justify-between gap-3 text-left" aria-expanded={ordersOpen} onClick={() => setOrdersOpen((open) => !open)}>

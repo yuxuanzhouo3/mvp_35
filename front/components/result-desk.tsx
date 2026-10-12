@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type Filter<T> = {
   key: string
@@ -22,9 +22,11 @@ export function ResultDesk<T>({
   filters = [],
   sorts,
   pageSize = 5,
+  maxPageSize,
   empty,
   onSearch,
   searching,
+  afterSearch,
   render,
 }: {
   items: T[]
@@ -33,21 +35,30 @@ export function ResultDesk<T>({
   filters?: Filter<T>[]
   sorts: Sort<T>[]
   pageSize?: number
+  maxPageSize?: number
   empty: string
   onSearch?: (query: string) => void
   searching?: boolean
+  afterSearch?: React.ReactNode
   render: (item: T) => React.ReactNode
 }) {
+  const cap = Math.min(50, Math.max(1, maxPageSize || 50))
   const [draft, setDraft] = useState('')
   const [query, setQuery] = useState('')
   const [openFilter, setOpenFilter] = useState(false)
   const [picked, setPicked] = useState<Record<string, string>>({})
   const [sortId, setSortId] = useState(sorts[0]?.id || '')
   const [page, setPage] = useState(0)
-  const [limit, setLimit] = useState(pageSize)
+  const [limit, setLimit] = useState(Math.min(cap, Math.max(1, pageSize)))
+
+  useEffect(() => {
+    setLimit((current) => Math.min(cap, Math.max(1, current > cap ? pageSize : current)))
+    setPage(0)
+  }, [cap, pageSize])
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase()
+    // Server search already returned the matching rows; do not hide them again by keyword.
+    const needle = onSearch ? '' : query.trim().toLowerCase()
     const sort = sorts.find((item) => item.id === sortId) || sorts[0]
     const next = items.filter((item) => {
       if (needle && !keywords(item).toLowerCase().includes(needle)) return false
@@ -58,9 +69,9 @@ export function ResultDesk<T>({
     })
     if (sort) next.sort(sort.compare)
     return next
-  }, [items, query, picked, sortId, filters, keywords, sorts])
+  }, [items, query, picked, sortId, filters, keywords, sorts, onSearch])
 
-  const size = Math.min(50, Math.max(1, Number.isFinite(limit) ? limit : pageSize))
+  const size = Math.min(cap, Math.max(1, Number.isFinite(limit) ? limit : pageSize))
   const pages = Math.max(1, Math.ceil(filtered.length / size))
   const current = Math.min(page, pages - 1)
   const slice = filtered.slice(current * size, current * size + size)
@@ -86,6 +97,7 @@ export function ResultDesk<T>({
           }}
         />
         <button type="button" className="h-10 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60" disabled={searching} onClick={search}>{searching ? '询价中' : '搜索'}</button>
+        {afterSearch}
         {filters.length > 0 && (
           <button type="button" className={`h-10 rounded-xl border px-4 text-sm ${openFilter ? 'border-primary text-primary' : 'border-border'}`} onClick={() => setOpenFilter((value) => !value)}>筛选</button>
         )}
@@ -95,12 +107,12 @@ export function ResultDesk<T>({
             className="w-12 bg-transparent text-center outline-none"
             type="number"
             min={1}
-            max={50}
+            max={cap}
             aria-label="最多条数"
-            value={limit}
+            value={size}
             onChange={(event) => {
               const next = Number(event.target.value)
-              setLimit(Number.isFinite(next) ? Math.min(50, Math.max(1, next)) : 1)
+              setLimit(Number.isFinite(next) ? Math.min(cap, Math.max(1, next)) : 1)
               setPage(0)
             }}
           />

@@ -17,6 +17,7 @@ import { GuideVideo } from '@/components/guide-video'
 import { UserMenu } from '@/components/user-menu'
 import { AdSlot } from '@/components/ad-slot'
 import { api } from '@/lib/api'
+import { tintForChannel } from '@/lib/brand-tints'
 import { accessToken, logoutSession } from '@/lib/session'
 
 const marketData = [
@@ -40,7 +41,7 @@ const channelGroups = [
   {
     title: '主获客 1–5',
     items: [
-      ['B1', 'ecommerce', '电商平台', 'Amazon、Temu、Walmart、淘宝、拼多多。访客、询盘和买家进入同一线索池。'],
+      ['B1', 'ecommerce', '电商平台', '先登录店铺：分析订单找客户、半托管分订单、或全托管只收钱。'],
       ['B2', 'social', '社交平台', 'LinkedIn、Facebook、微信小程序、抖音、小红书、快手。'],
       ['B3', 'expo', '线上展会', '会期集中发现，会后进入冷启或召回。'],
       ['B4', 'agency', '12 代理渠道', '渠道子账户获客，分成与线索账分开。'],
@@ -292,14 +293,17 @@ export default function Page() {
               <div key={group.title}>
                 <h3 className="text-sm font-semibold text-primary">{group.title}</h3>
                 <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {group.items.map(([code, id, title, copy]) => (
-                    <button key={code} type="button" className="feature-card !min-h-0 !w-full cursor-pointer !p-5 text-left" onClick={() => openChannel(code, id)}>
-                      <span className="text-sm font-semibold text-primary">{code}</span>
-                      <h3 className="mt-4 text-xl font-semibold">{title}</h3>
-                      <p className="mt-3 text-sm leading-7 text-muted-foreground">{copy}</p>
-                      <p className="mt-5 text-sm font-medium text-primary">{signedIn ? '进入这一路' : '登录后进入'}</p>
-                    </button>
-                  ))}
+                  {group.items.map(([code, id, title, copy]) => {
+                    const tint = tintForChannel(id)
+                    return (
+                      <button key={code} type="button" className={`!min-h-0 !w-full cursor-pointer rounded-[1.15rem] border !p-5 text-left transition hover:-translate-y-0.5 ${tint.card}`} onClick={() => openChannel(code, id)}>
+                        <span className={`text-sm font-semibold ${tint.code}`}>{code}</span>
+                        <h3 className="mt-4 text-xl font-semibold">{title}</h3>
+                        <p className="mt-3 text-sm leading-7 text-muted-foreground">{copy}</p>
+                        <p className={`mt-5 text-sm font-medium ${tint.code}`}>{signedIn ? '进入这一路' : '登录后进入'}</p>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             ))}

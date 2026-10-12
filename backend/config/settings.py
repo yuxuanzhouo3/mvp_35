@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     hunyuan_enabled: bool = False
     tongyi_enabled: bool = False
     hunyuan_api_key: str = ""
+    tongyi_api_key: str = ""
+    # Real LLM for 客服 / AI 选品. OpenAI-compatible: hunyuan | tongyi | openai.
+    ai_enabled: bool = False
+    ai_provider: str = "hunyuan"
+    ai_api_key: str = ""
+    ai_base_url: str = ""
+    ai_model: str = ""
     ses_mode: str = "mock"
     wechat_pay_mode: str = "disabled"
     wechat_pay_appid: str = ""
@@ -80,7 +87,13 @@ class Settings(BaseSettings):
     walmart_consumer_id: str = ""
     ebay_client_id: str = ""
     ebay_client_secret: str = ""
+    ebay_deletion_verification_token: str = ""
+    ebay_deletion_endpoint: str = "https://pickglobal.mornscience.top/api/v1/webhooks/ebay-account-deletion"
+    aliexpress_app_key: str = ""
+    aliexpress_app_secret: str = ""
+    aliexpress_tracking_id: str = ""
     reply_interval_hours: int = 24
+    amazon_sp_application_id: str = ""
     amazon_sp_client_id: str = ""
     amazon_sp_client_secret: str = ""
     amazon_sp_refresh_token: str = ""

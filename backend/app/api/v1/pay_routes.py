@@ -125,7 +125,14 @@ def billing_summary(request: Request, authorization: str | None = Header(default
     return respond(
         request,
         {
-            "plans": [{**plan, "amount_fen": listed_amount(settings, plan["amount_fen"])} for plan in PLANS],
+            "plans": [
+                {
+                    **plan,
+                    "list_fen": plan["amount_fen"],
+                    "amount_fen": listed_amount(settings, plan["amount_fen"]),
+                }
+                for plan in PLANS
+            ],
             "payment_testing": int(settings.payment_test_amount_fen or 0) > 0,
             "subscription": store.query("subscriptions", tenant_id=tenant_id, limit=5),
             "payments": store.query("payments", tenant_id=tenant_id, limit=20),

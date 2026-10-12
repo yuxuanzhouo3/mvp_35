@@ -69,11 +69,11 @@ export function ChatSidebar({ open, onClose }: { open: boolean; onClose: () => v
   if (!open) return null
 
   return (
-    <aside className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] top-[calc(4.75rem+env(safe-area-inset-top))] z-30 flex flex-col border-border bg-background md:inset-x-auto md:bottom-0 md:right-0 md:top-[calc(7.25rem+env(safe-area-inset-top))] md:w-80 md:border-l" aria-label="客服">
+    <aside className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] top-[calc(3rem+env(safe-area-inset-top))] z-30 flex flex-col bg-background md:inset-x-auto md:bottom-0 md:right-0 md:top-[calc(3rem+env(safe-area-inset-top))] md:w-80" aria-label="客服">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div>
           <p className="text-sm font-semibold">客服</p>
-          <p className="text-xs text-muted-foreground">解释最近的报告，金额仍由规则引擎计算</p>
+          <p className="text-xs text-muted-foreground">大模型解释最近的报告，金额仍由规则引擎锁定</p>
         </div>
         <button type="button" className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="关闭客服" onClick={onClose}>
           <X className="size-4" />

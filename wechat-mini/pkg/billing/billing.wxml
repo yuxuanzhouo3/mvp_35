@@ -9,6 +9,8 @@
   <view class="item" wx:for="{{plans}}" wx:key="id">
     <view class="h2">{{item.name}}</view>
     <view class="muted">{{item.price}} / {{item.period}}</view>
+    <view class="muted" wx:if="{{item.testPrice}}">测试实付 {{item.testPrice}}</view>
+    <view class="muted" wx:for="{{item.features}}" wx:for-item="line" wx:key="*this">{{line}}</view>
     <button class="wx-btn" wx:if="{{item.payable}}" disabled="{{busy}}" data-id="{{item.id}}" bindtap="checkout">
       <image class="wx-logo" src="/assets/wechat.png" mode="aspectFit" />
       <text>微信支付</text>

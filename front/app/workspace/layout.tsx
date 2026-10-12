@@ -55,9 +55,9 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-background pb-28 md:pb-0">
-      <header className="site-header sticky top-0 z-40 bg-background/90 backdrop-blur-md">
-        <div className="container flex h-14 items-center justify-between gap-4 md:h-16">
-          <Link href="/" className="flex items-center gap-2" aria-label="返回 PickGlobal 首页">
+      <header className="site-header sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur-md">
+        <div className="flex h-14 w-full items-center justify-between gap-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] md:h-16 md:gap-4 md:pl-2 md:pr-3">
+          <Link href="/" className="flex shrink-0 items-center gap-1.5 md:gap-2" aria-label="返回 PickGlobal 首页">
             <span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <Globe2 className="size-[18px]" />
             </span>
@@ -73,10 +73,10 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
               )
             })}
           </nav>
-          <div className="flex min-w-0 items-center gap-2 text-xs sm:gap-3 sm:text-sm">
-            <button type="button" className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 ${chatOpen ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`} aria-expanded={chatOpen} onClick={() => setChatOpen((open) => !open)}>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs sm:gap-3 sm:text-sm">
+            <button type="button" className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 sm:px-2.5 ${chatOpen ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`} aria-expanded={chatOpen} onClick={() => setChatOpen((open) => !open)}>
               <MessageSquare className="size-4" />
-              客服
+              <span className="hidden sm:inline">客服</span>
             </button>
             <UserMenu name={name || '账号'} onLogout={() => void logoutSession().then(() => router.replace('/login'))} />
             <GuideVideo className="shrink-0" />

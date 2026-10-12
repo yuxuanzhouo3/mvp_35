@@ -8,6 +8,8 @@ services:
       DATA_PATH: /data/store.json
       HUNYUAN_ENABLED: "false"
       TONGYI_ENABLED: "false"
+      AI_ENABLED: "false"
+      AI_PROVIDER: hunyuan
       SES_MODE: mock
       WECHAT_PAY_MODE: disabled
     volumes:
@@ -19,6 +21,7 @@ services:
       AUTH_MODE: demo
       DATA_PATH: /data/store.json
       HUNYUAN_ENABLED: "false"
+      AI_ENABLED: "false"
       SES_MODE: mock
       WECHAT_PAY_MODE: disabled
     volumes:
