@@ -31,6 +31,7 @@ Add a row when a merge lands. Newest row first.
 
 | Day | Step | Pull request | Result |
 | --- | --- | --- | --- |
+| 12 Oct 2026 | `yzcmf` → `test` | [#14](https://github.com/yuxuanzhouo3/mvp_35/pull/14) | `1.8` on `test` (`f94dd3e`). Tip `3bbec32`. `pro` stays `1.2`. |
 | 9 Oct 2026 | `yzcmf` → `test` | [#13](https://github.com/yuxuanzhouo3/mvp_35/pull/13) | `1.7` on `test` (`378fe20`). Tip `1faa275`. `pro` stays `1.2`. |
 | 4 Oct 2026 | `yzcmf` → `test` | [#11](https://github.com/yuxuanzhouo3/mvp_35/pull/11) | `1.6` on `test` (`433cabe`). Tip `e9faa82`. `pro` stays `1.2`. |
 | 3 Oct 2026 | `yzcmf` → `test` | [#10](https://github.com/yuxuanzhouo3/mvp_35/pull/10) | `1.5` on `test` (`1698cc7`). Tip `6704ca4`. `pro` stays `1.2`. |
@@ -43,6 +44,10 @@ Add a row when a merge lands. Newest row first.
 ## Pace
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
+
+### 12 October 2026
+
+`yzcmf` through `3bbec32` is on `test` as `1.8` ([#14](https://github.com/yuxuanzhouo3/mvp_35/pull/14), `f94dd3e`). `pro` stays `1.2`. Test now has four-shelf selection, B1–B5 channel login with yearly plans and overseas shelf caps, the PostgreSQL `cache_entries` hot cache, and Hunyuan-compatible AI for 客服 and AI 选品 (off until keys), plus voice and image input and branded acquire/pay marks. Next: CloudBase `tcb` with git. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`, and now includes this test update. Live SES stays unwired.
 
 ### 11 October 2026
 
