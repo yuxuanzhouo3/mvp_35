@@ -31,6 +31,7 @@ Add a row when a merge lands. Newest row first.
 
 | Day | Step | Pull request | Result |
 | --- | --- | --- | --- |
+| 13 Oct 2026 | `yzcmf` → `test` | [#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15) | `1.9` on `test` (`4b1a6bc`). Tip `d936f75`. `pro` stays `1.2`. |
 | 12 Oct 2026 | `yzcmf` → `test` | [#14](https://github.com/yuxuanzhouo3/mvp_35/pull/14) | `1.8` on `test` (`f94dd3e`). Tip `3bbec32`. `pro` stays `1.2`. |
 | 9 Oct 2026 | `yzcmf` → `test` | [#13](https://github.com/yuxuanzhouo3/mvp_35/pull/13) | `1.7` on `test` (`378fe20`). Tip `1faa275`. `pro` stays `1.2`. |
 | 4 Oct 2026 | `yzcmf` → `test` | [#11](https://github.com/yuxuanzhouo3/mvp_35/pull/11) | `1.6` on `test` (`433cabe`). Tip `e9faa82`. `pro` stays `1.2`. |
@@ -44,6 +45,10 @@ Add a row when a merge lands. Newest row first.
 ## Pace
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
+
+### 13 October 2026
+
+`yzcmf` through `d936f75` is on `test` as `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`). `pro` stays `1.2`. This merge carries the 1.8 Releases and pace note onto test; product tip remains the 1.8 stack through `3bbec32`. Next: CloudBase `tcb` with git. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`, and now includes this test update. Live SES stays unwired.
 
 ### 12 October 2026
 
