@@ -1,0 +1,82 @@
+<view class="page" wx:if="{{missing}}">
+  <view class="copy">没有这一路。</view>
+  <button class="btn-line" bindtap="back">返回九路</button>
+</view>
+<view class="page" wx:else>
+  <text class="link" bindtap="back">返回九路</text>
+  <view class="h1">{{channel.code}} {{channel.name}}</view>
+  <view class="copy">{{channel.copy}}{{seed ? ' 种子报告 ' + seed + '。' : ''}}</view>
+  <view class="err" wx:if="{{error}}">{{error}}</view>
+  <view class="ok" wx:if="{{message}}">{{message}}</view>
+  <view class="chips">
+    <view class="chip {{view == item.id ? 'on' : ''}}" wx:for="{{views}}" wx:key="id" data-id="{{item.id}}" bindtap="setView">{{item.name}}</view>
+  </view>
+
+  <block wx:if="{{view == 'discover'}}">
+    <view class="h2">发现线索</view>
+    <picker mode="selector" range="{{channel.platforms}}" value="{{platformIndex}}" bindchange="onPlatform">
+      <view class="picker">{{channel.platforms[platformIndex]}}</view>
+    </picker>
+    <view class="muted" wx:if="{{channel.platforms[platformIndex] == 'digital_human_placeholder'}}">数智人 DEMO 为占位演示，不购买 10 小时包。</view>
+    <button class="btn" disabled="{{busy}}" bindtap="discover">开始发现</button>
+  </block>
+
+  <block wx:if="{{view == 'leads'}}">
+    <view class="h2">线索池</view>
+    <view class="muted">勾选后到「触达」创建活动。已选 {{pickedCount}} 条。</view>
+    <view class="item" wx:for="{{leads}}" wx:key="id">
+      <view data-id="{{item.id}}" bindtap="toggleLead">
+        <view>{{item.checked ? '已选 · ' : ''}}{{item.company}}</view>
+        <view class="muted">{{item.meta}}</view>
+      </view>
+      <view class="actions">
+        <button class="mini btn-line" data-id="{{item.id}}" data-type="open" bindtap="signal">打开</button>
+        <button class="mini btn-line" data-id="{{item.id}}" data-company="{{item.company}}" bindtap="won">赢单</button>
+      </view>
+    </view>
+    <view class="muted" wx:if="{{leads.length == 0}}">这一路还没有线索。</view>
+  </block>
+
+  <block wx:if="{{view == 'outreach'}}">
+    <view class="h2">触达</view>
+    <view class="muted">生成草稿、批准，再发送。已选 {{pickedCount}} 条。邮箱是演示占位，短信、微信和电话只保留入口。</view>
+    <view class="chips">
+      <view class="chip {{reach == item.id ? 'on' : ''}}" wx:for="{{reachForms}}" wx:key="id" data-id="{{item.id}}" bindtap="setReach">{{item.name}}{{item.id == 'email' ? '' : ' · 占位'}}</view>
+    </view>
+    <button class="btn" disabled="{{busy || pickedCount == 0}}" bindtap="createCampaign">用已选线索创建活动</button>
+    <view class="item" wx:for="{{campaigns}}" wx:key="id">
+      <view>{{item.name}}</view>
+      <view class="muted">状态 {{item.status}}{{item.draft ? ' · ' + item.draft : ''}}</view>
+      <view class="actions">
+        <button class="mini btn-line" data-id="{{item.id}}" bindtap="draft">草稿</button>
+        <button class="mini btn-line" data-id="{{item.id}}" bindtap="approve">批准</button>
+        <button class="mini btn-line" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="sendCampaign">发送</button>
+      </view>
+    </view>
+    <view class="muted" wx:if="{{campaigns.length == 0}}">还没有触达活动。</view>
+  </block>
+
+  <block wx:if="{{view == 'activation'}}">
+    <view class="h2">冷客启动</view>
+    <button class="btn" disabled="{{busy}}" bindtap="scan">规则扫描</button>
+    <view class="item" wx:for="{{activation}}" wx:key="id">
+      <view>{{item.reason}} · {{item.status}}</view>
+      <view class="muted">{{item.draft}}</view>
+      <view class="actions">
+        <button class="mini btn-line" data-id="{{item.id}}" bindtap="approveLife">批准</button>
+        <button class="mini btn-line" data-id="{{item.id}}" bindtap="sendLife">发送</button>
+      </view>
+    </view>
+    <view class="muted" wx:if="{{activation.length == 0}}">暂无冷启任务。</view>
+  </block>
+
+  <block wx:if="{{view == 'recall'}}">
+    <view class="h2">流失召回</view>
+    <view class="copy">打开过、但没有回复的线索，由规则扫进召回队列。必须先人工批准，才能发送。召回率单独计算。这一页只说明规则。</view>
+  </block>
+
+  <block wx:if="{{view == 'ledger'}}">
+    <view class="h2">{{channel.id == 'raas' ? '结果分佣' : '分成入账'}}</view>
+    <view class="copy">代理分成和 RaaS 抽成由服务端验签后入账。这一页不发起收款。RaaS 抽成不计入普通获客率。</view>
+  </block>
+</view>

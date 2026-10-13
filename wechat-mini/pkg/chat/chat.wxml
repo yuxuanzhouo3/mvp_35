@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="h1">业务助手</view>
+  <view class="copy">解释最近的报告。金额仍由规则引擎计算。</view>
+  <view class="err" wx:if="{{error}}">{{error}}</view>
+  <view class="item" wx:for="{{messages}}" wx:key="id">
+    <view class="k">{{item.role == 'assistant' ? '助手' : '我'}}</view>
+    <view>{{item.content}}</view>
+  </view>
+  <view class="muted" wx:if="{{messages.length == 0}}">还没有对话。直接提问选品或获客。</view>
+  <textarea class="area" value="{{draft}}" bindinput="onDraft" placeholder="问利润、路线或获客" />
+  <button class="btn" disabled="{{sending}}" bindtap="send">{{sending ? '正在回复' : '发送'}}</button>
+</view>

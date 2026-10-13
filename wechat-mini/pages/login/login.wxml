@@ -1,0 +1,53 @@
+<view class="page">
+  <view class="brand">
+    <view class="mark">P</view>
+    <text class="brand-name">Pick<text class="brand-accent">Global</text></text>
+  </view>
+  <view class="h1">登录工作台</view>
+  <view class="copy">微信一键登录，或使用邮箱、手机号、用户名。</view>
+
+  <button class="wx-btn" disabled="{{wxBusy}}" bindtap="onWechat">
+    <image class="wx-logo" src="/assets/wechat.png" mode="aspectFit" />
+    <text>{{wxBusy ? '正在登录' : '微信登录'}}</text>
+  </button>
+
+  <view class="chips" style="margin-top: 28rpx;">
+    <view class="chip {{mode == 'password' ? 'on' : ''}}" data-mode="password" bindtap="setMode">密码</view>
+    <view class="chip {{mode == 'code' ? 'on' : ''}}" data-mode="code" bindtap="setMode">验证码</view>
+  </view>
+
+  <text class="label">邮箱、手机或用户名</text>
+  <input class="input" value="{{account}}" bindinput="onAccount" placeholder="name@company.com" />
+
+  <block wx:if="{{mode == 'password'}}">
+    <text class="label">密码</text>
+    <input class="input" password value="{{password}}" bindinput="onPassword" placeholder="密码" />
+  </block>
+  <block wx:else>
+    <button class="btn-line" disabled="{{sending}}" bindtap="sendCode">{{sending ? '正在发送' : '发送验证码'}}</button>
+    <view class="muted" wx:if="{{sentNote}}">{{sentNote}}</view>
+    <view class="muted" wx:if="{{sentCode}}">演示环境验证码：{{sentCode}}</view>
+    <text class="label">验证码</text>
+    <input class="input" type="number" value="{{code}}" bindinput="onCode" placeholder="验证码" />
+  </block>
+
+  <view class="err" wx:if="{{error}}">{{error}}</view>
+  <button class="btn" disabled="{{busy}}" bindtap="onSubmit">{{busy && mode != 'wechat' ? '正在登录' : '登录'}}</button>
+
+  <view class="links">
+    <text bindtap="goForgot">忘记密码</text>
+    <text bindtap="goRegister">注册账号</text>
+  </view>
+</view>
+
+<view class="mask" wx:if="{{privacy}}">
+  <view class="dialog">
+    <view class="h2">隐私保护指引</view>
+    <view class="copy">微信登录前需要同意{{privacyName}}。同意后会使用微信身份进入同一个工作台。</view>
+    <button class="wx-btn" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onAgreePrivacy">
+      <image class="wx-logo" src="/assets/wechat.png" mode="aspectFit" />
+      <text>同意并微信登录</text>
+    </button>
+    <button class="btn-line" bindtap="closePrivacy">取消</button>
+  </view>
+</view>

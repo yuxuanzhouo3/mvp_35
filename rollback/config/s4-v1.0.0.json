@@ -1,0 +1,23 @@
+{
+  "id": "s4-v1.0.0",
+  "storage_engine": "postgresql",
+  "image_tag": "s4-v1.0.0",
+  "ai_route": "hunyuan",
+  "prompt_version": "prompt-v1",
+  "flags": {
+    "auth.sso": false,
+    "auth.mfa": false,
+    "payment.raas": false,
+    "selection.auto_deal": false,
+    "acquisition.social": false,
+    "acquisition.ecommerce": false,
+    "acquisition.expo": false,
+    "acquisition.agency": false,
+    "ai.agent": false,
+    "ai.finetune": false,
+    "digital_human": false,
+    "geo_seo": false,
+    "raas": false,
+    "global_multi_active": false
+  }
+}

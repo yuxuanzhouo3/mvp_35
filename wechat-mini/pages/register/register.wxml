@@ -1,0 +1,23 @@
+<view class="page">
+  <view class="h1">注册卖家账号</view>
+  <view class="copy">注册后进入你自己的工作台。也可以返回用微信登录。</view>
+  <button class="wx-btn" bindtap="goLogin">
+    <image class="wx-logo" src="/assets/wechat.png" mode="aspectFit" />
+    <text>改用微信登录</text>
+  </button>
+  <text class="label">显示名</text>
+  <input class="input" value="{{displayName}}" bindinput="onName" placeholder="怎么称呼你" />
+  <text class="label">邮箱或手机号</text>
+  <input class="input" value="{{account}}" bindinput="onAccount" placeholder="邮箱或手机号" />
+  <text class="label">密码</text>
+  <input class="input" password value="{{password}}" bindinput="onPassword" placeholder="至少 6 位" />
+  <button class="btn-line" bindtap="sendCode">发送邮箱或短信验证码</button>
+  <view class="muted" wx:if="{{sentNote}}">{{sentNote}}</view>
+  <view class="muted" wx:if="{{sentCode}}">演示环境验证码：{{sentCode}}</view>
+  <text class="label">验证码</text>
+  <input class="input" type="number" value="{{code}}" bindinput="onCode" />
+  <text class="label">邀请码</text>
+  <input class="input" value="{{inviteCode}}" bindinput="onInvite" placeholder="选填" />
+  <view class="err" wx:if="{{error}}">{{error}}</view>
+  <button class="btn" disabled="{{pending}}" bindtap="onSubmit">{{pending ? '正在注册' : '注册并进入'}}</button>
+</view>

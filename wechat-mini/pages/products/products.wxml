@@ -1,0 +1,90 @@
+<view class="page">
+  <block wx:if="{{!signedIn}}">
+    <view class="h1">选品分析</view>
+    <view class="copy">登录后可以录入商品、导入表格、搜索货源，并生成报告。</view>
+    <button class="wx-btn" bindtap="goLogin">
+      <image class="wx-logo" src="/assets/wechat.png" mode="aspectFit" />
+      <text>微信登录</text>
+    </button>
+  </block>
+  <block wx:else>
+    <text class="eyebrow">路径 A · 选品与分析报告</text>
+    <view class="h1">双向入口，同一商品库</view>
+    <view class="copy">改市场后必须重新分析。表格支持 CSV 和 TSV。Excel 请先在网页端导入。</view>
+    <view class="err" wx:if="{{error}}">{{error}}</view>
+    <view class="ok" wx:if="{{message}}">{{message}}</view>
+    <view class="chips">
+      <view class="chip {{tab == item.id ? 'on' : ''}}" wx:for="{{tabs}}" wx:key="id" data-id="{{item.id}}" bindtap="setTab">{{item.name}}</view>
+    </view>
+
+    <block wx:if="{{tab == 'manual'}}">
+      <text class="label">名称</text>
+      <input class="input" data-key="name" value="{{form.name}}" bindinput="onField" />
+      <text class="label">SKU</text>
+      <input class="input" data-key="sku" value="{{form.sku}}" bindinput="onField" />
+      <text class="label">采购成本 CNY</text>
+      <input class="input" data-key="cost_cny" value="{{form.cost_cny}}" bindinput="onField" />
+      <text class="label">售价 USD</text>
+      <input class="input" data-key="target_price_usd" value="{{form.target_price_usd}}" bindinput="onField" />
+      <text class="label">包装 CNY</text>
+      <input class="input" data-key="packaging_cny" value="{{form.packaging_cny}}" bindinput="onField" />
+      <text class="label">国内段 CNY</text>
+      <input class="input" data-key="domestic_freight_cny" value="{{form.domestic_freight_cny}}" bindinput="onField" />
+      <text class="label">国际段 USD</text>
+      <input class="input" data-key="international_freight_usd" value="{{form.international_freight_usd}}" bindinput="onField" />
+      <text class="label">汇率 USD/CNY</text>
+      <input class="input" data-key="fx_usd_cny" value="{{form.fx_usd_cny}}" bindinput="onField" />
+      <text class="label">路线</text>
+      <picker mode="selector" range="{{routeLabels}}" value="{{routeIndex}}" bindchange="onRoute">
+        <view class="picker">{{routeLabels[routeIndex]}}</view>
+      </picker>
+      <text class="label">贸易术语</text>
+      <input class="input" data-key="incoterm" value="{{form.incoterm}}" bindinput="onField" />
+      <button class="btn" disabled="{{busy}}" bindtap="saveProduct">写入商品库</button>
+    </block>
+
+    <block wx:if="{{tab == 'sheet'}}">
+      <view class="copy">表头至少包含 sku、name、cost_cny、target_price_usd。</view>
+      <textarea class="area" value="{{csv}}" bindinput="onCsv" />
+      <button class="btn-line" bindtap="chooseFile">上传 CSV / TSV</button>
+      <view class="muted" wx:if="{{csvFile}}">{{csvFile}}</view>
+      <button class="btn" disabled="{{busy}}" bindtap="importCsv">开始导入</button>
+      <button class="btn-line" disabled="{{busy}}" bindtap="priceOnly">先比价，不入库</button>
+    </block>
+
+    <block wx:if="{{tab == 'catalog'}}">
+      <view class="copy">搜索只带选品排序。利润率达到 15% 且风险不是高的商品优先。</view>
+      <input class="input" value="{{q}}" bindinput="onQuery" placeholder="名称、SKU 或供应商" confirm-type="search" bindconfirm="searchCatalog" />
+      <button class="btn" disabled="{{busy}}" bindtap="searchCatalog">搜索货源</button>
+      <view class="item" wx:for="{{catalog}}" wx:key="id">
+        <view class="h2">{{item.name}}</view>
+        <view class="muted">{{item.meta}}</view>
+        <button class="btn-line" disabled="{{busy}}" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="adopt">入库</button>
+      </view>
+      <view class="muted" wx:if="{{catalog.length == 0}}">还没有货源结果。输入关键词后搜索。</view>
+    </block>
+
+    <block wx:if="{{tab == 'library'}}">
+      <input class="input" value="{{q}}" bindinput="onQuery" placeholder="按名称或 SKU 搜索" confirm-type="search" bindconfirm="loadLibrary" />
+      <button class="btn-line" bindtap="loadLibrary">搜索</button>
+      <view class="item" wx:for="{{library}}" wx:key="id">
+        <view class="h2">{{item.name}}</view>
+        <view class="muted">{{item.meta}}</view>
+        <view class="actions">
+          <button class="mini btn grow" disabled="{{busy}}" data-id="{{item.id}}" bindtap="analyze">使用</button>
+          <button class="mini btn-line" disabled="{{busy}}" data-id="{{item.id}}" data-name="{{item.name}}" bindtap="remove">删除</button>
+        </view>
+      </view>
+      <view class="muted" wx:if="{{library.length == 0}}">没有匹配的商品。</view>
+    </block>
+
+    <view class="card" wx:if="{{quotes.length}}">
+      <view class="h2">利润报告</view>
+      <view class="item" wx:for="{{quotes}}" wx:key="sku">
+        <view>{{item.name}} · {{item.sku}}</view>
+        <view class="muted">建议 ${{item.price}} · 利润率 {{item.margin}} · 风险 {{item.risk}}</view>
+        <view class="copy">{{item.advice}}</view>
+      </view>
+    </view>
+  </block>
+</view>

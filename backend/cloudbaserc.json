@@ -1,0 +1,12 @@
+{
+  "envId": "mvp35-d6g2zp4539a542ebc",
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "cloudrun": {
+    "name": "pickglobal-api"
+  },
+  "database": {
+    "migrations": [
+      "db/cloudbase/migrations"
+    ]
+  }
+}

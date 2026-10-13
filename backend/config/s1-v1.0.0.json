@@ -1,0 +1,36 @@
+{
+  "id": "s1-v1.0.0",
+  "product": ["path_a_selection_report", "path_b_nine_channel_acquisition"],
+  "kpis": ["N%", "ActR", "TR", "OR", "AR", "QR", "ActR_cold", "RecR"],
+  "timings": ["AnaT", "LeadT", "AcqT", "ActT", "RecT"],
+  "north_star": "AR",
+  "states": {
+    "User": ["pending", "active", "suspended", "deleted"],
+    "Payment": ["created", "pending", "succeeded", "failed", "refunded"],
+    "Report": ["draft", "analyzing", "completed", "acquired"],
+    "Task": ["created", "running", "paused", "completed", "failed"],
+    "Lead": ["new", "scored", "qualified", "contacted", "replied", "won", "lost", "recalled"],
+    "Campaign": ["draft", "pending_approval", "approved", "scheduled", "sending", "sent", "paused", "completed"],
+    "Recall": ["triggered", "queued", "delivered", "recovered", "failed"]
+  },
+  "events": [
+    "user.registered",
+    "user.login",
+    "payment.succeeded",
+    "product.imported",
+    "selection.completed",
+    "report.generated",
+    "acquisition.started",
+    "lead.discovered",
+    "lead.qualified",
+    "campaign.delivered",
+    "campaign.opened",
+    "campaign.replied",
+    "deal.won",
+    "recall.triggered",
+    "kpi.updated",
+    "ai.called",
+    "digital_human.generated",
+    "raas.settled"
+  ]
+}

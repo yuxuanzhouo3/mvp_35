@@ -1,0 +1,23 @@
+{
+  "id": "baseline-cloudbase",
+  "storage_engine": "cloudbase_documents",
+  "image_tag": "baseline-cloudbase",
+  "ai_route": "rules",
+  "prompt_version": "rules-v1",
+  "flags": {
+    "auth.sso": false,
+    "auth.mfa": false,
+    "payment.raas": false,
+    "selection.auto_deal": false,
+    "acquisition.social": false,
+    "acquisition.ecommerce": false,
+    "acquisition.expo": false,
+    "acquisition.agency": false,
+    "ai.agent": false,
+    "ai.finetune": false,
+    "digital_human": false,
+    "geo_seo": false,
+    "raas": false,
+    "global_multi_active": false
+  }
+}

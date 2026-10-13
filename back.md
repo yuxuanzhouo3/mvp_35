@@ -204,123 +204,71 @@ S2：
 
 ## 4. 服务边界
 
-初期采用模块化单体，不提前拆微服务：
+初期采用模块化单体，不提前拆微服务。下面是当前仓库里的 `backend/`，不是按域拆开的目标目录：
 
 ```text
 backend/
 ├── app/
-│   ├── main.py
+│   ├── main.py                      # FastAPI 入口，挂 /api/v1，打开 store
 │   ├── api/
+│   │   ├── deps.py                  # 请求绑定租户
 │   │   └── v1/
+│   │       ├── router.py            # 商品、分析、线索、活动、账单、任务
+│   │       ├── auth_routes.py       # 注册、登录、忘记密码、重置
+│   │       ├── admin_routes.py      # /admin/* 平台后台
+│   │       ├── pay_routes.py        # 支付下单与查单
+│   │       ├── ai_routes.py         # 对话，只解释不改数
+│   │       ├── core_routes.py       # 健康检查等
+│   │       └── contract.py          # 契约路由
 │   ├── core/
-│   │   ├── auth.py
-│   │   ├── errors.py
-│   │   ├── logging.py
-│   │   └── idempotency.py
-│   ├── domains/
-│   │   ├── users/
-│   │   ├── tenants/
-│   │   ├── billing/
-│   │   ├── payments/
-│   │   ├── chat/
-│   │   ├── products/
-│   │   ├── analysis/
-│   │   ├── leads/
-│   │   ├── campaigns/
-│   │   ├── outreach/
-│   │   └── recall/
-│   ├── providers/
-│   │   ├── hunyuan/
-│   │   ├── wechat_pay/
-│   │   ├── ses/
-│   │   ├── location/
-│   │   └── product_sources/
-│   ├── workers/
-│   └── schemas/
+│   │   ├── errors.py                # AppError，稳定错误码
+│   │   └── timeutil.py
+│   ├── modules/                     # 业务规则，对应 front.md 的 Core Services
+│   │   ├── auth.py · tokens.py · passwords.py
+│   │   ├── selection.py             # 路径 A：分析与报告
+│   │   ├── acquisition.py           # 路径 B：线索、触达、成交
+│   │   ├── payment.py
+│   │   ├── ai_gateway.py            # 混元；模型不能改金额
+│   │   ├── providers.py             # 九路与外部源，DEMO 可 mock
+│   │   ├── jobs.py · events.py · state.py
+│   │   └── kpi_view.py · scale.py
+│   ├── services/
+│   │   ├── profit.py                # 规则引擎金额，Decimal
+│   │   ├── metrics.py               # 八率 + 五时效
+│   │   ├── identity.py              # token → 租户；平台管理员
+│   │   └── common.py                # 渠道、套餐、商品入库、账本签名
+│   └── workers/
+│       ├── loop.py                  # python -m app.workers.loop
+│       └── execute.py               # 分析、发现线索、发送
 ├── db/
-│   ├── repositories/
-│   │   ├── protocols.py
-│   │   ├── cloudbase/
-│   │   └── mysql/
-│   ├── collections/          # 云文档结构、字段与验证规则
-│   ├── indexes/              # 索引声明和创建脚本
-│   ├── migrations/           # 云文档版本迁移；S2 增加 MySQL migration
-│   ├── seeds/                # plans 等非敏感基础数据
-│   └── transactions/         # 支付、额度等原子操作
-├── net/
-│   ├── gateway/              # 同域 /api 与 /webhooks 路由约定
-│   ├── middleware/           # request-id、鉴权、限流、审计
-│   ├── clients/              # CloudBase、混元、SES、微信支付 HTTP client
-│   ├── sse/                  # AI chat 与 job progress 流协议
-│   ├── webhooks/             # 验签、解密、去重和快速应答
-│   └── policies/             # timeout、retry、TLS、CORS、VPC 策略
+│   ├── store.py                     # 默认 JSON；STORAGE_ENGINE=cloudbase 切远程
+│   ├── cloudbase_store.py           # CloudBase PostgreSQL documents
+│   ├── cloudbase_sql.py
+│   ├── repository.py · schema.py · money.py · migrate.py
+│   ├── sql/                         # 0001_core、0001_postgres_shape
+│   └── cloudbase/migrations/        # documents 表
 ├── config/
-│   ├── settings.py           # Pydantic Settings 与环境变量校验
-│   ├── feature_flags.py      # 分阶段功能开关
-│   └── environments/         # local/test/production 非敏感配置
-├── contracts/
-│   ├── openapi.yaml          # 对前端公开的 API 契约
-│   ├── events/               # job/domain event schema
-│   └── webhooks/             # 微信支付、SES 回调 schema
-├── observability/
-│   ├── logging/              # JSON 日志字段与脱敏规则
-│   ├── metrics/              # API、任务、AI、支付、SES 指标
-│   ├── tracing/              # request/trace/job 关联
-│   └── alerts/               # 告警规则与级别
-├── security/
-│   ├── rbac/                 # 角色、权限和资源级策略
-│   ├── cam/                  # 腾讯云最小权限 CAM 定义
-│   ├── secrets/              # Secret 名称/挂载说明，不放真实密钥
-│   └── threat-model/         # 登录、支付、AI、webhook 威胁模型
-├── scripts/
-│   ├── init_db.py            # 创建集合和索引
-│   ├── migrate.py            # 执行/校验数据迁移
-│   ├── reconcile_payments.py # 支付与权益对账
-│   ├── reconcile_usage.py    # 用量账本与余额对账
-│   └── export_openapi.py     # 从 FastAPI 导出契约
-├── fixtures/
-│   ├── webhooks/             # 已脱敏且可验签的回调样本
-│   ├── providers/            # 混元、SES、商品 API 模拟响应
-│   └── seed/                 # 本地演示数据
-├── ops/
-│   ├── cloudbase/            # 云托管、云文档、COS、网关部署配置
-│   ├── docker/               # 容器启动和健康检查配置
-│   └── runbooks/             # 回滚、漏单、积压、密钥轮换处置
-├── docs/
-│   ├── architecture.md       # 后端内部架构
-│   ├── local-development.md  # 本地启动与调试
-│   ├── api.md                # API 使用说明
-│   └── operations.md         # 部署和运维说明
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── contract/
-├── .env.example              # 只列变量名和安全示例
-├── Dockerfile
-├── docker-compose.yml        # 仅本地 api/worker/mock 组合
+│   ├── settings.py
+│   ├── flags.json · flags.py
+│   └── s1|s2|s3|s4-v1.0.0.json
+├── data/store.json                  # 本地默认库，测试强制走这里
+├── Dockerfile · cloudbaserc.json · docker-compose.yml
 ├── pyproject.toml
-└── uv.lock
+└── .env.example
 ```
 
-模块规则：
+`domains/`、`net/`、`observability/`、`security/` 仍是后面要拆的目标目录，当前不存在。它们的职责现在落在 `app/modules`、`app/services`、`app/api` 和 `db/`。
+
+当前模块规则：
 
 - `api` 只处理 HTTP、鉴权、输入验证和响应转换。
-- `domains` 保存业务规则，不依赖 FastAPI 或具体数据库。
-- `db` 是 backend 内部数据层，集中管理 repository、collection、index、migration 和 transaction；隔离云文档与未来 MySQL。
-- `net` 是 backend 内部网络层，集中管理入站网关、中间件、SSE、webhook 和所有出站 HTTP 策略。
-- `config` 只保存环境模型和非敏感配置；真实 Secret 由腾讯云注入，禁止写入仓库。
-- `contracts` 是前后端、worker 和 webhook 的稳定边界；接口变更必须先更新契约和 contract test。
-- `observability` 定义统一日志、指标、trace 和告警，不在每个 domain 自建格式。
-- `security` 保存可审查的 RBAC、CAM 和威胁模型，不能包含私钥、token 或生产账号。
-- `scripts` 必须幂等、支持 `--dry-run`，生产执行前输出目标环境和变更摘要。
-- `fixtures` 只能使用脱敏/合成数据；真实联系人、邮件和支付报文不得提交。
-- `ops` 保存部署声明与故障处置，`docs` 保存开发者说明，两者不承载运行时代码。
-- `providers` 隔离混元、SES、位置和商品数据源。
-- `providers` 只做供应商语义转换，底层连接、超时、TLS 和重试统一复用 `net/clients` 与 `net/policies`。
-- `workers` 复用 domain service，不复制业务逻辑。
-- `app/domains` 只能依赖 `db/repositories/protocols.py`，不能直接调用 CloudBase HTTP API。
-- 浏览器只能调用 `net/gateway` 暴露的 API；不能导入 `db`、`net/clients` 或管理凭证。
-- 跨模块引用通过 service/protocol，不直接操作别的模块集合。
+- `modules` 保存业务规则。金额在 `services/profit.py`，八率在 `services/metrics.py`。
+- `providers.py` 隔离混元、SES、位置和商品数据源。DEMO 可以 mock，不在路由里直接调供应商。
+- `workers` 复用 `modules`，不复制业务逻辑。
+- `db` 是唯一存储入口。`open_store` 在 JSON 文件和 CloudBase `documents` 之间二选一，不双写。
+- `config` 只放环境模型和非敏感开关。密钥由腾讯云注入，不写入仓库。
+- 浏览器只走 Next.js `/api` 代理到 FastAPI。不能持有 CloudBase 管理凭证。
+- 跨模块通过函数调用，不直接改别的模块文档。
 
 ---
 

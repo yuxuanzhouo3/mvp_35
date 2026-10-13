@@ -1,0 +1,307 @@
+page {
+  background: #f4f6fb;
+  color: #1c2740;
+  font-size: 28rpx;
+  line-height: 1.5;
+}
+
+.page {
+  padding: 28rpx 28rpx 64rpx;
+  box-sizing: border-box;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  margin-bottom: 28rpx;
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  margin-right: 16rpx;
+  border-radius: 18rpx;
+  background: #3457b2;
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.brand-name {
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.brand-accent {
+  color: #3457b2;
+}
+
+.eyebrow {
+  color: #3457b2;
+  font-size: 22rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+.h1 {
+  margin-top: 12rpx;
+  font-size: 44rpx;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.h2 {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.copy, .muted {
+  color: #667085;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.card {
+  margin-top: 20rpx;
+  padding: 28rpx;
+  border-radius: 24rpx;
+  background: #fff;
+}
+
+.grid2, .grid3 {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 20rpx;
+}
+
+.metric, .tile {
+  box-sizing: border-box;
+  margin: 0 16rpx 16rpx 0;
+  padding: 24rpx;
+  border-radius: 20rpx;
+  background: #fff;
+}
+
+.metric {
+  width: calc(50% - 16rpx);
+}
+
+.tile {
+  width: calc(50% - 16rpx);
+  min-height: 180rpx;
+}
+
+.metric.star {
+  background: #eef2ff;
+  border: 2rpx solid #3457b2;
+}
+
+.k, .code {
+  color: #667085;
+  font-size: 22rpx;
+}
+
+.v {
+  margin-top: 8rpx;
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.tile .name {
+  margin-top: 8rpx;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+button {
+  margin: 0;
+  padding: 0;
+  line-height: normal;
+}
+
+button::after {
+  border: none;
+}
+
+.btn, .btn-line, .wx-btn, .mini {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 88rpx;
+  margin-top: 20rpx;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.btn {
+  background: #3457b2;
+  color: #fff;
+}
+
+.btn-line {
+  background: #fff;
+  color: #1c2740;
+  border: 1rpx solid #e4e7ef;
+}
+
+.wx-btn {
+  background: #07c160;
+  color: #fff;
+}
+
+.wx-logo {
+  width: 44rpx;
+  height: 44rpx;
+  margin-right: 12rpx;
+}
+
+.mini {
+  width: auto;
+  height: 72rpx;
+  margin-top: 0;
+  padding: 0 24rpx;
+  font-size: 26rpx;
+}
+
+.mini.grow {
+  flex: 1;
+}
+
+button[disabled] {
+  opacity: 0.5;
+}
+
+.label {
+  display: block;
+  margin-top: 24rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.input, .area, .picker {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 12rpx;
+  padding: 0 24rpx;
+  border: 1rpx solid #e4e7ef;
+  border-radius: 16rpx;
+  background: #fff;
+  font-size: 28rpx;
+}
+
+.input, .picker {
+  height: 88rpx;
+  line-height: 88rpx;
+}
+
+.area {
+  height: 240rpx;
+  padding: 20rpx 24rpx;
+  line-height: 1.5;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.chip {
+  margin: 0 12rpx 12rpx 0;
+  padding: 12rpx 22rpx;
+  border: 1rpx solid #e4e7ef;
+  border-radius: 999rpx;
+  background: #fff;
+  font-size: 24rpx;
+}
+
+.chip.on {
+  border-color: #3457b2;
+  background: #3457b2;
+  color: #fff;
+}
+
+.err, .ok, .warn {
+  margin-top: 20rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.err {
+  background: #fde8e8;
+  color: #b42318;
+}
+
+.ok {
+  background: #e7f8ee;
+  color: #067647;
+}
+
+.warn {
+  background: #fff6e5;
+  color: #92400e;
+}
+
+.item {
+  margin-top: 16rpx;
+  padding: 24rpx;
+  border: 1rpx solid #e4e7ef;
+  border-radius: 20rpx;
+  background: #fff;
+}
+
+.actions {
+  display: flex;
+  margin-top: 16rpx;
+}
+
+.actions .mini {
+  margin-right: 12rpx;
+}
+
+.links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 28rpx;
+  color: #667085;
+  font-size: 26rpx;
+}
+
+.link {
+  color: #3457b2;
+}
+
+.mask {
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 28rpx;
+  background: rgba(15, 23, 42, 0.45);
+  box-sizing: border-box;
+}
+
+.dialog {
+  width: 100%;
+  padding: 36rpx;
+  border-radius: 28rpx;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.check {
+  width: 36rpx;
+  height: 36rpx;
+  margin-right: 16rpx;
+}
