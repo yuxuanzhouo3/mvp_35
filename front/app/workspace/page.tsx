@@ -38,47 +38,47 @@ export default function DashboardPage() {
   const openValue = openKey ? cardValue(openKey, shown) : ''
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+    <div className="flex flex-col gap-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-[12px] leading-4 md:gap-4 md:pb-0 md:text-sm md:leading-5">
+      <div className="flex flex-wrap items-end justify-between gap-2 md:gap-4">
+        <div className="min-w-0">
           <span className="eyebrow">{averaged ? '30 天 · 全站中间平均' : '30 天 · 本账号'}</span>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">八率五时效</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <h1 className="mt-1 text-base font-semibold tracking-tight md:mt-2 md:text-3xl">八率五时效</h1>
+          <p className="mt-1 max-w-2xl text-[11px] leading-4 text-muted-foreground md:mt-2 md:text-sm md:leading-6">
             {averaged
               ? `还没有获客，显示全站平均。纳入 ${shown?.basis?.included ?? 0} 人。点卡片看公式。`
               : '按本账号最近 30 天计算。点卡片看公式。'}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/workspace/products" className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">去选品分析</Link>
-          <Link href="/workspace/acquire" className="rounded-lg border border-border px-3 py-2 text-sm">去获客经营</Link>
+        <div className="flex gap-1.5 md:gap-2">
+          <Link href="/workspace/products" className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] text-primary-foreground md:px-3 md:py-2 md:text-sm">去选品</Link>
+          <Link href="/workspace/acquire" className="rounded-lg border border-border px-2.5 py-1.5 text-[11px] md:px-3 md:py-2 md:text-sm">去获客</Link>
         </div>
       </div>
-      {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
+      {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive md:px-4 md:py-3 md:text-sm">{error}</p>}
       {shown?.redlines.tripped && (
-        <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          送达红线已触发。按封送达率 {percent(shown.redlines.delivery_rate)}，退信 {percent(shown.redlines.bounce_rate)}，投诉 {percent(shown.redlines.complaint_rate)}。目标是送达 ≥95%、退信 &lt;1.5%、投诉 &lt;0.1%。
+        <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-900 md:px-4 md:py-3 md:text-sm md:leading-5">
+          送达红线已触发。按封送达率 {percent(shown.redlines.delivery_rate)}，退信 {percent(shown.redlines.bounce_rate)}，投诉 {percent(shown.redlines.complaint_rate)}。
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-4 gap-1.5 md:grid-cols-2 md:gap-3 xl:grid-cols-4">
         {rateOrder.map(([key, label]) => (
           <RateCard key={key} label={label} rate={shown?.rates[key]} emphasize={key === 'ar'} averaged={averaged} onOpen={() => setOpenKey(key)} />
         ))}
       </div>
-      <div className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="text-sm font-semibold">五时效（P50，超时记入未达标）</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-5">
+      <div className="rounded-2xl border border-border bg-card p-2.5 md:p-5">
+        <h2 className="text-[11px] font-semibold md:text-sm">五时效（P50）</h2>
+        <div className="mt-2 grid grid-cols-5 gap-1 md:mt-4 md:gap-3">
           {timingOrder.map(([key, label, target]) => (
-            <button key={key} type="button" className="soft-card p-3 text-left" onClick={() => setOpenKey(key)}>
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className="mt-2 text-lg font-semibold">{duration(shown?.timings_p50_seconds[key])}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">目标 {target}</p>
+            <button key={key} type="button" className="rounded-xl border border-border bg-background/80 px-1 py-1.5 text-left md:rounded-[1.15rem] md:p-3" onClick={() => setOpenKey(key)}>
+              <p className="truncate text-[9px] leading-3 text-muted-foreground md:text-xs md:leading-4">{label.replace(/（|）|\(.+\)/g, '').replace(/ AnaT| LeadT| AcqT| ActT| RecT/g, '')}</p>
+              <p className="mt-0.5 text-[11px] font-semibold md:mt-2 md:text-lg">{duration(shown?.timings_p50_seconds[key])}</p>
+              <p className="mt-0.5 hidden text-[11px] text-muted-foreground md:block">目标 {target}</p>
             </button>
           ))}
         </div>
-        {shown?.alerts.act_or_rec_p95_over_72h && <p className="mt-3 text-sm text-destructive">激活或召回 P95 超过 72 小时。</p>}
+        {shown?.alerts.act_or_rec_p95_over_72h && <p className="mt-2 text-xs text-destructive md:mt-3 md:text-sm">激活或召回 P95 超过 72 小时。</p>}
       </div>
-      <p className="text-xs text-muted-foreground">导入成功率 {percent(shown?.import_success_rate)} · 完成报告 {shown?.counts.analyses ?? 0} · 一键获客 {shown?.counts.acquired ?? 0} · 线索 {shown?.counts.leads ?? 0}</p>
+      <p className="text-[10px] text-muted-foreground md:text-xs">导入 {percent(shown?.import_success_rate)} · 报告 {shown?.counts.analyses ?? 0} · 获客 {shown?.counts.acquired ?? 0} · 线索 {shown?.counts.leads ?? 0}</p>
       {openKey && (
         <MetricDetail
           termKey={openKey}
@@ -102,13 +102,13 @@ function cardValue(key: string, source: Metrics | null) {
 
 function RateCard({ label, rate, emphasize = false, averaged = false, onOpen }: { label: string; rate?: Rate; emphasize?: boolean; averaged?: boolean; onOpen: () => void }) {
   return (
-    <button type="button" className={`soft-card p-4 text-left transition hover:-translate-y-0.5 ${emphasize ? 'is-focus' : ''}`} onClick={onOpen}>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{label}</span>
-        <span>{averaged ? '全站平均' : rate?.code}</span>
+    <button type="button" className={`rounded-xl border border-border p-1.5 text-left transition hover:-translate-y-0.5 md:rounded-[1.15rem] md:p-4 ${emphasize ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'bg-card'}`} onClick={onOpen}>
+      <div className="flex items-center justify-between gap-0.5 text-[9px] leading-3 text-muted-foreground md:text-xs md:leading-4">
+        <span className="truncate">{label}</span>
+        <span className="hidden shrink-0 sm:inline">{averaged ? '平均' : rate?.code}</span>
       </div>
-      <p className="mt-3 text-3xl font-semibold tracking-tight">{percent(rate?.value)}</p>
-      <p className="mt-2 text-[11px] text-muted-foreground">目标 {percent(rate?.target)}{emphasize ? ' · 北星' : ''}</p>
+      <p className="mt-1 text-sm font-semibold tracking-tight md:mt-3 md:text-3xl">{percent(rate?.value)}</p>
+      <p className="mt-0.5 truncate text-[9px] text-muted-foreground md:mt-2 md:text-[11px]">目标 {percent(rate?.target)}{emphasize ? ' · 北星' : ''}</p>
     </button>
   )
 }

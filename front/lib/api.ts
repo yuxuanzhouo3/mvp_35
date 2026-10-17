@@ -101,10 +101,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function waitJob(jobId: string) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
     const job = await api<Job>(`/jobs/${jobId}`)
     if (job.status === 'succeeded' || job.status === 'failed') return job
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    // Poll faster at first so short analysis jobs feel snappier.
+    const delay = attempt < 12 ? 100 : attempt < 24 ? 200 : 350
+    await new Promise((resolve) => setTimeout(resolve, delay))
   }
   throw new Error('任务仍在排队，请稍后刷新')
 }

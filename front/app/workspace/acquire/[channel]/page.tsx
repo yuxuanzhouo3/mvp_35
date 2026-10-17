@@ -130,32 +130,32 @@ function ChannelDesk() {
   const views = channel.id === 'raas' ? [baseViews[5], ...baseViews.slice(0, 5)] : baseViews
 
   return (
-    <div className="work-desk flex flex-col gap-2 overflow-hidden">
+    <div className="flex flex-col gap-2 pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-[12px] leading-4 md:h-[calc(100dvh-7.25rem)] md:overflow-hidden md:pb-0 md:text-sm md:leading-5">
       <RouteBar />
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
         <div>
-          <Link href="/workspace/acquire" className="text-sm text-primary">返回九路</Link>
-          <h1 className="text-2xl font-semibold tracking-tight">{channel.code} {channel.name}</h1>
+          <Link href="/workspace/acquire" className="text-[11px] text-primary md:text-sm">返回九路</Link>
+          <h1 className="text-base font-semibold tracking-tight md:text-2xl">{channel.code} {channel.name}</h1>
         </div>
-        <p className="max-w-xl text-xs leading-5 text-muted-foreground">{channel.copy}{seed ? ` · 种子报告 ${seed}` : ''}</p>
+        <p className="hidden max-w-xl text-xs leading-5 text-muted-foreground md:block">{channel.copy}{seed ? ` · 种子报告 ${seed}` : ''}</p>
       </div>
-      {error && <p className="shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-      {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
-      <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-6">
+      {error && <p className="shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive md:text-sm">{error}</p>}
+      {message && <p className="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 md:text-sm">{message}</p>}
+      <div className="grid shrink-0 grid-cols-3 gap-1.5 md:gap-2 lg:grid-cols-6">
         {views.map((item) => (
-          <button key={item.id} type="button" className={`h-11 rounded-xl px-2 text-sm font-medium ${view === item.id ? 'bg-blue-600 text-white' : 'border border-border bg-white text-slate-700 dark:bg-card dark:text-foreground'}`} onClick={() => setView(item.id)}>
+          <button key={item.id} type="button" className={`h-8 rounded-xl px-1.5 text-[11px] font-medium md:h-11 md:px-2 md:text-sm ${view === item.id ? 'bg-blue-600 text-white' : 'border border-border bg-white text-slate-700 dark:bg-card dark:text-foreground'}`} onClick={() => setView(item.id)}>
             {item.name}
           </button>
         ))}
       </div>
-      <section className="panel-frame min-h-0 flex-1 overflow-y-auto rounded-3xl bg-card p-4 md:p-5">
+      <section className="panel-frame rounded-2xl bg-card p-3 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-y-contain md:rounded-3xl md:p-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {view === 'discover' && (
           <div>
             {loginChannels.has(channel.id) && <ChannelLogin channel={channel.id} platforms={channel.platforms} />}
             <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold">发现线索</h2>
-                <p className="text-xs text-muted-foreground">{loginChannels.has(channel.id) ? '登录后下一步再获客；现在可用演示线索。' : '这一路不需要店铺登录。'}</p>
+                <p className="text-xs text-muted-foreground">{loginChannels.has(channel.id) ? '先登录平台；已登录则用你的账号拉线索，未登录仍可用演示线索。' : '这一路不需要店铺登录。'}</p>
               </div>
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">

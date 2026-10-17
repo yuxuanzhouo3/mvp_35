@@ -12,10 +12,10 @@ import { api } from '@/lib/api'
 import { accessToken, logoutSession } from '@/lib/session'
 
 const links = [
-  ['/workspace', '看板'],
+  ['/workspace', '总览'],
   ['/workspace/products', '选品分析'],
   ['/workspace/acquire', '获客经营'],
-  ['/workspace/billing', '账单'],
+  ['/workspace/billing', '订阅'],
 ]
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
@@ -47,10 +47,6 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     return () => {
       cancelled = true
     }
-  }, [])
-
-  useEffect(() => {
-    if (window.matchMedia('(min-width: 768px)').matches) setChatOpen(true)
   }, [])
 
   return (

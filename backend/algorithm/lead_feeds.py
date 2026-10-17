@@ -1,14 +1,16 @@
 """Official lead sources for B1–B5.
 
-A platform with its keys missing stays on the five demo leads. A platform with
-keys calls only that platform's official API. A failed call does not mix the
-demo list back in. Canton Fair, Global Sources, CIIE, and online expos have no
-stable public buyer API, so they stay on the demo list.
+Each tenant uses tokens saved on channel_accounts after OAuth (or pasted keys).
+ENV only holds the developer App Key/Secret and an optional bootstrap fallback.
+A platform with no tenant token and no ENV fallback stays on the five demo leads.
+Canton Fair, Global Sources, CIIE, and online expos have no stable public buyer
+API, so they stay on the demo list.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -30,10 +32,39 @@ def discover(store, settings, payload: dict, tenant_id: str = "") -> tuple[list[
         if pushed:
             return _stamp_market(pushed, market), "live"
         return demo, "mock"
-    live = _live(channel, platform, query, settings)
+    bag = _tenant_bag(store, settings, tenant_id, channel, platform)
+    live = _live(channel, platform, query, settings, bag)
     if live is None:
         return demo, "mock"
     return _stamp_market(live, market), "live"
+
+
+def _tenant_bag(store, settings, tenant_id: str, channel: str, platform: str) -> dict:
+    """Merge per-tenant OAuth tokens over ENV bootstrap."""
+    meta: dict = {}
+    access = ""
+    refresh = ""
+    if store and tenant_id:
+        from app.modules.channel_login import account_secrets
+
+        secrets = account_secrets(store, tenant_id, channel, platform)
+        if secrets:
+            access = str(secrets.get("access_token") or "")
+            refresh = str(secrets.get("refresh_token") or "")
+            raw_meta = secrets.get("token_meta") or {}
+            if isinstance(raw_meta, str):
+                try:
+                    raw_meta = json.loads(raw_meta)
+                except json.JSONDecodeError:
+                    raw_meta = {}
+            if isinstance(raw_meta, dict):
+                meta = raw_meta
+    return {
+        "access_token": access,
+        "refresh_token": refresh,
+        "meta": meta,
+        "use_system": bool(meta.get("use_system")),
+    }
 
 
 def _stamp_market(rows: list[dict], market: str | None) -> list[dict]:
@@ -65,7 +96,7 @@ def _agency_rows(store, tenant_id: str, platform: str) -> list[dict]:
     return rows
 
 
-def _live(channel: str, platform: str, query: str, settings) -> list[dict] | None:
+def _live(channel: str, platform: str, query: str, settings, bag: dict) -> list[dict] | None:
     callers = {
         ("ecommerce", "amazon"): _amazon,
         ("ecommerce", "walmart"): _walmart,
@@ -86,7 +117,7 @@ def _live(channel: str, platform: str, query: str, settings) -> list[dict] | Non
     caller = callers.get((channel, platform))
     if caller is None:
         return None
-    return caller(settings, query)
+    return caller(settings, query, bag)
 
 
 def _lead(channel: str, platform: str, company: str, contact: str, email: str | None, market: str, external_id: str) -> dict:
@@ -134,11 +165,12 @@ def _since(days: int = 7) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _amazon(settings, query: str) -> list[dict] | None:
+def _amazon(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
+    bag = bag or {}
     client_id = getattr(settings, "amazon_sp_client_id", "") or ""
     secret = getattr(settings, "amazon_sp_client_secret", "") or ""
-    refresh = getattr(settings, "amazon_sp_refresh_token", "") or ""
+    refresh = str(bag.get("refresh_token") or "") or getattr(settings, "amazon_sp_refresh_token", "") or ""
     if not (client_id and secret and refresh):
         return None
     token_body = _post(
@@ -174,10 +206,12 @@ def _amazon(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _walmart(settings, query: str) -> list[dict] | None:
+def _walmart(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
-    client_id = getattr(settings, "walmart_market_client_id", "") or ""
-    secret = getattr(settings, "walmart_market_client_secret", "") or ""
+    bag = bag or {}
+    meta = bag.get("meta") or {}
+    client_id = str(meta.get("client_id") or "") or getattr(settings, "walmart_market_client_id", "") or ""
+    secret = str(meta.get("client_secret") or "") or getattr(settings, "walmart_market_client_secret", "") or ""
     if not (client_id and secret):
         return None
     token_body = _post(
@@ -224,11 +258,12 @@ def _walmart(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _taobao(settings, query: str) -> list[dict] | None:
+def _taobao(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
+    bag = bag or {}
     app_key = getattr(settings, "taobao_app_key", "") or ""
     secret = getattr(settings, "taobao_app_secret", "") or ""
-    session = getattr(settings, "taobao_session", "") or ""
+    session = str(bag.get("access_token") or "") or getattr(settings, "taobao_session", "") or ""
     if not (app_key and secret and session):
         return None
     params = {
@@ -266,11 +301,12 @@ def _taobao(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _pdd(settings, query: str) -> list[dict] | None:
+def _pdd(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
+    bag = bag or {}
     client_id = getattr(settings, "pdd_client_id", "") or ""
     secret = getattr(settings, "pdd_client_secret", "") or ""
-    token = getattr(settings, "pdd_access_token", "") or ""
+    token = str(bag.get("access_token") or "") or getattr(settings, "pdd_access_token", "") or ""
     if not (client_id and secret and token):
         return None
     end = int(datetime.now().timestamp())
@@ -310,11 +346,12 @@ def _pdd(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _temu(settings, query: str) -> list[dict] | None:
+def _temu(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
+    bag = bag or {}
     app_key = getattr(settings, "temu_app_key", "") or ""
     secret = getattr(settings, "temu_app_secret", "") or ""
-    token = getattr(settings, "temu_access_token", "") or ""
+    token = str(bag.get("access_token") or "") or getattr(settings, "temu_access_token", "") or ""
     if not (app_key and secret and token):
         return None
     params = {
@@ -352,10 +389,12 @@ def _temu(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _linkedin(settings, query: str) -> list[dict] | None:
+def _linkedin(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
-    token = getattr(settings, "linkedin_access_token", "") or ""
-    account = getattr(settings, "linkedin_ad_account_id", "") or ""
+    bag = bag or {}
+    meta = bag.get("meta") or {}
+    token = str(bag.get("access_token") or "") or getattr(settings, "linkedin_access_token", "") or ""
+    account = str(meta.get("ad_account_id") or "") or getattr(settings, "linkedin_ad_account_id", "") or ""
     if not (token and account):
         return None
     body = _get(
@@ -379,10 +418,12 @@ def _linkedin(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _facebook(settings, query: str) -> list[dict] | None:
+def _facebook(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
-    page = getattr(settings, "facebook_page_id", "") or ""
-    token = getattr(settings, "facebook_page_access_token", "") or ""
+    bag = bag or {}
+    meta = bag.get("meta") or {}
+    page = str(meta.get("page_id") or "") or getattr(settings, "facebook_page_id", "") or ""
+    token = str(bag.get("access_token") or "") or getattr(settings, "facebook_page_access_token", "") or ""
     if not (page and token):
         return None
     forms = _get(f"https://graph.facebook.com/v21.0/{page}/leadgen_forms", params={"access_token": token, "limit": "5"})
@@ -404,11 +445,13 @@ def _facebook(settings, query: str) -> list[dict] | None:
     return rows[:8]
 
 
-def _wecom(settings, query: str) -> list[dict] | None:
+def _wecom(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
-    corp = getattr(settings, "wecom_corp_id", "") or ""
-    secret = getattr(settings, "wecom_contact_secret", "") or ""
-    userid = getattr(settings, "wecom_follow_userid", "") or ""
+    bag = bag or {}
+    meta = bag.get("meta") or {}
+    corp = str(meta.get("corp_id") or "") or getattr(settings, "wecom_corp_id", "") or ""
+    secret = str(meta.get("contact_secret") or "") or getattr(settings, "wecom_contact_secret", "") or ""
+    userid = str(meta.get("follow_userid") or "") or getattr(settings, "wecom_follow_userid", "") or ""
     if not (corp and secret and userid):
         return None
     token_body = _get("https://qyapi.weixin.qq.com/cgi-bin/gettoken", params={"corpid": corp, "corpsecret": secret})
@@ -440,9 +483,10 @@ def _wecom(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _douyin(settings, query: str) -> list[dict] | None:
+def _douyin(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
-    token = getattr(settings, "douyin_access_token", "") or ""
+    bag = bag or {}
+    token = str(bag.get("access_token") or "") or getattr(settings, "douyin_access_token", "") or ""
     if not token:
         return None
     now = int(datetime.now().timestamp())
@@ -473,9 +517,10 @@ def _douyin(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _xhs(settings, query: str) -> list[dict] | None:
+def _xhs(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
-    token = getattr(settings, "xhs_access_token", "") or ""
+    bag = bag or {}
+    token = str(bag.get("access_token") or "") or getattr(settings, "xhs_access_token", "") or ""
     if not token:
         return None
     body = _post(
@@ -503,9 +548,10 @@ def _xhs(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _kuaishou(settings, query: str) -> list[dict] | None:
+def _kuaishou(settings, query: str, bag: dict | None = None) -> list[dict] | None:
     del query
-    token = getattr(settings, "kuaishou_access_token", "") or ""
+    bag = bag or {}
+    token = str(bag.get("access_token") or "") or getattr(settings, "kuaishou_access_token", "") or ""
     if not token:
         return None
     body = _get("https://open.kuaishou.com/openapi/leads/list", params={"access_token": token, "count": "10"})
@@ -529,10 +575,11 @@ def _kuaishou(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _alibaba_intl(settings, query: str) -> list[dict] | None:
+def _alibaba_intl(settings, query: str, bag: dict | None = None) -> list[dict] | None:
+    bag = bag or {}
     app_key = getattr(settings, "alibaba_intl_app_key", "") or ""
     secret = getattr(settings, "alibaba_intl_app_secret", "") or ""
-    token = getattr(settings, "alibaba_intl_access_token", "") or ""
+    token = str(bag.get("access_token") or "") or getattr(settings, "alibaba_intl_access_token", "") or ""
     if not (app_key and secret and token):
         return None
     import hmac
@@ -566,9 +613,11 @@ def _alibaba_intl(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _qichacha(settings, query: str) -> list[dict] | None:
-    app_key = getattr(settings, "qichacha_app_key", "") or ""
-    secret = getattr(settings, "qichacha_secret_key", "") or ""
+def _qichacha(settings, query: str, bag: dict | None = None) -> list[dict] | None:
+    bag = bag or {}
+    meta = bag.get("meta") or {}
+    app_key = str(meta.get("app_key") or bag.get("access_token") or "") or getattr(settings, "qichacha_app_key", "") or ""
+    secret = str(meta.get("secret_key") or bag.get("refresh_token") or "") or getattr(settings, "qichacha_secret_key", "") or ""
     if not (app_key and secret and query.strip()):
         return None if not (app_key and secret) else []
     timespan = str(int(datetime.now().timestamp()))
@@ -597,8 +646,10 @@ def _qichacha(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _tianyancha(settings, query: str) -> list[dict] | None:
-    token = getattr(settings, "tianyancha_token", "") or ""
+def _tianyancha(settings, query: str, bag: dict | None = None) -> list[dict] | None:
+    bag = bag or {}
+    meta = bag.get("meta") or {}
+    token = str(meta.get("token") or bag.get("access_token") or "") or getattr(settings, "tianyancha_token", "") or ""
     if not token:
         return None
     if not query.strip():
@@ -628,9 +679,11 @@ def _tianyancha(settings, query: str) -> list[dict] | None:
     return rows
 
 
-def _qixin(settings, query: str) -> list[dict] | None:
-    app_key = getattr(settings, "qixin_app_key", "") or ""
-    secret = getattr(settings, "qixin_secret_key", "") or ""
+def _qixin(settings, query: str, bag: dict | None = None) -> list[dict] | None:
+    bag = bag or {}
+    meta = bag.get("meta") or {}
+    app_key = str(meta.get("app_key") or bag.get("access_token") or "") or getattr(settings, "qixin_app_key", "") or ""
+    secret = str(meta.get("secret_key") or bag.get("refresh_token") or "") or getattr(settings, "qixin_secret_key", "") or ""
     if not (app_key and secret):
         return None
     if not query.strip():

@@ -50,10 +50,11 @@ def open_channel(
     *,
     scene: str = "web",
     openid: str | None = None,
+    client_ip: str | None = None,
 ) -> dict:
     if provider not in {"wechat", "alipay"}:
         raise AppError("INVALID_PROVIDER", "支付渠道无效")
-    if scene not in {"web", "miniprogram"}:
+    if scene not in {"web", "miniprogram", "wap"}:
         raise AppError("INVALID_SCENE", "支付场景无效")
     amount = int(payment["amount"])
     subject = next((item["name"] for item in PLANS if item["id"] == payment.get("plan_id")), "PickGlobal")
@@ -88,6 +89,24 @@ def open_channel(
             "jsapi": jsapi,
             "message": "请在微信小程序内确认支付",
         }
+    if provider == "wechat" and scene == "wap":
+        from app.modules.wechat_pay import create_h5_order
+
+        url = create_h5_order(
+            settings,
+            out_trade_no=payment["id"],
+            amount_fen=amount,
+            description=subject,
+            client_ip=client_ip or "127.0.0.1",
+        )
+        store.touch("payments", payment["id"], {"provider": provider})
+        return {
+            "channel": provider,
+            "code_url": None,
+            "pay_url": url,
+            "jsapi": None,
+            "message": "请前往微信完成支付",
+        }
     if provider == "wechat":
         from app.modules.wechat_pay import create_native_order
 
@@ -102,7 +121,13 @@ def open_channel(
         }
     from app.modules.alipay_pay import page_pay_url
 
-    url = page_pay_url(settings, out_trade_no=payment["id"], amount_fen=amount, subject=subject)
+    url = page_pay_url(
+        settings,
+        out_trade_no=payment["id"],
+        amount_fen=amount,
+        subject=subject,
+        mobile=scene == "wap",
+    )
     store.touch("payments", payment["id"], {"provider": provider})
     return {
         "channel": provider,

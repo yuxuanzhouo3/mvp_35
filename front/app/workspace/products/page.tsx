@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Mic, MicOff, Paperclip, X } from 'lucide-react'
 import { api, percent, waitJob } from '@/lib/api'
+import { CameraCapture } from '@/components/camera-capture'
 import { ProductLibrary } from '@/components/product-library'
 import { PriceCompareDialog, type PriceSite } from '@/components/price-compare-dialog'
+import { AI_PICK_PROMPTS, PromptSuggest, usePromptKeys } from '@/components/prompt-suggest'
 import { ReportDialog } from '@/components/report-dialog'
 import { ResultDesk } from '@/components/result-desk'
 import { RouteBar } from '@/components/route-bar'
 import { TermHint, type SelectionTermId } from '@/components/term-hint'
+import { isPhoneClient } from '@/lib/device'
 import { readTradeRoute, TRADE_ROUTES } from '@/lib/trade-route'
 
 type SpeechRec = {
@@ -167,9 +170,16 @@ export default function ProductsPage() {
   const [aiPreview, setAiPreview] = useState<string | null>(null)
   const [aiFileName, setAiFileName] = useState('')
   const [recording, setRecording] = useState(false)
+  const [cameraOpen, setCameraOpen] = useState(false)
   const uploadRef = useRef<HTMLInputElement>(null)
-  const cameraRef = useRef<HTMLInputElement>(null)
+  const voiceFileRef = useRef<HTMLInputElement>(null)
   const speechRef = useRef<SpeechRec | null>(null)
+  const aiKeys = usePromptKeys(AI_PICK_PROMPTS, aiNeed, setAiNeed)
+
+  function openAiCamera() {
+    setCameraOpen(false)
+    window.requestAnimationFrame(() => setCameraOpen(true))
+  }
 
   useEffect(() => {
     void api<SelectionAi>('/catalog/selection-allowance').then(setAi).catch(() => undefined)
@@ -201,6 +211,10 @@ export default function ProductsPage() {
     const Speech = (window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec }).SpeechRecognition
       || (window as unknown as { webkitSpeechRecognition?: new () => SpeechRec }).webkitSpeechRecognition
     if (!Speech) {
+      if (isPhoneClient()) {
+        voiceFileRef.current?.click()
+        return
+      }
       setMessage('当前浏览器不支持语音输入，请改用文字或上传图片。')
       return
     }
@@ -391,12 +405,12 @@ export default function ProductsPage() {
           <div className="mt-1 text-sm text-muted-foreground">按{TRADE_ROUTES[route].label}比价。利润率<TermHint id="margin" />达到 15% 且风险<TermHint id="risk" />不是高的商品优先<TermHint id="pick" />。排序选「搜索时间」时，刚返回的商品在上面。免费保留海外利润最高的 5 条，专业版 10 条，企业版 30 条。</div>
           {platforms.length > 0 && (
             <div className="mt-2 text-xs leading-5 text-muted-foreground">
-              {platforms.map((item) => `${item.name}${item.status === 'ok' ? ` ${item.count}` : item.status === 'failed' ? ' 失败' : item.status === 'reauth' ? ' 需重新授权' : ' 未配置'}`).join(' · ')}
+              {platforms.map((item) => `${item.name}${item.status === 'ok' ? ` ${item.count}` : item.status === 'failed' ? ' 失败' : item.status === 'reauth' ? ' 需重新授权' : ' 当前版本未上线'}`).join(' · ')}
               {' · '}来源 {provider === 'live' ? '实时' : '本地演示'}<TermHint id="provider" />
             </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{refresh?.premium ? '1688、拼多多、eBay、速卖通货价每 15 分钟更新。' : '各平台货价每小时更新。支付专业版或企业版后改为每 15 分钟，并有 10 次随时刷新。'}</span>
+            <span>{refresh?.premium ? '1688、拼多多、eBay、速卖通、TikTok Shop、Temu 货价每 15 分钟更新。' : '各平台货价每小时更新。支付专业版或企业版后改为每 15 分钟，并有 10 次随时刷新。'}</span>
             {refresh?.premium ? <span>还可随时刷新 {refresh.manual_left} 次。</span> : <a className="text-primary" href="/workspace/billing">去支付</a>}
             {refresh?.premium && shelfQuery && (
               <button
@@ -487,48 +501,53 @@ export default function ProductsPage() {
                 })
               }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">AI 选品</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {ai ? `当前每天 ${ai.ai_daily} 次，还剩 ${ai.ai_left} 次。免费 0 次，专业版 5 次，企业版 20 次。金额仍由规则引擎计算。` : '正在读取今天的次数。'}
-                  </p>
-                </div>
-                <button type="submit" disabled={busy || (ai?.ai_left || 0) <= 0} className="h-10 shrink-0 rounded-xl bg-primary px-4 text-sm text-primary-foreground disabled:opacity-50">{busy ? '处理中' : '让 AI 选品'}</button>
-              </div>
-              <div className="mt-3 flex items-stretch gap-2">
-                <div className="flex shrink-0 flex-col justify-center gap-1.5">
-                  <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={(event) => {
-                    attachAiImage(event.target.files?.[0])
-                    event.target.value = ''
-                  }} />
-                  <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(event) => {
-                    attachAiImage(event.target.files?.[0])
-                    event.target.value = ''
-                  }} />
-                  <button type="button" title="上传图片" className="flex size-8 items-center justify-center rounded-full border border-border bg-background text-foreground transition hover:bg-muted" onClick={() => uploadRef.current?.click()}>
-                    <Paperclip className="size-3.5" />
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                <p className="shrink-0 text-sm font-medium">AI 选品</p>
+                <input ref={uploadRef} type="file" accept="image/*" className="hidden" onChange={(event) => {
+                  attachAiImage(event.target.files?.[0])
+                  event.target.value = ''
+                }} />
+                <input ref={voiceFileRef} type="file" accept="audio/*" capture className="hidden" onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) setAiNeed((current) => current.trim() || `语音选品：${file.name.replace(/\.[^.]+$/, '')}`)
+                  event.target.value = ''
+                }} />
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button type="button" title="上传图片" aria-label="上传图片" className="flex size-10 items-center justify-center rounded-full border border-border bg-background text-foreground transition hover:bg-muted md:size-8" onClick={() => uploadRef.current?.click()}>
+                    <Paperclip className="size-4 md:size-3.5" />
                   </button>
-                  <button type="button" title={recording ? '停止语音' : '语音输入'} className={`flex size-8 items-center justify-center rounded-full border transition ${recording ? 'animate-pulse border-rose-300 bg-rose-50 text-rose-600' : 'border-border bg-background text-foreground hover:bg-muted'}`} onClick={toggleVoice}>
+                  <button type="button" title={recording ? '停止语音' : '语音输入'} aria-label={recording ? '停止语音' : '语音输入'} className={`hidden size-8 items-center justify-center rounded-full border transition md:flex ${recording ? 'animate-pulse border-rose-300 bg-rose-50 text-rose-600' : 'border-border bg-background text-foreground hover:bg-muted'}`} onClick={toggleVoice}>
                     {recording ? <MicOff className="size-3.5" /> : <Mic className="size-3.5" />}
                   </button>
-                  <button type="button" title="拍照" className="flex size-8 items-center justify-center rounded-full border border-border bg-background text-foreground transition hover:bg-muted" onClick={() => cameraRef.current?.click()}>
-                    <Camera className="size-3.5" />
+                  <button type="button" title="拍照" aria-label="拍照" className={`flex size-10 items-center justify-center rounded-full border transition md:size-8 ${cameraOpen ? 'border-sky-400 bg-sky-50 text-sky-700' : 'border-border bg-background text-foreground hover:bg-muted'}`} onClick={openAiCamera}>
+                    <Camera className="size-4 md:size-3.5" />
                   </button>
                 </div>
-                <div className="min-w-0 flex-1">
-                  {aiPreview && (
-                    <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-secondary/40 px-2 py-1.5">
-                      <img src={aiPreview} alt={aiFileName || '参考图'} className="size-10 rounded-md object-cover" />
-                      <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{aiFileName || '参考图'}</span>
-                      <button type="button" className="flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" onClick={clearAiImage} title="移除图片">
-                        <X className="size-3.5" />
-                      </button>
-                    </div>
-                  )}
-                  <textarea className="h-20 w-full rounded-lg bg-muted p-2 text-sm" value={aiNeed} placeholder="例如：美国站 100 美元以内的二手 iPhone" onChange={(event) => setAiNeed(event.target.value)} />
-                </div>
+                <button type="submit" disabled={busy || (ai?.ai_left || 0) <= 0} className="ml-auto h-9 shrink-0 rounded-xl bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50 sm:h-10 sm:px-4 sm:text-sm">{busy ? '处理中' : '让 AI 选品'}</button>
               </div>
+              <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground sm:text-xs">
+                {ai ? `当前每天 ${ai.ai_daily} 次，还剩 ${ai.ai_left} 次。免费 0 次，专业版 5 次，企业版 20 次。金额仍由规则引擎计算。Tab / 方向键切换默认需求。` : '正在读取今天的次数。'}
+              </p>
+              <div className="mt-2">
+                <PromptSuggest options={AI_PICK_PROMPTS} value={aiNeed} onPick={setAiNeed} />
+              </div>
+              {aiPreview && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-secondary/40 px-2 py-1.5">
+                  <img src={aiPreview} alt={aiFileName || '参考图'} className="size-10 rounded-md object-cover" />
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{aiFileName || '参考图'}</span>
+                  <button type="button" className="flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-muted" onClick={clearAiImage} title="移除图片">
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              )}
+              <textarea
+                className="mt-2 h-20 w-full rounded-lg bg-muted p-2 text-sm"
+                value={aiNeed}
+                placeholder="Tab / ↑↓←→ 切换默认需求，或直接输入"
+                onChange={(event) => setAiNeed(event.target.value)}
+                onKeyDown={aiKeys.onKeyDown}
+              />
+              <CameraCapture open={cameraOpen} onClose={() => setCameraOpen(false)} onCapture={attachAiImage} />
             </form>
           )}
           {compareOpen && <PriceCompareDialog query={shelfQuery} sites={platforms} offerLimit={ai?.shelf_limit || 5} onClose={() => setCompareOpen(false)} />}

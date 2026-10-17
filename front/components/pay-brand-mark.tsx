@@ -14,14 +14,19 @@ export function PayBrandMark({ method, className = 'size-5' }: { method: 'wechat
       </svg>
     )
   }
+  // Path mark (no system font) so mobile WebViews do not show a blank/garbled glyph.
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <rect width="32" height="32" rx="7" fill="#1677FF" />
+      <rect width="32" height="32" rx="8" fill="#1677FF" />
       <path
         fill="#fff"
-        d="M8.2 9.2h4.1c2.4 0 3.9 1.3 3.9 3.4 0 2.3-1.7 3.6-4.3 3.6H10.7v5.1H8.2V9.2zm2.5 5.2h1.4c1.2 0 1.9-.6 1.9-1.6s-.6-1.5-1.8-1.5h-1.5v3.1zm8.2-1.2c0-2.5 1.8-4.2 4.4-4.2 1.2 0 2.1.3 2.8.8l-.9 1.9c-.5-.3-1.1-.5-1.8-.5-1.4 0-2.3.9-2.3 2.2v.1c0 1.3.9 2.2 2.4 2.2.7 0 1.3-.2 1.8-.5l.9 1.8c-.7.5-1.7.8-2.9.8-2.7 0-4.4-1.7-4.4-4.4v-.2z"
+        d="M9.2 8.6h3.4c2.7 0 4.4 1.4 4.4 3.7 0 2.5-1.9 4-4.8 4H12.1v6.1H9.2V8.6zm3.1 5.7h1c1.2 0 1.9-.6 1.9-1.7s-.6-1.6-1.8-1.6h-1.1v3.3z"
       />
-      <path fill="#fff" d="M7.4 22.8h17.2v1.8H7.4z" opacity=".9" />
+      <path
+        fill="#fff"
+        d="M18.2 12.4c0-2.2 1.6-3.8 4-3.8 1.1 0 2 .3 2.6.7l-.9 2.1c-.5-.3-1-.5-1.6-.5-1.1 0-1.8.7-1.8 1.8v.1c0 1.1.7 1.8 1.9 1.8.6 0 1.2-.2 1.7-.5l.9 2c-.7.5-1.6.7-2.7.7-2.5 0-4.1-1.5-4.1-4.1v-.3z"
+      />
+      <path fill="#fff" d="M8.4 24.2h15.2v2H8.4z" />
     </svg>
   )
 }

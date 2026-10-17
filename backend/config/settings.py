@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     aliexpress_app_key: str = ""
     aliexpress_app_secret: str = ""
     aliexpress_tracking_id: str = ""
+    # TikTok Shop affiliate search. Empty skips the card as 未配置.
+    tiktok_shop_app_key: str = ""
+    tiktok_shop_app_secret: str = ""
+    tiktok_shop_access_token: str = ""
+    tiktok_shop_shop_cipher: str = ""
     reply_interval_hours: int = 24
     amazon_sp_application_id: str = ""
     amazon_sp_client_id: str = ""
@@ -101,9 +106,11 @@ class Settings(BaseSettings):
     walmart_market_client_secret: str = ""
     taobao_session: str = ""
     pdd_access_token: str = ""
+    # Temu Partner US goods list for selection shelf. Empty skips the card.
     temu_app_key: str = ""
     temu_app_secret: str = ""
     temu_access_token: str = ""
+    temu_open_host: str = "https://openapi-b-us.temu.com"
     linkedin_client_id: str = ""
     linkedin_client_secret: str = ""
     linkedin_access_token: str = ""

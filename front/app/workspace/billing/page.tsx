@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { api } from '@/lib/api'
 import { payTint } from '@/lib/brand-tints'
+import { isPhoneClient, openExternalPay, openWechatPay } from '@/lib/device'
 import { readClient } from '@/lib/client-adapter'
 import { PayBrandMark } from '@/components/pay-brand-mark'
 import { ResultDesk } from '@/components/result-desk'
@@ -163,6 +164,7 @@ export default function BillingPage() {
     setQr('')
     setQrImage('')
     const miniprogram = readClient()?.shell === 'miniprogram'
+    const phone = isPhoneClient()
     try {
       const payment = await api<Payment>('/payments/checkout', {
         method: 'POST',
@@ -170,19 +172,22 @@ export default function BillingPage() {
           plan_id: planId,
           kind: 'subscription',
           provider,
-          scene: provider === 'wechat' && miniprogram ? 'miniprogram' : 'web',
+          scene: provider === 'wechat' && miniprogram ? 'miniprogram' : phone && (provider === 'wechat' || provider === 'alipay') ? 'wap' : 'web',
           idempotency_key: `plan-${planId}-${provider}-${Date.now()}`,
         }),
       })
       if (payment.jsapi) {
         invokeMiniProgramPay(payment.jsapi)
         setNotice(`订单 ${payment.id} 已创建。请在微信小程序里确认支付，入账以后台签名回调为准。`)
+      } else if (provider === 'wechat' && phone && payment.pay_url) {
+        setNotice(`订单 ${payment.id} 已创建。正在打开微信付款…付完后回此页点查询。`)
+        openWechatPay(payment.pay_url)
       } else if (provider === 'wechat' && payment.code_url) {
         setQr(payment.code_url)
-        setNotice(`订单 ${payment.id} 已创建。请用微信扫码支付，付完后点查询。入账以后台签名回调为准。`)
+        setNotice(`订单 ${payment.id} 已创建。请用微信扫码，或点二维码打开微信付款。入账以后台签名回调为准。`)
       } else if (provider === 'alipay' && payment.pay_url) {
         setNotice(`订单 ${payment.id} 已创建。请前往支付宝完成付款，入账以后台签名回调为准。`)
-        window.open(payment.pay_url, '_blank', 'noopener,noreferrer')
+        openExternalPay(payment.pay_url)
       } else {
         setNotice(payment.message || `订单 ${payment.id} 保持待支付，尚未入账。`)
       }
@@ -217,10 +222,10 @@ export default function BillingPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <span className="eyebrow">账单</span>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">套餐与支付</h1>
+        <span className="eyebrow">订阅</span>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">订阅与支付</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">下单后是待支付。商户配置完整后才会给出付款地址。</p>
-        {summary?.payment_testing && <p className="mt-2 text-sm text-muted-foreground">当前是支付测试，付费套餐实付 0.10 元。</p>}
+        {summary?.payment_testing && <p className="mt-2 text-sm text-muted-foreground">当前是支付测试，付费订阅实付 0.10 元。</p>}
         {picked && (
           <p className="mt-3 max-w-3xl rounded-xl border border-border bg-card px-4 py-3 text-sm leading-6">
             这一档是{picked.name}：成交和召回成交抽成 {Math.round(picked.take * 100)}%，已送达线索 ¥{(picked.leadFen / 100).toFixed(2)} / 条，已送达召回 ¥{(picked.recallFen / 100).toFixed(2)} / 次。
@@ -228,7 +233,7 @@ export default function BillingPage() {
             手点赢单和私下收款不进入抽成。
           </p>
         )}
-        {!summary && !error && <p className="mt-4 text-sm text-muted-foreground">正在加载账单…</p>}
+        {!summary && !error && <p className="mt-4 text-sm text-muted-foreground">正在加载订阅…</p>}
       </div>
       {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       {notice && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
@@ -289,11 +294,15 @@ export default function BillingPage() {
                 {qr && (
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-lg border border-border bg-secondary/40 px-2 py-1.5">
                     {qrImage ? (
-                      <img src={qrImage} alt="微信支付二维码" width={112} height={112} className="size-[112px] rounded-md bg-white p-0.5" />
+                      <button type="button" className="group flex flex-col items-center gap-1" onClick={() => openWechatPay(qr)} title="打开微信付款">
+                        <img src={qrImage} alt="微信支付二维码" width={112} height={112} className="size-[112px] rounded-md bg-white p-0.5 ring-offset-2 transition group-active:ring-2 group-active:ring-emerald-500" />
+                        <span className="text-[10px] font-medium text-emerald-700">点二维码打开微信付款</span>
+                      </button>
                     ) : (
                       <p className="text-[11px] text-muted-foreground">正在生成二维码…</p>
                     )}
-                    <p className="mt-1 text-center text-[10px] leading-3 text-muted-foreground">微信扫码，付完后查询入账</p>
+                    <p className="mt-1 text-center text-[10px] leading-3 text-muted-foreground">也可另开微信扫一扫；付完后查询入账</p>
+                    <button type="button" className="mt-1.5 h-8 w-full rounded-full bg-emerald-600 text-xs font-medium text-white" onClick={() => openWechatPay(qr)}>打开微信付款</button>
                   </div>
                 )}
                 <button disabled={busy} className="mt-auto h-8 rounded-full bg-primary text-sm text-primary-foreground disabled:opacity-50" onClick={() => {

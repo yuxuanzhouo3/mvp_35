@@ -108,7 +108,7 @@ export function RaasShare({ leads, recalls }: { leads: Lead[]; recalls: Recall[]
       </p>
       <div>
         <h3 className="font-semibold">换档后跳到支付</h3>
-        <p className="mt-1 text-sm text-muted-foreground">免费档不跳转。付费档进入账单页，用微信或支付宝付月费。月费付清之前，抽成仍按现在这一档。</p>
+        <p className="mt-1 text-sm text-muted-foreground">免费档不跳转。付费档进入订阅页，用微信或支付宝付月费。月费付清之前，抽成仍按现在这一档。</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {sharePlans.map((item) => (
             <PlanCard key={item.id} item={item} current={item.id === plan.id} />

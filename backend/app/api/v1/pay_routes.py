@@ -54,9 +54,19 @@ def payments_checkout(request: Request, body: CheckoutIn, authorization: str | N
         settings=settings,
     )
     if body.provider:
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        client_ip = forwarded or (request.client.host if request.client else None)
         payment = {
             **payment,
-            **open_channel(store, settings, payment, body.provider, scene=body.scene, openid=body.openid),
+            **open_channel(
+                store,
+                settings,
+                payment,
+                body.provider,
+                scene=body.scene,
+                openid=body.openid,
+                client_ip=client_ip,
+            ),
         }
     return respond(request, payment)
 

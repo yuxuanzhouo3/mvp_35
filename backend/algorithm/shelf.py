@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,11 +29,39 @@ _SHELF: dict[str, dict] = {}
 _GOODS_CACHE: dict[str, dict] = {}
 _ALIBABA_SESSION = {"access_token": "", "refresh_token": "", "access_until": 0.0, "refresh_until": 0.0}
 _ALIBABA_DENY: dict[str, float] = {}
-TIMEOUT = 4
+TIMEOUT = 3
+EBAY_TIMEOUT = 10
+_EBAY_TOKEN: dict[str, object] = {"key": "", "token": "", "until": 0.0}
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+_PRICE_CN = re.compile(
+    r"(?:不超过|低于|不到|以内|以下|内)?\s*(\d+(?:\.\d+)?)\s*(?:美元|美金|刀|usd|\$)\s*(?:以内|以下|内)?",
+    re.I,
+)
+_PRICE_EN = re.compile(r"(?:under|below|<=|max(?:imum)?)\s*\$?\s*(\d+(?:\.\d+)?)", re.I)
+_USED = re.compile(r"二手|闲置|翻新|used|pre-?owned|refurbished", re.I)
+_STOP = {
+    "usd",
+    "us",
+    "usa",
+    "under",
+    "below",
+    "with",
+    "the",
+    "and",
+    "for",
+    "or",
+    "within",
+    "less",
+    "than",
+    "station",
+    "market",
+    "site",
+}
 
 
 def clear_goods_cache() -> None:
     _GOODS_CACHE.clear()
+    _EBAY_TOKEN.update(key="", token="", until=0.0)
 
 
 def goods_age(query: str, target_market: str = "US") -> float | None:
@@ -68,7 +97,6 @@ def remember_shelf(items: list[dict]) -> None:
 
 def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list[dict], list[dict]]:
     needle = query.strip()
-    fx = fetch_usd_cny(getattr(settings, "fx_api_url", "") or "") or "7.20"
     if not needle or target_market == "CN":
         return [], _planned(settings, called=False)
     jobs = (
@@ -76,12 +104,16 @@ def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list
         _pinduoduo,
         _ebay,
         _aliexpress,
+        _tiktok,
+        _temu,
     )
     domestic: list[dict] = []
     us_rows: list[dict] = []
     us_prices: list[Decimal] = []
     statuses: list[dict] = []
-    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+    fx_url = getattr(settings, "fx_api_url", "") or ""
+    with ThreadPoolExecutor(max_workers=len(jobs) + 1) as pool:
+        fx_future = pool.submit(fetch_usd_cny, fx_url)
         futures = [pool.submit(job, needle, settings) for job in jobs]
         for future in as_completed(futures):
             rows, status = future.result()
@@ -91,6 +123,7 @@ def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list
             else:
                 us_rows.extend(rows)
                 us_prices.extend(row["usd"] for row in rows if row.get("usd"))
+        fx = fx_future.result() or "7.20"
     statuses.sort(key=lambda row: row["id"])
     if not domestic:
         return _us_shelf_items(us_rows, fx, target_market), statuses
@@ -133,6 +166,8 @@ _PLATFORMS = (
     ("pinduoduo", "拼多多", "CN"),
     ("ebay", "eBay", "US"),
     ("aliexpress", "速卖通", "US"),
+    ("tiktok", "TikTok Shop", "US"),
+    ("temu", "Temu", "US"),
 )
 
 
@@ -678,23 +713,77 @@ def _walmart(query: str, settings) -> tuple[list, dict]:
     return rows[:8], _status("walmart", "沃尔玛", "US", "ok", len(rows[:8]))
 
 
-def _ebay(query: str, settings) -> tuple[list, dict]:
-    client_id = getattr(settings, "ebay_client_id", "") or ""
-    secret = getattr(settings, "ebay_client_secret", "") or ""
-    if not (client_id and secret):
-        return _skip("ebay", "eBay", "US")
-    token = _ebay_token(client_id, secret)
-    if not token:
-        return _fail("ebay", "eBay", "US")
-    body = _get(
-        "https://api.ebay.com/buy/browse/v1/item_summary/search",
-        params={"q": query, "limit": "30"},
-        headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
-    )
-    if body is None:
-        return _fail("ebay", "eBay", "US")
+def ebay_search_plan(query: str) -> dict:
+    """Turn a Chinese/English need into Browse API q + filter.
+
+    eBay keyword search returns 0 hits for long Chinese prompts like
+    「美国站 100 美元以内的二手 iPhone」. Pull Latin product tokens, map common
+    CN product words, and push budget / used into the official filter param.
+    """
+    text = " ".join((query or "").split())
+    max_price = None
+    for pattern in (_PRICE_CN, _PRICE_EN):
+        match = pattern.search(text)
+        if match:
+            try:
+                max_price = float(match.group(1))
+            except ValueError:
+                max_price = None
+            if max_price and max_price > 0:
+                break
+            max_price = None
+    used = bool(_USED.search(text))
+    latin = [token for token in re.findall(r"[A-Za-z][A-Za-z0-9+\-]{1,}", text) if token.lower() not in _STOP]
+    words = list(dict.fromkeys(latin))
+    if re.search(r"iphone|苹果\s*手机|苹果手机", text, re.I) and not any(w.lower() == "iphone" for w in words):
+        words.insert(0, "iphone")
+    if re.search(r"\bipad\b|平板", text, re.I) and not any(w.lower() == "ipad" for w in words):
+        words.insert(0, "ipad")
+    if re.search(r"耳机|airpods", text, re.I) and not any(w.lower() in {"airpods", "earbuds", "headphones"} for w in words):
+        words.insert(0, "headphones")
+    if used and not any(w.lower() == "used" for w in words):
+        # Prefer the filter for condition; keep q short for recall.
+        pass
+    q = " ".join(words[:8]).strip()
+    if not q or _CJK.search(q):
+        stripped = _CJK.sub(" ", text)
+        stripped = re.sub(r"[^\w\s+\-]", " ", stripped)
+        q = " ".join(token for token in stripped.split() if token.lower() not in _STOP)[:80].strip()
+    if not q:
+        q = "iphone" if re.search(r"手机|iphone|苹果", text, re.I) else text[:60]
+    filters: list[str] = []
+    if max_price:
+        ceiling = max(1, int(max_price))
+        # Browse API ignores price bounds unless priceCurrency is set.
+        filters.append(f"price:[1..{ceiling}]")
+        filters.append("priceCurrency:USD")
+    if used:
+        filters.append("conditions:{USED}")
+    return {"q": q, "filter": ",".join(filters), "max_price": max_price, "used": used}
+
+
+def _ebay_browse(token: str, *, q: str, limit: int = 30, filter_expr: str = "") -> dict | None:
+    params: dict[str, str] = {"q": q, "limit": str(limit)}
+    if filter_expr:
+        params["filter"] = filter_expr
+    try:
+        response = httpx.get(
+            "https://api.ebay.com/buy/browse/v1/item_summary/search",
+            params=params,
+            headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
+            timeout=EBAY_TIMEOUT,
+            follow_redirects=True,
+        )
+        response.raise_for_status()
+        body = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def _ebay_rows(body: dict | None) -> list:
     rows = []
-    for product in body.get("itemSummaries") or []:
+    for product in (body or {}).get("itemSummaries") or []:
         if not isinstance(product, dict):
             continue
         price = product.get("price") or {}
@@ -707,6 +796,33 @@ def _ebay(query: str, settings) -> tuple[list, dict]:
             continue
         seller = (product.get("seller") or {}).get("username") or "eBay"
         rows.append(_us("ebay", external, title, amount, str(seller), str(product.get("itemWebUrl") or "")))
+    return rows[:30]
+
+
+def _ebay(query: str, settings) -> tuple[list, dict]:
+    client_id = getattr(settings, "ebay_client_id", "") or ""
+    secret = getattr(settings, "ebay_client_secret", "") or ""
+    if not (client_id and secret):
+        return _skip("ebay", "eBay", "US")
+    token = _ebay_token(client_id, secret)
+    if not token:
+        return _fail("ebay", "eBay", "US")
+    plan = ebay_search_plan(query)
+    body = _ebay_browse(token, q=plan["q"], filter_expr=plan["filter"])
+    if body is None:
+        return _fail("ebay", "eBay", "US")
+    rows = _ebay_rows(body)
+    # Drop filters then broaden q if the refined search was too tight.
+    if not rows and plan["filter"]:
+        body = _ebay_browse(token, q=plan["q"])
+        if body is not None:
+            rows = _ebay_rows(body)
+    if not rows and plan["q"].lower() != "iphone" and re.search(r"iphone|苹果|手机", query or "", re.I):
+        body = _ebay_browse(token, q="iphone", filter_expr=plan["filter"])
+        if body is None:
+            body = _ebay_browse(token, q="iphone")
+        if body is not None:
+            rows = _ebay_rows(body)
     return rows[:30], _status("ebay", "eBay", "US", "ok", len(rows[:30]))
 
 
@@ -758,6 +874,182 @@ def _aliexpress(query: str, settings) -> tuple[list, dict]:
     return rows[:30], _status("aliexpress", "速卖通", "US", "ok", len(rows[:30]))
 
 
+def _tiktok_sign(path: str, secret: str, params: dict, body: str) -> str:
+    pieces = "".join(f"{key}{params[key]}" for key in sorted(params) if key not in {"sign", "access_token"})
+    raw = f"{secret}{path}{pieces}{body}{secret}"
+    return hmac.new(secret.encode(), raw.encode(), hashlib.sha256).hexdigest()
+
+
+def _tiktok_price(product: dict) -> Decimal | None:
+    for key in ("sale_price", "original_price", "price"):
+        value = product.get(key)
+        if isinstance(value, dict):
+            amount = _amount(value.get("amount") or value.get("sale_price") or value.get("value"))
+            currency = str(value.get("currency") or "USD").upper()
+            if amount is not None and currency == "USD":
+                return amount
+        else:
+            amount = _amount(value)
+            if amount is not None:
+                return amount
+    for sku in product.get("skus") or []:
+        if isinstance(sku, dict):
+            found = _tiktok_price(sku)
+            if found is not None:
+                return found
+    return None
+
+
+def _tiktok(query: str, settings) -> tuple[list, dict]:
+    app_key = getattr(settings, "tiktok_shop_app_key", "") or ""
+    secret = getattr(settings, "tiktok_shop_app_secret", "") or ""
+    token = getattr(settings, "tiktok_shop_access_token", "") or ""
+    cipher = getattr(settings, "tiktok_shop_shop_cipher", "") or ""
+    if not (app_key and secret and token and cipher):
+        return _skip("tiktok", "TikTok Shop", "US")
+    plan = ebay_search_plan(query)
+    keywords = [part for part in plan["q"].split() if part][:3] or [query.strip()[:40]]
+    path = "/affiliate_seller/202405/open_collaborations/products/search"
+    payload = json.dumps({"title_keywords": keywords}, separators=(",", ":"))
+    params = {
+        "app_key": app_key,
+        "timestamp": str(int(time.time())),
+        "shop_cipher": cipher,
+        "page_size": "20",
+    }
+    params["sign"] = _tiktok_sign(path, secret, params, payload)
+    try:
+        response = httpx.post(
+            f"https://open-api.tiktokglobalshop.com{path}",
+            params=params,
+            content=payload,
+            headers={
+                "Content-Type": "application/json",
+                "x-tts-access-token": token,
+            },
+            timeout=8,
+        )
+        body = response.json()
+    except (httpx.HTTPError, ValueError):
+        return _fail("tiktok", "TikTok Shop", "US")
+    if not isinstance(body, dict) or body.get("code") not in (0, "0", None):
+        # Some success envelopes omit code and nest under data.
+        if not isinstance(body, dict) or (body.get("code") not in (0, "0") and "data" not in body):
+            return _fail("tiktok", "TikTok Shop", "US")
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    products = data.get("products") or data.get("product_list") or []
+    if not isinstance(products, list):
+        return _fail("tiktok", "TikTok Shop", "US")
+    rows = []
+    for product in products:
+        if not isinstance(product, dict):
+            continue
+        title = str(product.get("title") or product.get("product_name") or product.get("name") or "")
+        external = str(product.get("id") or product.get("product_id") or "")
+        amount = _tiktok_price(product)
+        if not title or not external or amount is None:
+            continue
+        link = str(product.get("product_url") or product.get("detail_url") or "")
+        rows.append(_us("tiktok", external, title, amount, "TikTok Shop", link))
+    return rows[:20], _status("tiktok", "TikTok Shop", "US", "ok", len(rows[:20]))
+
+
+def _temu_price(product: dict) -> Decimal | None:
+    for key in ("retailPrice", "listPrice", "price", "salePrice", "marketPrice"):
+        value = product.get(key)
+        if isinstance(value, dict):
+            amount = _amount(value.get("amount") or value.get("price") or value.get("value"))
+            currency = str(value.get("currency") or "USD").upper()
+            if amount is not None and currency in {"USD", ""}:
+                return amount
+        else:
+            amount = _amount(value)
+            if amount is not None:
+                return amount
+    for sku in product.get("skuInfoList") or product.get("skuList") or []:
+        if isinstance(sku, dict):
+            found = _temu_price(sku)
+            if found is not None:
+                return found
+    return None
+
+
+def _temu_goods(body: dict | None):
+    if not isinstance(body, dict):
+        return None
+    if body.get("success") is False:
+        return None
+    err = body.get("errorCode")
+    if err not in (None, 0, "0", 1000000, "1000000") and body.get("success") is not True:
+        return None
+    result = body.get("result")
+    if isinstance(result, list):
+        return result
+    if not isinstance(result, dict):
+        return []
+    for key in ("goodsList", "pageItems", "list", "goodsInfoList"):
+        rows = result.get(key)
+        if isinstance(rows, list):
+            return rows
+        if isinstance(rows, dict):
+            nested = rows.get("goodsList") or rows.get("list") or []
+            if isinstance(nested, list):
+                return nested
+    return []
+
+
+def _temu(query: str, settings) -> tuple[list, dict]:
+    """US Temu Partner goods list (seller mall) via bg.local.goods.list.query."""
+    app_key = getattr(settings, "temu_app_key", "") or ""
+    secret = getattr(settings, "temu_app_secret", "") or ""
+    token = getattr(settings, "temu_access_token", "") or ""
+    if not (app_key and secret and token):
+        return _skip("temu", "Temu", "US")
+    host = (getattr(settings, "temu_open_host", "") or "https://openapi-b-us.temu.com").rstrip("/")
+    plan = ebay_search_plan(query)
+    needle = (plan.get("q") or query).strip()[:80] or query.strip()[:80]
+    params = {
+        "type": "bg.local.goods.list.query",
+        "app_key": app_key,
+        "access_token": token,
+        "timestamp": str(int(time.time())),
+        "data_type": "JSON",
+        "pageNo": "1",
+        "pageSize": "20",
+        "goodsSearchType": "1",
+        "goodsStatusFilterType": "1",
+        "searchText": needle,
+    }
+    params["sign"] = _md5_sign(secret, params)
+    try:
+        response = httpx.post(
+            f"{host}/openapi/router",
+            content=json.dumps(params, separators=(",", ":")),
+            headers={"Content-Type": "application/json"},
+            timeout=8,
+        )
+        body = response.json()
+    except (httpx.HTTPError, ValueError):
+        return _fail("temu", "Temu", "US")
+    products = _temu_goods(body if isinstance(body, dict) else None)
+    if products is None:
+        return _fail("temu", "Temu", "US")
+    rows = []
+    for product in products:
+        if not isinstance(product, dict):
+            continue
+        title = str(product.get("goodsName") or product.get("title") or product.get("name") or "")
+        external = str(product.get("goodsId") or product.get("id") or "")
+        amount = _temu_price(product)
+        if not title or not external or amount is None:
+            continue
+        link = str(product.get("goodsUrl") or product.get("thumbUrl") or "")
+        if not link and external:
+            link = f"https://www.temu.com/goods.html?goods_id={external}"
+        rows.append(_us("temu", external, title, amount, "Temu", link))
+    return rows[:20], _status("temu", "Temu", "US", "ok", len(rows[:20]))
+
+
 def _aliexpress_products(body: dict | None):
     if not isinstance(body, dict) or body.get("error_response"):
         return None
@@ -776,16 +1068,25 @@ def _aliexpress_products(body: dict | None):
 
 
 def _ebay_token(client_id: str, secret: str) -> str:
+    key = f"{client_id}:{secret[:12]}"
+    now = time.time()
+    if _EBAY_TOKEN["token"] and _EBAY_TOKEN["key"] == key and now < float(_EBAY_TOKEN["until"] or 0):
+        return str(_EBAY_TOKEN["token"])
     try:
         response = httpx.post(
             "https://api.ebay.com/identity/v1/oauth2/token",
             data={"grant_type": "client_credentials", "scope": "https://api.ebay.com/oauth/api_scope"},
             auth=(client_id, secret),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=TIMEOUT,
+            timeout=EBAY_TIMEOUT,
         )
         response.raise_for_status()
-        token = response.json().get("access_token")
-    except (httpx.HTTPError, ValueError):
+        body = response.json()
+        token = str(body.get("access_token") or "")
+        expires = int(body.get("expires_in") or 7200)
+    except (httpx.HTTPError, ValueError, TypeError):
         return ""
-    return str(token or "")
+    if not token:
+        return ""
+    _EBAY_TOKEN.update(key=key, token=token, until=now + max(60, expires - 60))
+    return token

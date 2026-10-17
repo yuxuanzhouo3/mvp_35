@@ -170,6 +170,7 @@ class ChannelLoginIn(BaseModel):
     channel: str
     platform: str
     mode: str = ""
+    credentials: dict[str, str] = {}
 
 
 class ChannelCallbackIn(BaseModel):
@@ -366,7 +367,18 @@ def create_router() -> APIRouter:
         from app.modules.channel_login import begin_login
 
         settings, store, prof = ctx(request, authorization, write=True)
-        return respond(request, begin_login(store, settings, prof, channel=body.channel, platform=body.platform, mode=body.mode))
+        return respond(
+            request,
+            begin_login(
+                store,
+                settings,
+                prof,
+                channel=body.channel,
+                platform=body.platform,
+                mode=body.mode,
+                credentials=body.credentials,
+            ),
+        )
 
     @router.post("/channel-accounts/callback")
     def channel_account_callback(request: Request, body: ChannelCallbackIn, authorization: str | None = Header(default=None)):

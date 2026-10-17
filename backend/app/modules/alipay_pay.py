@@ -20,14 +20,17 @@ def ready(settings: Settings) -> bool:
     return bool(settings.alipay_app_id and settings.alipay_private_key and _public_key(settings))
 
 
-def page_pay_url(settings: Settings, *, out_trade_no: str, amount_fen: int, subject: str) -> str:
+def page_pay_url(settings: Settings, *, out_trade_no: str, amount_fen: int, subject: str, mobile: bool = False) -> str:
     if not ready(settings):
         raise AppError("NOT_ENABLED", "支付宝未开通", 501, {"flag": "payment.alipay", "placeholder": True})
     notify = settings.alipay_notify_url or "https://pickglobal.mornscience.top/api/v1/webhooks/alipay"
     origin = (settings.public_web_origin or "https://pickglobal.mornscience.top").rstrip("/")
+    # Phone browsers need wap pay; PC page pay often fails or blank-screens on mobile.
+    method = "alipay.trade.wap.pay" if mobile else "alipay.trade.page.pay"
+    product_code = "QUICK_WAP_WAY" if mobile else "FAST_INSTANT_TRADE_PAY"
     params = {
         "app_id": settings.alipay_app_id,
-        "method": "alipay.trade.page.pay",
+        "method": method,
         "format": "JSON",
         "charset": "utf-8",
         "sign_type": "RSA2",
@@ -41,7 +44,7 @@ def page_pay_url(settings: Settings, *, out_trade_no: str, amount_fen: int, subj
                 "out_trade_no": out_trade_no,
                 "total_amount": f"{Decimal(amount_fen) / Decimal(100):.2f}",
                 "subject": subject,
-                "product_code": "FAST_INSTANT_TRADE_PAY",
+                "product_code": product_code,
             },
         ),
     }

@@ -17,6 +17,7 @@ import { GuideVideo } from '@/components/guide-video'
 import { UserMenu } from '@/components/user-menu'
 import { AdSlot } from '@/components/ad-slot'
 import { api } from '@/lib/api'
+import { ChannelMark } from '@/components/brand-marks'
 import { tintForChannel } from '@/lib/brand-tints'
 import { accessToken, logoutSession } from '@/lib/session'
 
@@ -297,7 +298,10 @@ export default function Page() {
                     const tint = tintForChannel(id)
                     return (
                       <button key={code} type="button" className={`!min-h-0 !w-full cursor-pointer rounded-[1.15rem] border !p-5 text-left transition hover:-translate-y-0.5 ${tint.card}`} onClick={() => openChannel(code, id)}>
-                        <span className={`text-sm font-semibold ${tint.code}`}>{code}</span>
+                        <div className="flex items-center gap-2">
+                          <ChannelMark id={id} className={`size-9 ${tint.code}`} />
+                          <span className={`text-sm font-semibold ${tint.code}`}>{code}</span>
+                        </div>
                         <h3 className="mt-4 text-xl font-semibold">{title}</h3>
                         <p className="mt-3 text-sm leading-7 text-muted-foreground">{copy}</p>
                         <p className={`mt-5 text-sm font-medium ${tint.code}`}>{signedIn ? '进入这一路' : '登录后进入'}</p>

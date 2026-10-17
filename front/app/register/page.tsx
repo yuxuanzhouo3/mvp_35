@@ -51,7 +51,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell title="注册卖家账号" copy="注册后进入你自己的工作台。套餐默认免费，付费在账单页下单，支付结果以后台回调为准。">
+    <AuthShell title="注册卖家账号" copy="注册后进入你自己的工作台。订阅默认免费，付费在订阅页下单，支付结果以后台回调为准。">
       <form onSubmit={onSubmit}>
         <label className="block text-sm font-medium">
           显示名

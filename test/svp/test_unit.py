@@ -269,6 +269,43 @@ def test_qichacha_search_replaces_demo_leads(monkeypatch):
     assert len(demo) == 5
 
 
+def test_discovery_prefers_tenant_channel_token(monkeypatch):
+    from algorithm.lead_feeds import discover
+
+    class Store:
+        def query(self, name, tenant_id="", limit=50, filters=None):
+            assert name == "channel_accounts"
+            return {
+                "items": [
+                    {
+                        "id": "cac1",
+                        "channel": "social",
+                        "platform": "douyin",
+                        "status": "connected",
+                        "access_token": "tenant-dy-token",
+                        "refresh_token": "",
+                        "token_meta": "{}",
+                    }
+                ]
+            }
+
+    seen = {}
+
+    def fake_post(url, data=None, json_body=None, headers=None):
+        seen["token"] = (headers or {}).get("access-token")
+        return {"data": {"list": [{"nickname": "线索甲", "open_id": "o1"}]}}
+
+    monkeypatch.setattr("algorithm.lead_feeds._post", fake_post)
+
+    class Keys:
+        douyin_access_token = "env-should-not-win"
+
+    rows, provider = discover(Store(), Keys(), {"channel": "social", "platform": "douyin", "query": ""}, "ten-1")
+    assert provider == "live"
+    assert seen["token"] == "tenant-dy-token"
+    assert rows[0]["company"] == "线索甲"
+
+
 def test_agency_push_needs_a_parent_then_discovery_uses_it(client):
     denied = client.post(
         "/api/v1/agency/leads",

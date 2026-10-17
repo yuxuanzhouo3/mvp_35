@@ -164,7 +164,14 @@ def test_selection_assist_ranks_catalog_source(client: TestClient):
     assert "algorithm" not in plain.json()["data"]
     assert "selection" not in plain.json()["data"]["items"][0]
     assert ranked.json()["data"]["sources"]["provider"] == "local-book"
-    assert {row["id"] for row in ranked.json()["data"]["sources"]["platforms"]} == {"1688", "pinduoduo", "ebay", "aliexpress"}
+    assert {row["id"] for row in ranked.json()["data"]["sources"]["platforms"]} == {
+        "1688",
+        "pinduoduo",
+        "ebay",
+        "aliexpress",
+        "tiktok",
+        "temu",
+    }
 
 
 def test_ebay_listings_fill_selection_when_china_supply_is_empty(monkeypatch):
@@ -347,6 +354,191 @@ def test_alibaba_missing_permission_is_a_failure(monkeypatch):
     _alibaba("杯", Settings())
     assert len(calls) == 2
     clear_alibaba_session()
+
+
+def test_tiktok_shop_skips_without_keys_and_reads_usd_prices(monkeypatch):
+    from algorithm import shelf
+
+    settings = type(
+        "S",
+        (),
+        {
+            "tiktok_shop_app_key": "",
+            "tiktok_shop_app_secret": "",
+            "tiktok_shop_access_token": "",
+            "tiktok_shop_shop_cipher": "",
+        },
+    )()
+    rows, status = shelf._tiktok("iphone", settings)
+    assert rows == []
+    assert status["status"] == "skipped"
+
+    class Response:
+        def json(self):
+            return {
+                "code": 0,
+                "data": {
+                    "products": [
+                        {
+                            "id": "1729",
+                            "title": "Used iPhone Case",
+                            "sale_price": {"amount": "12.50", "currency": "USD"},
+                        }
+                    ]
+                },
+            }
+
+    monkeypatch.setattr(shelf.httpx, "post", lambda *args, **kwargs: Response())
+    ready = type(
+        "S",
+        (),
+        {
+            "tiktok_shop_app_key": "key",
+            "tiktok_shop_app_secret": "secret",
+            "tiktok_shop_access_token": "token",
+            "tiktok_shop_shop_cipher": "cipher",
+        },
+    )()
+    rows, status = shelf._tiktok("美国站二手 iPhone", ready)
+    assert status["status"] == "ok"
+    assert status["count"] == 1
+    assert float(rows[0]["usd"]) == 12.5
+
+
+def test_temu_skips_without_keys_and_reads_usd_prices(monkeypatch):
+    from algorithm import shelf
+
+    settings = type(
+        "S",
+        (),
+        {
+            "temu_app_key": "",
+            "temu_app_secret": "",
+            "temu_access_token": "",
+            "temu_open_host": "",
+        },
+    )()
+    rows, status = shelf._temu("iphone", settings)
+    assert rows == []
+    assert status["status"] == "skipped"
+
+    class Response:
+        def json(self):
+            return {
+                "success": True,
+                "errorCode": 1000000,
+                "result": {
+                    "goodsList": [
+                        {
+                            "goodsId": 601099548666279,
+                            "goodsName": "Phone Case",
+                            "retailPrice": {"amount": "9.90", "currency": "USD"},
+                        }
+                    ]
+                },
+            }
+
+    monkeypatch.setattr(shelf.httpx, "post", lambda *args, **kwargs: Response())
+    ready = type(
+        "S",
+        (),
+        {
+            "temu_app_key": "key",
+            "temu_app_secret": "secret",
+            "temu_access_token": "token",
+            "temu_open_host": "https://openapi-b-us.temu.com",
+        },
+    )()
+    rows, status = shelf._temu("美国站二手 iPhone", ready)
+    assert status["status"] == "ok"
+    assert status["count"] == 1
+    assert float(rows[0]["usd"]) == 9.9
+    assert rows[0]["id"].startswith("temu:")
+
+
+def test_ebay_search_plan_turns_chinese_need_into_browse_filters():
+    from algorithm.shelf import ebay_search_plan
+
+    plan = ebay_search_plan("美国站 100 美元以内的二手 iPhone")
+    assert plan["q"].lower() == "iphone"
+    assert "price:[1..100]" in plan["filter"]
+    assert "priceCurrency:USD" in plan["filter"]
+    assert "conditions:{USED}" in plan["filter"]
+
+
+def test_ebay_wrapper_uses_browse_plan(monkeypatch):
+    from algorithm import shelf
+
+    shelf.clear_goods_cache()
+    calls = []
+
+    def fake_browse(token, *, q, limit=30, filter_expr=""):
+        calls.append({"q": q, "filter": filter_expr})
+        return {
+            "itemSummaries": [
+                {
+                    "itemId": "v1|1|0",
+                    "title": "Apple iPhone SE Used",
+                    "price": {"value": "49.99", "currency": "USD"},
+                    "seller": {"username": "seller"},
+                    "itemWebUrl": "https://ebay.example/1",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(shelf, "_ebay_token", lambda *_a, **_k: "tok")
+    monkeypatch.setattr(shelf, "_ebay_browse", fake_browse)
+    settings = type("S", (), {"ebay_client_id": "id", "ebay_client_secret": "secret"})()
+    rows, status = shelf._ebay("美国站 100 美元以内的二手 iPhone", settings)
+    assert status["status"] == "ok"
+    assert status["count"] == 1
+    assert float(rows[0]["usd"]) == 49.99
+    assert calls[0]["q"].lower() == "iphone"
+    assert "priceCurrency:USD" in calls[0]["filter"]
+    shelf.clear_goods_cache()
+
+
+def test_fx_rate_is_cached_across_calls(monkeypatch):
+    from algorithm import feeds
+
+    feeds.clear_fx_cache()
+    calls = {"n": 0}
+
+    def fake_get(url, *, params=None, headers=None):
+        calls["n"] += 1
+        return {"rates": {"CNY": "7.25"}}
+
+    monkeypatch.setattr(feeds, "_get", fake_get)
+    first = feeds.fetch_usd_cny("https://fx.example/latest")
+    second = feeds.fetch_usd_cny("https://fx.example/latest")
+    assert first == "7.25"
+    assert second == "7.25"
+    assert calls["n"] == 1
+    feeds.clear_fx_cache()
+
+
+def test_ebay_token_is_reused_until_expiry(monkeypatch):
+    from algorithm import shelf
+
+    shelf.clear_goods_cache()
+    calls = {"n": 0}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"access_token": "tok-1", "expires_in": 7200}
+
+    def fake_post(*_args, **_kwargs):
+        calls["n"] += 1
+        return Response()
+
+    monkeypatch.setattr(shelf.httpx, "post", fake_post)
+    assert shelf._ebay_token("id", "secret-value") == "tok-1"
+    assert shelf._ebay_token("id", "secret-value") == "tok-1"
+    assert calls["n"] == 1
+    shelf.clear_goods_cache()
 
 
 def test_free_prices_stay_cached_for_one_hour(monkeypatch):

@@ -148,6 +148,37 @@ def create_native_order(settings: Settings, *, out_trade_no: str, amount_fen: in
     return code_url
 
 
+def create_h5_order(
+    settings: Settings,
+    *,
+    out_trade_no: str,
+    amount_fen: int,
+    description: str,
+    client_ip: str = "127.0.0.1",
+) -> str:
+    """Mobile browser pay: returns h5_url that jumps into the WeChat app."""
+    body = _place_order(
+        settings,
+        url_path="/v3/pay/transactions/h5",
+        order={
+            "mchid": settings.wechat_pay_mchid,
+            "out_trade_no": out_trade_no,
+            "appid": pay_appid(settings, "web"),
+            "description": description,
+            "notify_url": _notify_url(settings),
+            "amount": {"total": amount_fen, "currency": "CNY"},
+            "scene_info": {
+                "payer_client_ip": (client_ip or "127.0.0.1").split(",")[0].strip() or "127.0.0.1",
+                "h5_info": {"type": "Wap", "app_name": "PickGlobal", "app_url": "https://pickglobal.mornscience.top"},
+            },
+        },
+    )
+    h5_url = body.get("h5_url")
+    if not h5_url:
+        raise AppError("WECHAT_PAY_FAILED", "微信支付下单没有完成", 502, {"wechat_code": body.get("code")})
+    return h5_url
+
+
 def create_jsapi_order(
     settings: Settings,
     *,

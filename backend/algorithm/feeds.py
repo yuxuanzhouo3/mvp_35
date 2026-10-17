@@ -11,6 +11,7 @@ shape: `product`, `country`, and `X-Api-Key`, with `sellers[].price` or
 and the product's own exchange rate.
 """
 
+import time
 from decimal import Decimal
 
 import httpx
@@ -18,13 +19,19 @@ import httpx
 from app.services.profit import money
 
 STRATEGY = "competitor-median-with-cost-plus-floor"
+_FX_CACHE: dict[str, object] = {"url": "", "rate": None, "until": 0.0}
+_FX_TTL = 3600.0
+
+
+def clear_fx_cache() -> None:
+    _FX_CACHE.update(url="", rate=None, until=0.0)
 
 
 def _get(url: str, *, params: dict | None = None, headers: dict | None = None) -> dict | None:
     if not url:
         return None
     try:
-        response = httpx.get(url, params=params, headers=headers, timeout=4, follow_redirects=True)
+        response = httpx.get(url, params=params, headers=headers, timeout=3, follow_redirects=True)
         response.raise_for_status()
         body = response.json()
     except (httpx.HTTPError, ValueError):
@@ -33,6 +40,9 @@ def _get(url: str, *, params: dict | None = None, headers: dict | None = None) -
 
 
 def fetch_usd_cny(url: str) -> str | None:
+    now = time.time()
+    if url and _FX_CACHE["url"] == url and _FX_CACHE["rate"] and now < float(_FX_CACHE["until"] or 0):
+        return str(_FX_CACHE["rate"])
     body = _get(url, params={"from": "USD", "to": "CNY"})
     if not body:
         return None
@@ -45,7 +55,9 @@ def fetch_usd_cny(url: str) -> str | None:
         return None
     if parsed <= 0:
         return None
-    return money(parsed)
+    value = money(parsed)
+    _FX_CACHE.update(url=url, rate=value, until=now + _FX_TTL)
+    return value
 
 
 def fetch_global_offers(url: str, key: str, *, name: str, country: str) -> list[dict]:

@@ -206,7 +206,7 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
           <div className="my-1 h-px bg-border" />
           <Link href="/workspace/billing" className={item} onClick={() => setOpen(false)}>
             <CreditCard className="size-4 text-muted-foreground" />
-            账单
+            订阅
           </Link>
           <button type="button" className={item} onClick={() => choose('settings')}>
             <Settings className="size-4 text-muted-foreground" />
@@ -266,8 +266,8 @@ export function UserMenu({ name, onLogout }: { name: string; onLogout: () => voi
                   <SettingRow label="广告" hint="工作台里的推广位">
                     <button type="button" className="h-9 w-full rounded-lg border border-border text-sm" onClick={() => saveLook({ ads: !look.ads })}>{look.ads ? '显示中，点击关闭' : '已关闭，点击打开'}</button>
                   </SettingRow>
-                  <SettingRow label="账单与订阅" hint="套餐、支付和发票">
-                    <Link href="/workspace/billing" className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm" onClick={() => setDialog(null)}>打开账单</Link>
+                  <SettingRow label="订阅与支付" hint="订阅、支付和发票">
+                    <Link href="/workspace/billing" className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm" onClick={() => setDialog(null)}>打开订阅</Link>
                   </SettingRow>
                   <SettingRow label="隐私" hint="用户守则和隐私条款">
                     <Link href="/legal/privacy" className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm" onClick={() => setDialog(null)}>查看条款</Link>

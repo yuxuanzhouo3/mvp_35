@@ -65,7 +65,8 @@ class CloudBaseStore:
             return result
 
     def _ensure(self, *, full: bool) -> dict:
-        expired = self._data is None or time.time() - self._loaded_at >= 30
+        # Hot path: keep the in-process document map a bit longer to cut SQL round-trips.
+        expired = self._data is None or time.time() - self._loaded_at >= 60
         if expired:
             self._data = self._load() if full else self._load_named(_HOT)
             self._complete = full
