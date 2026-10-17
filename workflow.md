@@ -46,6 +46,10 @@ Add a row when a merge lands. Newest row first.
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
 
+### 17 October 2026
+
+Tip `fd19d81` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. Selection adds TikTok Shop and Temu to the US shelf beside eBay and AliExpress, with budget and used-item parsing for English queries. Channel login stores per-tenant OAuth or pasted keys; lead feeds read those tokens. Phone checkout uses WeChat H5 and Alipay WAP. The products desk gets camera capture, prompt chips, and offline-platform mail drafts in the price compare dialog. Next: merge to `test` when you agree. CloudBase `tcb` with git still waits. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
+
 ### 13 October 2026
 
 `yzcmf` through `d936f75` is on `test` as `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`). `pro` stays `1.2`. This merge carries the 1.8 Releases and pace note onto test; product tip remains the 1.8 stack through `3bbec32`. Next: CloudBase `tcb` with git. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`, and now includes this test update. Live SES stays unwired.
