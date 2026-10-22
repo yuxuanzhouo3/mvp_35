@@ -33,42 +33,18 @@ function supportDraft(offline: string[]): MailDraft {
   }
 }
 
-function mailChannels(draft: MailDraft) {
-  const to = encodeURIComponent(SUPPORT_EMAIL)
+/** Domestic webmail home pages (compose deep-links 404 / timeout in CN). */
+const WEBMAIL_HOMES = [
+  { id: 'qq', name: 'QQ 邮箱', href: 'https://mail.qq.com/' },
+  { id: '163', name: '163 邮箱', href: 'https://mail.163.com/' },
+  { id: '126', name: '126 邮箱', href: 'https://mail.126.com/' },
+  { id: 'yeah', name: 'yeah 邮箱', href: 'https://mail.yeah.net/' },
+] as const
+
+function systemMailto(draft: MailDraft) {
   const subject = encodeURIComponent(draft.subject)
   const body = encodeURIComponent(draft.body)
-  return [
-    {
-      id: 'system',
-      name: '系统邮箱',
-      hint: 'Outlook / Foxmail / 自带邮件',
-      href: `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`,
-    },
-    {
-      id: 'outlook',
-      name: 'Outlook 网页',
-      hint: '浏览器打开撰写',
-      href: `https://outlook.live.com/mail/0/deeplink/compose?to=${to}&subject=${subject}&body=${body}`,
-    },
-    {
-      id: 'gmail',
-      name: 'Gmail',
-      hint: '浏览器打开撰写',
-      href: `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${subject}&body=${body}`,
-    },
-    {
-      id: 'qq',
-      name: 'QQ 邮箱',
-      hint: '浏览器打开撰写',
-      href: `https://mail.qq.com/cgi-bin/qm_compose?to=${to}&subject=${subject}`,
-    },
-    {
-      id: '163',
-      name: '网易邮箱',
-      hint: '163 / 126 / yeah',
-      href: `https://mail.163.com/`,
-    },
-  ] as const
+  return `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`
 }
 
 function amount(price: string) {
@@ -143,52 +119,68 @@ function SiteCard({ site, offerLimit }: { site: PriceSite; offerLimit: number })
 
 function SupportMailPanel({ offline }: { offline: string[] }) {
   const draft = supportDraft(offline)
-  const channels = mailChannels(draft)
   const [copied, setCopied] = useState(false)
+  const [hint, setHint] = useState('')
 
   async function copyDraft() {
     const text = `收件人：${SUPPORT_EMAIL}\n主题：${draft.subject}\n\n${draft.body}`
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
+      window.setTimeout(() => setCopied(false), 2500)
+      return true
     } catch {
-      setCopied(false)
+      setHint('复制失败，请长按选中上方邮箱与主题手动复制。')
+      return false
     }
+  }
+
+  async function openWebmail(href: string, name: string) {
+    const ok = await copyDraft()
+    if (ok) setHint(`已复制正文。在 ${name} 点「写邮件」，粘贴收件人与内容即可。`)
+    window.open(href, '_blank', 'noopener,noreferrer')
   }
 
   return (
     <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 px-3 py-3 text-sm leading-6 text-amber-950">
       <p>
-        {offline.join('、')} 在当前版本尚未上线。任选一种方式发信催我们尽快接入（
-        <span className="font-medium">{SUPPORT_EMAIL}</span>
-        ）。没有装 Outlook 也能用。
+        {offline.join('、')} 在当前版本尚未上线。请发信催我们尽快接入：
+        <span className="font-medium"> {SUPPORT_EMAIL}</span>
       </p>
+      <p className="mt-1 text-[11px] text-amber-900/80">主题：{draft.subject}</p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {channels.map((channel) => (
-          <a
-            key={channel.id}
-            href={channel.href}
-            target={channel.id === 'system' ? undefined : '_blank'}
-            rel={channel.id === 'system' ? undefined : 'noreferrer'}
-            title={channel.hint}
-            className="inline-flex h-9 items-center justify-center rounded-xl bg-amber-900 px-3 text-xs font-medium text-amber-50"
-            onClick={channel.id === '163' || channel.id === 'qq' ? () => void copyDraft() : undefined}
-          >
-            {channel.name}
-          </a>
-        ))}
+        <a
+          href={systemMailto(draft)}
+          className="inline-flex h-9 items-center justify-center rounded-xl bg-amber-900 px-3 text-xs font-medium text-amber-50"
+          title="Outlook / Foxmail / 系统自带邮件"
+        >
+          系统邮箱
+        </a>
         <button
           type="button"
           className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-amber-900/30 bg-white/70 px-3 text-xs font-medium text-amber-950"
-          onClick={() => void copyDraft()}
+          onClick={() => {
+            void copyDraft().then((ok) => {
+              if (ok) setHint('已复制收件人、主题和正文，打开任意邮箱粘贴发送。')
+            })
+          }}
         >
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
           {copied ? '已复制' : '复制全文'}
         </button>
+        {WEBMAIL_HOMES.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className="inline-flex h-9 items-center justify-center rounded-xl bg-amber-900 px-3 text-xs font-medium text-amber-50"
+            onClick={() => void openWebmail(item.href, item.name)}
+          >
+            {item.name}
+          </button>
+        ))}
       </div>
       <p className="mt-2 text-[11px] leading-5 text-amber-900/80">
-        「系统邮箱」走本机默认客户端；网页邮箱在浏览器里写；网易 / QQ 若打不开撰写页，会先复制正文，粘贴即可。
+        {hint || '国内网页邮箱没有稳定的「一键写邮件」链接。点 QQ / 163 / 126 / yeah 会先复制全文再打开邮箱首页，登录后写邮件并粘贴即可。系统邮箱走本机客户端。'}
       </p>
     </div>
   )

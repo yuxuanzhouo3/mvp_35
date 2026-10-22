@@ -24,8 +24,50 @@ B1_MODES = {
     "half": "半托管：平台承接一部分订单和客户，卖家保留一部分",
     "full": "全托管：平台接单，卖家只收钱",
 }
+B2_MODES = {
+    "invent": "AI 造热点：种草 → 落地页表单 → 微信/邮箱/手机",
+    "remix": "复刻热点：改写种草 → 落地页表单 → 微信/邮箱/手机",
+}
+B3_MODES = {
+    "settle": "入驻线上展会 → 中高意向 + 微信/邮箱/手机",
+    "follow": "询盘跟进，补齐联系方式",
+}
+B4_MODES = {
+    "directory": "搜集代理商平台与通讯录",
+    "outreach": "联系一二级代理，私底下分销与建合约",
+}
+B5_MODES = {
+    "search": "检索全国公司法人通信信息并自行联系",
+    "merge": "汇聚各路线索并用工商补全通信方式",
+}
+CHANNEL_MODES = {
+    "ecommerce": B1_MODES,
+    "social": B2_MODES,
+    "expo": B3_MODES,
+    "agency": B4_MODES,
+    "enrichment": B5_MODES,
+}
+MODE_ERROR = {
+    "ecommerce": ("B1_MODE_REQUIRED", "电商要先选定分析订单、半托管或全托管"),
+    "social": ("B2_MODE_REQUIRED", "社交要先选定造热点或复刻热点"),
+    "expo": ("B3_MODE_REQUIRED", "展会要先选定入驻或询盘跟进"),
+    "agency": ("B4_MODE_REQUIRED", "代理要先选定搜集平台或私联合约"),
+    "enrichment": ("B5_MODE_REQUIRED", "智慧大脑要先选定法人检索或客源汇聚"),
+}
 LOGIN_CHANNELS = ("ecommerce", "social", "expo", "agency", "enrichment")
 TIMEOUT = 12
+
+
+def mode_label(channel: str, mode: str) -> str:
+    return (CHANNEL_MODES.get(channel) or {}).get(mode, "")
+
+
+def require_mode(channel: str, mode: str) -> str:
+    modes = CHANNEL_MODES.get(channel) or {}
+    if mode not in modes:
+        code, message = MODE_ERROR[channel]
+        raise AppError(code, message, details={"modes": modes})
+    return mode
 
 # Platforms that can connect by pasting keys when OAuth is missing or optional.
 PASTE_FIELDS = {
@@ -69,11 +111,8 @@ def begin_login(store, settings, prof: dict, *, channel: str, platform: str, mod
     _check_channel(channel)
     if platform not in CHANNELS[channel]:
         raise AppError("UNKNOWN_PLATFORM", "这一路没有这个平台", details={"platform": platform})
-    chosen = ""
-    if channel == "ecommerce":
-        if mode not in B1_MODES:
-            raise AppError("B1_MODE_REQUIRED", "电商要先选定分析订单、半托管或全托管", details={"modes": B1_MODES})
-        chosen = mode
+    chosen = require_mode(channel, mode)
+    label = mode_label(channel, chosen)
     tenant_id = prof["tenant"]["id"]
     user_id = prof["user"]["id"]
     current = _find(store, tenant_id, channel, platform)
@@ -83,7 +122,7 @@ def begin_login(store, settings, prof: dict, *, channel: str, platform: str, mod
         saved = _save(store, tenant_id, user_id, channel, platform, current, {
             "status": "connected",
             "mode": chosen,
-            "mode_label": B1_MODES.get(chosen, ""),
+            "mode_label": label,
             "account_label": platform,
             "connected_at": iso(),
         })
@@ -95,7 +134,7 @@ def begin_login(store, settings, prof: dict, *, channel: str, platform: str, mod
         if missing:
             raise AppError("LOGIN_CREDENTIALS_REQUIRED", "缺少登录字段", details={"missing": missing})
         fields = _fields_from_paste(platform, creds)
-        fields.update({"status": "connected", "mode": chosen, "mode_label": B1_MODES.get(chosen, ""), "connected_at": iso()})
+        fields.update({"status": "connected", "mode": chosen, "mode_label": label, "connected_at": iso()})
         saved = _save(store, tenant_id, user_id, channel, platform, current, fields)
         return _public(saved)
 
@@ -104,22 +143,22 @@ def begin_login(store, settings, prof: dict, *, channel: str, platform: str, mod
         if not missing:
             saved = _save(store, tenant_id, user_id, channel, platform, current, {
                 "status": "connected",
-                "mode": "",
-                "mode_label": "",
+                "mode": chosen,
+                "mode_label": label,
                 "account_label": platform,
                 "connected_at": iso(),
                 "token_meta": json.dumps({"use_system": True}),
             })
             return _public(saved, authorize_url="", missing="", needs_credentials=True, credential_fields=list(PASTE_FIELDS.get(platform, ())))
         return _public(
-            _save(store, tenant_id, user_id, channel, platform, current, {"status": "pending", "mode": "", "mode_label": ""}),
+            _save(store, tenant_id, user_id, channel, platform, current, {"status": "pending", "mode": chosen, "mode_label": label}),
             authorize_url="",
             missing=missing,
             needs_credentials=True,
             credential_fields=list(PASTE_FIELDS.get(platform, ())),
         )
 
-    fields = {"status": "pending", "mode": chosen, "mode_label": B1_MODES.get(chosen, "")}
+    fields = {"status": "pending", "mode": chosen, "mode_label": label}
     saved = _save(store, tenant_id, user_id, channel, platform, current, fields)
     url, missing = _authorize_url(settings, channel, platform, _state(settings, tenant_id, channel, platform, chosen))
     paste = list(PASTE_FIELDS.get(platform, ()))
@@ -146,7 +185,7 @@ def complete_login(store, settings, prof: dict, *, state: str, code: str) -> dic
         {
             "status": "connected",
             "mode": payload.get("mode") or "",
-            "mode_label": B1_MODES.get(payload.get("mode") or "", ""),
+            "mode_label": mode_label(channel, payload.get("mode") or ""),
             "connected_at": iso(),
             "account_label": tokens.get("account_label") or platform,
             "access_token": tokens.get("access_token") or "",

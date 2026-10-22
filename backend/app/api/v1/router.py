@@ -100,6 +100,17 @@ class LeadSearchIn(BaseModel):
     query: str = ""
     seed_analysis_id: str | None = None
     route: str | None = None
+    mode: str = ""
+
+
+class SeedDraftIn(BaseModel):
+    channel: str
+    platform: str
+    mode: str
+    seed_text: str = ""
+    remix_notes: str = ""
+    seed_analysis_id: str | None = None
+    landing_path: str = "/workspace/acquire"
 
 
 class AnalysisIn(BaseModel):
@@ -386,6 +397,40 @@ def create_router() -> APIRouter:
 
         settings, store, prof = ctx(request, authorization, write=True)
         return respond(request, complete_login(store, settings, prof, state=body.state, code=body.code))
+
+    @router.get("/content/seed-drafts")
+    def content_seed_drafts(request: Request, channel: str = "", authorization: str | None = Header(default=None)):
+        from algorithm.content_acquire import list_seed_drafts
+
+        _settings, store, prof = ctx(request, authorization)
+        return respond(request, {"items": list_seed_drafts(store, prof["tenant"]["id"], channel)})
+
+    @router.post("/content/seed-drafts")
+    def content_seed_draft_create(request: Request, body: SeedDraftIn, authorization: str | None = Header(default=None)):
+        from algorithm.content_acquire import draft_seed
+
+        _settings, store, prof = ctx(request, authorization, write=True)
+        return respond(
+            request,
+            draft_seed(
+                store,
+                prof,
+                channel=body.channel,
+                platform=body.platform,
+                mode=body.mode,
+                seed_text=body.seed_text,
+                remix_notes=body.remix_notes,
+                seed_analysis_id=body.seed_analysis_id,
+                landing_path=body.landing_path,
+            ),
+        )
+
+    @router.post("/content/seed-drafts/{job_id}/approve")
+    def content_seed_draft_approve(job_id: str, request: Request, authorization: str | None = Header(default=None)):
+        from algorithm.content_acquire import approve_seed
+
+        _settings, store, prof = ctx(request, authorization, write=True)
+        return respond(request, approve_seed(store, prof["tenant"]["id"], job_id))
 
     @router.get("/catalog/search")
     def catalog_search(request: Request, q: str = "", algorithm: str | None = None, route: str | None = None, authorization: str | None = Header(default=None)):

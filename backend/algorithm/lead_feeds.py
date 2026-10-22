@@ -22,17 +22,76 @@ TIMEOUT = 6
 
 
 def discover(store, settings, payload: dict, tenant_id: str = "") -> tuple[list[dict], str]:
+    from algorithm.content_acquire import (
+        enrich_lead_contacts,
+        mock_agency_directory,
+        mock_landing_leads,
+        mock_legal_contacts,
+    )
+
     channel = payload["channel"]
     query = payload.get("query") or ""
     market = payload.get("target_market") or None
     demo = mock_leads(channel, payload.get("platform"), query, payload.get("seed_analysis_id"), market)
     platform = demo[0]["platform"]
+    bag = _tenant_bag(store, settings, tenant_id, channel, platform)
+    mode = str(payload.get("mode") or bag.get("mode") or "")
+
     if channel == "agency":
         pushed = _agency_rows(store, tenant_id, platform)
         if pushed:
-            return _stamp_market(pushed, market), "live"
+            return _stamp_market([enrich_lead_contacts(row) for row in pushed], market), "live"
+        if mode in {"directory", "outreach"}:
+            return _stamp_market(mock_agency_directory(platform, mode), market), "mock"
         return demo, "mock"
-    bag = _tenant_bag(store, settings, tenant_id, channel, platform)
+
+    if channel == "social" and mode in {"invent", "remix"}:
+        live = _live(channel, platform, query, settings, bag)
+        if live:
+            return _stamp_market([enrich_lead_contacts(row) for row in live], market), "live"
+        return _stamp_market(mock_landing_leads(channel, platform, mode, query), market), "mock"
+
+    if channel == "expo" and mode in {"settle", "follow"}:
+        live = _live(channel, platform, query, settings, bag)
+        if live:
+            return _stamp_market([enrich_lead_contacts(row) for row in live], market), "live"
+        return _stamp_market(mock_landing_leads(channel, platform, mode, query), market), "mock"
+
+    if channel == "enrichment" and mode == "search":
+        live = _live(channel, platform, query, settings, bag)
+        if live:
+            return _stamp_market([enrich_lead_contacts(row) for row in live], market), "live"
+        return _stamp_market(mock_legal_contacts(platform, query), market), "mock"
+
+    if channel == "enrichment" and mode == "merge":
+        live = _live(channel, platform, query, settings, bag)
+        merged = []
+        if store and tenant_id:
+            found = store.query("leads", tenant_id=tenant_id, limit=30)
+            for item in found.get("items") or []:
+                merged.append(
+                    enrich_lead_contacts(
+                        {
+                            "company": item.get("company") or "",
+                            "contact_name": item.get("contact_name") or "",
+                            "email": item.get("email"),
+                            "wechat": item.get("wechat") or "",
+                            "phone": item.get("phone") or "",
+                            "market": item.get("market") or "CN",
+                            "quality_score": item.get("quality_score") or 47,
+                            "platform": platform,
+                            "source_channel": "enrichment",
+                            "external_id": item.get("external_id") or item.get("id") or "",
+                            "note": "merge 汇聚",
+                        }
+                    )
+                )
+        if live is not None:
+            merged.extend(enrich_lead_contacts(row) for row in live)
+        if merged:
+            return _stamp_market(merged[:12], market), "live" if live is not None else "mock"
+        return demo, "mock"
+
     live = _live(channel, platform, query, settings, bag)
     if live is None:
         return demo, "mock"
@@ -44,6 +103,7 @@ def _tenant_bag(store, settings, tenant_id: str, channel: str, platform: str) ->
     meta: dict = {}
     access = ""
     refresh = ""
+    mode = ""
     if store and tenant_id:
         from app.modules.channel_login import account_secrets
 
@@ -51,6 +111,7 @@ def _tenant_bag(store, settings, tenant_id: str, channel: str, platform: str) ->
         if secrets:
             access = str(secrets.get("access_token") or "")
             refresh = str(secrets.get("refresh_token") or "")
+            mode = str(secrets.get("mode") or "")
             raw_meta = secrets.get("token_meta") or {}
             if isinstance(raw_meta, str):
                 try:
@@ -63,6 +124,7 @@ def _tenant_bag(store, settings, tenant_id: str, channel: str, platform: str) ->
         "access_token": access,
         "refresh_token": refresh,
         "meta": meta,
+        "mode": mode,
         "use_system": bool(meta.get("use_system")),
     }
 
@@ -82,17 +144,18 @@ def _agency_rows(store, tenant_id: str, platform: str) -> list[dict]:
         company = str(item.get("company") or "").strip()
         if not company:
             continue
-        rows.append(
-            _lead(
-                "agency",
-                platform,
-                company,
-                str(item.get("contact_name") or ""),
-                item.get("email") or None,
-                str(item.get("market") or "US"),
-                str(item.get("external_id") or item["id"]),
-            )
+        row = _lead(
+            "agency",
+            platform,
+            company,
+            str(item.get("contact_name") or ""),
+            item.get("email") or None,
+            str(item.get("market") or "US"),
+            str(item.get("external_id") or item["id"]),
         )
+        row["wechat"] = str(item.get("wechat") or "")
+        row["phone"] = str(item.get("phone") or "")
+        rows.append(row)
     return rows
 
 

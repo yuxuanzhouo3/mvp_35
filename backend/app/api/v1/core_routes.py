@@ -212,8 +212,18 @@ def geo_seo(request: Request, authorization: str | None = Header(default=None)):
 
 @router.post("/content/generate")
 def content_generate(request: Request, authorization: str | None = Header(default=None)):
+    """Legacy contract stub. Prefer POST /content/seed-drafts for B2–B4 seeding."""
     bind(request, authorization, write=True)
-    return respond(request, {"mode": "contract", "sent": False, "applied_to_money": False, "items": []})
+    return respond(
+        request,
+        {
+            "mode": "contract",
+            "sent": False,
+            "applied_to_money": False,
+            "items": [],
+            "hint": "use /content/seed-drafts for invent/remix/settle drafts",
+        },
+    )
 
 
 @router.post("/raas/settle")

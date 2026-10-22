@@ -366,15 +366,17 @@ dedupe_key = source_channel + ":" + company.小写去空白 + ":" + market
 
 没配该平台钥匙时，发现管线仍返回现在的 5 条演示线索，`provider=mock`。配了钥匙就用下表的接口，`provider=live`，演示序列不再混入。
 
-B1–B4 不是匿名搜索。卖家先用各平台官方 OAuth 授权登录，授权之后本系统才对该账号做三件事，并且只动这个账号自己的内容、会话和粉丝，不去扫陌生人主页。
+B1 与 B2–B5 登录后做法不同。B1 围绕店铺订单。B2–B5 围绕「登录后内容/入驻/代理/工商检索 → 收中高意向并拿到可联系方式」。各路登录时必须选定 `channel_accounts.mode`。只动本账号或本租户已授权数据，不扫陌生人主页，不抓未授权网页。
 
-| 动作 | 节奏 | 规则 |
+| 路 | 登录后主路径 | 联系方式 |
 | --- | --- | --- |
-| 种草 | 授权后按商品报告起草一条，发出前仍要批准 | 只调官方发布接口。没发布权限的平台跳过，不抓页面代发 |
-| 自动回复 | 同一条会话 24 小时最多 1 次 | `REPLY_INTERVAL_HOURS` 默认 24。已在 24 小时内回复过的会话跳过。没消息权限的平台跳过 |
-| 收集粉丝 | 授权后拉取该账号自己的粉丝或关注者 | 只入库官方接口返回的昵称和联系方式。没有联系方式的粉丝可以入库，不能进发送受众 |
+| B1 | 订单 / 半托管 / 全托管 | 平台返回的买家字段 |
+| B2 | AI 种草或复刻热点 → 落地页表单 → 中高意向 | 加微信，或授权邮箱，或授权手机 |
+| B3 | 入驻线上展会 → 中高意向 | 同上 |
+| B4 | 搜集代理商平台；自行联系一二级代理谈分销与合约 | 代理留下的微信 / 邮箱 / 手机 |
+| B5 | 智慧大脑检索全国公司法人通信信息，自行联系 | 工商套餐返回的法人通信字段 |
 
-B4 的二级代理不另申请一套店铺钥匙，用租户已经授权的店铺账号做上面三件事，名单仍由该代理推送。B5 不发种草、不自动回复。它把 B1–B4 已经授权拉到的买家、表单、粉丝、展会询盘、代理名单，以及企查查、天眼查、启信宝的企业结果，收成同一条 `leads`。
+种草与跟进文案发出前仍要批准。`REPLY_INTERVAL_HOURS` 默认 24：同一会话 24 小时最多自动起草 1 次回复，发送仍须批准。中高意向：`quality_score≥70`，或表单已授权微信 / 邮箱 / 手机任一。
 
 ## B1 电商
 
@@ -400,36 +402,51 @@ B4 的二级代理不另申请一套店铺钥匙，用租户已经授权的店�
 
 ## B2 社交
 
-`channel=social`。`POST /acquisition/social` 在开关 `acquisition.social` 打开前保持未开通。
+`channel=social`。登录时必须选定 mode。理念：登录后 AI 种草或复刻热点 → 引流到落地页表单 → 收中高意向，并拿到加微信、授权邮箱或授权手机之一。`POST /acquisition/social` 在开关打开前保持未开通；发现走 `POST /lead-searches`；种草稿走 `POST /content/seed-drafts`，批准后才可发布。
+
+| mode | 名称 | 登录后流水线 |
+| --- | --- | --- |
+| `invent` | AI 造热点 | 选品报告或关键词 → AI 种草稿 → 批准发布 → 落地页表单 → 中高意向 + 微信/邮箱/手机 |
+| `remix` | 复刻热点 | 用户提供可引用要点 → AI 改写成合规种草稿 → 同上漏斗 |
 
 | 平台 id | 平台 | 官方接口 | 用来取线索 | 归一化 |
 | --- | --- | --- | --- | --- |
-| `linkedin` | LinkedIn | Lead Gen Forms，`https://api.linkedin.com/rest` | 广告表单留下的姓名、公司、邮箱 | 表单响应 id 作 `external_id`，市场默认 US |
-| `facebook` | Facebook / Instagram | Graph API `/{page-id}/leadgen_forms` | 主页线索表单 | `leadgen_id`，邮箱字段 |
-| `wechat_mini` | 微信小程序 / 企业微信 | 小程序登录；企业微信客户联系 `externalcontact` | 授权用户、客户联系人 | `external_userid`；邮箱可空 |
-| `douyin` | 抖音 | 抖音开放平台 `https://open.douyin.com`；企业号线索 | 短视频与直播留资 | 线索 id、昵称 |
-| `xiaohongshu` | 小红书 | 聚光 / 蒲公英商业开放接口 | 投放表单留资 | 表单 id；没有公开的匿名用户检索 |
-| `kuaishou` | 快手 | `https://open.kuaishou.com` 企业号线索 | 直播与作品留资 | 线索 id、昵称 |
+| `linkedin` | LinkedIn | Lead Gen Forms，`https://api.linkedin.com/rest` | 落地页/广告表单 | 表单响应 id；邮箱或手机 |
+| `facebook` | Facebook / Instagram | Graph API leadgen forms | 主页/落地页表单 | `leadgen_id`；微信字段若表单有则抄 |
+| `wechat_mini` | 微信小程序 / 企业微信 | 客户联系 `externalcontact` | 授权用户、加好友 | `external_userid`；微信为主 |
+| `douyin` | 抖音 | `https://open.douyin.com` 企业号线索 | 短视频引流后的留资 | 线索 id；手机/微信 |
+| `xiaohongshu` | 小红书 | 聚光等商业开放接口 | 投放/笔记落地表单 | 表单 id |
+| `kuaishou` | 快手 | `https://open.kuaishou.com` 企业号线索 | 作品引流留资 | 线索 id |
 
-只接表单和已授权客户。不要用搜索接口去扫陌生人的个人主页。
+只接本账号表单与已授权客户。不要用搜索接口去扫陌生人的个人主页。无发布权限则种草停在草稿，仍可收已有表单意向。
 
 ## B3 线上展会
 
-`channel=expo`。会后线索与 B1 同一张 `leads`。`POST /acquisition/expo` 在开关打开前保持未开通。冷启和召回不在发现时发送。
+`channel=expo`。登录时必须选定 mode。理念：登录后入驻线上展会 → 收中高意向，并加微信或授权邮箱/手机。无 OAuth 的展会保持未接通 + 演示线索，不造假登录。`POST /acquisition/expo` 在开关打开前保持未开通。
+
+| mode | 名称 | 登录后流水线 |
+| --- | --- | --- |
+| `settle` | 入驻展会 | 完成展位/店铺入驻绑定 → 拉询盘与名片 → 中高意向 + 微信/邮箱/手机 |
+| `follow` | 询盘跟进 | 对已有询盘 AI 起草跟进（批准发送）→ 意向升级并补齐联系方式 |
 
 | 平台 id | 平台 | 官方接口 | 用来取线索 | 说明 |
 | --- | --- | --- | --- | --- |
 | `canton_fair` | 广交会线上 | 展商采购对接导出 / 主办方合作接口 | 展期询盘、名片 | 没有稳定的匿名公开检索；没合作接口就保持未接通 |
-| `alibaba_com` | 阿里巴巴国际站 | 国际站开放平台询盘 `alibaba.trade` 询盘列表 | 询盘公司、联系人、国家 | 市场按买家国家映射 US/HK/AU，其余记国家码 |
-| `global_sources` | 环球资源 | 展会与询盘合作接口 | 采购商名片 | 同上，没钥匙不调用 |
+| `alibaba_com` | 阿里巴巴国际站 | 国际站开放平台询盘列表 | 询盘公司、联系人、国家 | 可 OAuth；市场按买家国家映射 |
+| `global_sources` | 环球资源 | 展会与询盘合作接口 | 采购商名片 | 没钥匙不调用 |
 | `ciie` | 进博会线上 | 主办方展商数据合作 | 采购商登记 | 没有公开 REST 时不抓网站 |
-| `online_expo` | 其他线上展 | 仅作演示平台 id | 演示 5 条 | 钥匙未配时的退路，和现在的 mock 相同 |
+| `online_expo` | 其他线上展 | 仅作演示平台 id | 演示 5 条 | 钥匙未配时的退路 |
 
 `online_expo` 必须留在 `CHANNELS` 里，避免现有调用变成 `UNKNOWN_PLATFORM`。
 
 ## B4 十二个二级代理
 
-`channel=agency`。发现仍进 `leads`。分成不进线索分。`POST /acquisition/agency` 在开关打开前保持未开通。
+`channel=agency`。登录（启用槽位）时必须选定 mode。理念：搜集代理商平台；登录后可自行联系各种一二级渠道代理，私下谈分销获客并建立合约。发现仍进 `leads`。分成不进线索分。`POST /acquisition/agency` 在开关打开前保持未开通。
+
+| mode | 名称 | 登录后流水线 |
+| --- | --- | --- |
+| `directory` | 搜集代理平台 | 整理可合作的代理商平台与槽位通讯录，入库待联系 |
+| `outreach` | 私联分销合约 | 对一二级代理留下的微信/邮箱/手机自行联系，谈分销与合约；合约线索可推送入库 |
 
 `agent_1` … `agent_12` 是二级代理，也就是渠道子账户。它们不是亚马逊、沃尔玛、Temu、独立站、国际站这些平台；那些平台属于 B1 和选品。二级代理不调用卖家订单接口。
 
@@ -438,9 +455,9 @@ B4 的二级代理不另申请一套店铺钥匙，用租户已经授权的店�
 | 层级 | 账户 | 做什么 |
 | --- | --- | --- |
 | 一级代理 | 通讯录里邀请来的上级账户，id 由系统生成，不占用 `agent_n`，也不进 `CHANNELS` | 不直接发现线索。下级成交后单独入一笔分成 |
-| 二级代理 | `agent_1` … `agent_12`，每个租户最多这 12 个 | 报备线索、跟进成交。平台 id 必须是这 12 个之一 |
+| 二级代理 | `agent_1` … `agent_12`，每个租户最多这 12 个 | 报备线索、跟进成交、私联合约。平台 id 必须是这 12 个之一 |
 
-每个二级代理必须挂在一个一级代理下面。当前租户在 B4 确认某个 `agent_n` 槽位后，该槽位记为已登录，不打开对方后台。线索由该二级代理用表格或 webhook 推送公司名单。推送字段：`company`、`contact_name`、`email`、`market`、`external_id`。入库时 `platform=agent_n`，`source_channel=agency`，并记下 `parent_channel_account_id`。没有上级的推送拒绝，错误 `AGENCY_PARENT_REQUIRED`，不入库。
+每个二级代理必须挂在一个一级代理下面。当前租户在 B4 确认某个 `agent_n` 槽位并选定 mode 后，该槽位记为已登录，不打开对方后台。线索由该二级代理用表格或 webhook 推送公司名单。推送字段：`company`、`contact_name`、`email`、`market`、`external_id`，可选 `wechat`、`phone`。入库时 `platform=agent_n`，`source_channel=agency`，并记下 `parent_channel_account_id`。没有上级的推送拒绝，错误 `AGENCY_PARENT_REQUIRED`，不入库。
 
 | 平台 id | 层级 | 线索从哪来 | 账本记在谁名下 |
 | --- | --- | --- | --- |
@@ -465,18 +482,25 @@ signature = HMAC-SHA256(ledger_hmac_secret, f"{idempotency_key}:{amount_fen}:age
 
 `level=2` 时 `channel_account_id` 必须是 `agent_1` … `agent_12`，且 `parent_channel_account_id` 不能空。`level=1` 的账户不能是 `agent_n`。两笔幂等键不同，互不覆盖。现有调用只带金额、幂等键和签名时照旧入账；带上 `level` 之后才按上表校验。
 
-## B5 全部客源
+## B5 智慧大脑
 
-`channel=enrichment`。租户在这一路打开企查查、天眼查或启信宝。钥匙已配置则记为已登录，钥匙为空则保持未登录。这一路负责把客源收齐，不种草，不自动回复。一次发现会合并：B1 订单买家、B2 表单和粉丝、B3 展会询盘、B4 代理推送的名单，再加上下面三家工商接口按关键词补到的企业。去重仍是 `source_channel:公司:市场`，同一 `external_id` 只更新。这些接口补公司是否存在、行业、地区，不改已经由规则写下的 `quality_score`。
+`channel=enrichment`。登录时必须选定 mode。理念：智慧大脑 + 登录后可自行搜索全国公司法人通信信息并自行联系。**不发种草、不自动回复、不调用社交发布接口。** 钥匙已配置或用户粘贴自有钥则记为已登录；否则保持未登录。
+
+| mode | 名称 | 登录后流水线 |
+| --- | --- | --- |
+| `search` | 法人通信检索 | 关键词查企查查/天眼查/启信宝 → 返回公司与法人通信字段 → 用户自行联系 |
+| `merge` | 客源汇聚 | 合并 B1–B4 已入库线索，再用工商接口补全公司与联系方式 |
+
+一次 `search` 发现按关键词补企业；`merge` 合并已有通道线索再补工商。去重仍是 `source_channel:公司:市场`，同一 `external_id` 只更新。接口能返回的法人电话、邮箱写入线索；微信字段仅当接口提供时抄写。不改规则已写下的 `quality_score` 公式，有通信方式的线索分数按意向规则抬到可触达档。
 
 | 平台 id | 平台 | 官方接口 | 检索 | 取用字段 |
 | --- | --- | --- | --- | --- |
-| `qichacha` | 企查查 | `https://api.qichacha.com`（开放平台以控制台主机为准） | 企业模糊搜索、工商详情 | 企业名称、法定代表人、省、统一社会信用代码、联系邮箱（若套餐含） |
-| `tianyancha` | 天眼查 | 门户 `https://open.tianyancha.com`，接口 `https://open.api.tianyancha.com/services/open/search/2.0` | 搜索、企业基本信息 | 名称、法人、注册地址、邮箱 |
+| `qichacha` | 企查查 | `https://api.qichacha.com`（开放平台以控制台主机为准） | 企业模糊搜索、工商详情 | 企业名称、法定代表人、省、统一社会信用代码、联系邮箱/电话（若套餐含） |
+| `tianyancha` | 天眼查 | 门户 `https://open.tianyancha.com`，接口 `https://open.api.tianyancha.com/services/open/search/2.0` | 搜索、企业基本信息 | 名称、法人、注册地址、邮箱/电话 |
 | `qixin` | 启信宝 | `https://api.qixin.com` | 企业搜索、工商照面 | 名称、法人、地区、联系方式 |
 | `aiqicha` | 爱企查 | 无稳定对公开放检索 | 不调用 | 不要抓网页；没接口就跳过 |
 
-信用代码写入 `external_id`。市场：注册地在境内记 `CN`，境外主体按注册国映射，映射不上记 `US` 只在演示数据里出现。邮箱缺失时线索仍入库，合格与否只看分数阈值。
+信用代码写入 `external_id`。市场：注册地在境内记 `CN`，境外主体按注册国映射，映射不上记 `US` 只在演示数据里出现。无通信方式时线索仍可入库，中高意向与可发送受众要求至少一种联系方式或分数达标。
 
 ## B6 GEO / SEO
 

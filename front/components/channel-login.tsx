@@ -42,13 +42,31 @@ const fieldLabels: Record<string, string> = {
   access_token: 'Access Token',
 }
 
-const modes = [
-  { id: 'analyze', name: '分析订单', copy: '从订单找买家', platforms: ['amazon', 'walmart', 'taobao'] },
-  { id: 'half', name: '半托管', copy: '平台接一部分', platforms: ['temu', 'taobao', 'pinduoduo'] },
-  { id: 'full', name: '全托管', copy: '你只收钱', platforms: ['temu', 'pinduoduo', 'amazon'] },
-] as const
+type ModeDef = { id: string; name: string; copy: string; platforms?: string[] }
 
-type ModeId = (typeof modes)[number]['id']
+const modesByChannel: Record<string, ModeDef[]> = {
+  ecommerce: [
+    { id: 'analyze', name: '分析订单', copy: '从订单找买家', platforms: ['amazon', 'walmart', 'taobao'] },
+    { id: 'half', name: '半托管', copy: '平台接一部分', platforms: ['temu', 'taobao', 'pinduoduo'] },
+    { id: 'full', name: '全托管', copy: '你只收钱', platforms: ['temu', 'pinduoduo', 'amazon'] },
+  ],
+  social: [
+    { id: 'invent', name: 'AI 造热点', copy: '种草→表单→微信/邮箱/手机' },
+    { id: 'remix', name: '复刻热点', copy: '改写→表单→微信/邮箱/手机' },
+  ],
+  expo: [
+    { id: 'settle', name: '入驻展会', copy: '入驻后收意向与联系方式' },
+    { id: 'follow', name: '询盘跟进', copy: '跟进询盘并补联系方式' },
+  ],
+  agency: [
+    { id: 'directory', name: '搜集平台', copy: '整理代理商平台通讯录' },
+    { id: 'outreach', name: '私联合约', copy: '联系一二級谈分销合约' },
+  ],
+  enrichment: [
+    { id: 'search', name: '法人检索', copy: '搜全国公司法人通信信息' },
+    { id: 'merge', name: '客源汇聚', copy: '合并线索并补通信方式' },
+  ],
+}
 
 type Account = {
   platform: string
@@ -63,7 +81,8 @@ type Account = {
 }
 
 export function ChannelLogin({ channel, platforms }: { channel: string; platforms: string[] }) {
-  const [mode, setMode] = useState<ModeId>('analyze')
+  const channelModes = modesByChannel[channel] || []
+  const [mode, setMode] = useState(channelModes[0]?.id || '')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState('')
@@ -71,11 +90,15 @@ export function ChannelLogin({ channel, platforms }: { channel: string; platform
   const [fields, setFields] = useState<string[]>([])
   const [values, setValues] = useState<Record<string, string>>({})
 
+  useEffect(() => {
+    setMode(channelModes[0]?.id || '')
+  }, [channel])
+
   const visible = useMemo(() => {
     if (channel !== 'ecommerce') return platforms
-    const picked = new Set<string>([...(modes.find((item) => item.id === mode)?.platforms || [])])
+    const picked = new Set<string>([...(channelModes.find((item) => item.id === mode)?.platforms || [])])
     return platforms.filter((platform) => picked.has(platform))
-  }, [channel, mode, platforms])
+  }, [channel, mode, platforms, channelModes])
 
   async function reload() {
     const data = await api<{ items: Account[] }>(`/channel-accounts?channel=${encodeURIComponent(channel)}`)
@@ -99,7 +122,7 @@ export function ChannelLogin({ channel, platforms }: { channel: string; platform
         body: JSON.stringify({
           channel,
           platform,
-          mode: channel === 'ecommerce' ? mode : '',
+          mode,
           credentials: credentials || {},
         }),
       })
@@ -138,15 +161,20 @@ export function ChannelLogin({ channel, platforms }: { channel: string; platform
     await login(pasteFor, credentials)
   }
 
+  const modeHintName = (account?: Account) => {
+    const id = account?.mode || mode
+    return channelModes.find((item) => item.id === id)?.name || account?.mode_label || ''
+  }
+
   return (
     <div className="mb-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 className="text-sm font-semibold">登录平台账号</h2>
-        <p className="text-xs text-muted-foreground">登录后用你的账号获客</p>
+        <p className="text-xs text-muted-foreground">先选做法，再登录</p>
       </div>
-      {channel === 'ecommerce' && (
-        <div className="mt-2 grid grid-cols-3 gap-1">
-          {modes.map((item) => (
+      {channelModes.length > 0 && (
+        <div className={`mt-2 grid gap-1 ${channelModes.length >= 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          {channelModes.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -165,9 +193,7 @@ export function ChannelLogin({ channel, platforms }: { channel: string; platform
           const account = row(platform)
           const connected = account?.status === 'connected'
           const tint = tintForPlatform(platform)
-          const modeHint = channel === 'ecommerce'
-            ? (connected && account?.mode ? modes.find((item) => item.id === account.mode)?.name || account.mode_label : modes.find((item) => item.id === mode)?.name)
-            : ''
+          const hint = modeHintName(account)
           return (
             <div key={`${mode}-${platform}`} className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 ${tint.card}`}>
               <PlatformMark platform={platform} className="size-7" />
@@ -175,12 +201,12 @@ export function ChannelLogin({ channel, platforms }: { channel: string; platform
                 <p className="truncate text-xs font-medium leading-tight">{names[platform] || platform}</p>
                 <p className="truncate text-[10px] leading-tight text-muted-foreground">
                   {connected ? (account?.has_token ? '已登录·可获客' : '已连接') : '未登录'}
-                  {modeHint ? ` · ${modeHint}` : ''}
+                  {hint ? ` · ${hint}` : ''}
                 </p>
               </div>
               <button
                 type="button"
-                disabled={busy === platform}
+                disabled={busy === platform || !mode}
                 className={`h-7 shrink-0 rounded-md px-2 text-[11px] font-medium text-white disabled:opacity-50 ${tint.button}`}
                 onClick={() => void login(platform)}
               >

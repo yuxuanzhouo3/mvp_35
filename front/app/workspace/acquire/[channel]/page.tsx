@@ -155,7 +155,7 @@ function ChannelDesk() {
             <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold">发现线索</h2>
-                <p className="text-xs text-muted-foreground">{loginChannels.has(channel.id) ? '先登录平台；已登录则用你的账号拉线索，未登录仍可用演示线索。' : '这一路不需要店铺登录。'}</p>
+                <p className="text-xs text-muted-foreground">{loginChannels.has(channel.id) ? (channel.id === 'ecommerce' ? '先选做法并登录店铺；未登录可用演示线索。' : '先选做法并登录；种草/入驻/代理/检索后收中高意向（微信或邮箱或手机）。') : '这一路不需要店铺登录。'}</p>
               </div>
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">

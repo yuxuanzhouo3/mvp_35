@@ -32,6 +32,23 @@ def test_b1_login_requires_a_mode_and_opens_the_seller_page(client: TestClient):
     assert "amzn1.sp.solution.test" in body["authorize_url"]
 
 
+def test_b2_login_requires_invent_or_remix(client: TestClient):
+    headers = register(client, "b2-mode@example.com")
+    missing = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "social", "platform": "douyin"})
+    assert missing.status_code == 400
+    assert missing.json()["error"]["code"] == "B2_MODE_REQUIRED"
+
+    client.app.state.settings.douyin_client_key = "dy-key"
+    opened = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "social", "platform": "douyin", "mode": "invent"},
+    )
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["data"]["mode"] == "invent"
+    assert "open.douyin.com" in opened.json()["data"]["authorize_url"]
+
+
 def test_seller_callback_exchanges_code_and_stores_tenant_token(client: TestClient, monkeypatch):
     headers = register(client, "b1-callback@example.com")
     me = client.get("/api/v1/me", headers=headers)
@@ -68,17 +85,29 @@ def test_temu_and_xhs_and_kuaishou_login_urls(client: TestClient):
     )
     assert "seller.temu.com/open-platform/client-manage/authorization" in temu.json()["data"]["authorize_url"]
 
-    xhs = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "social", "platform": "xiaohongshu"})
+    xhs = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "social", "platform": "xiaohongshu", "mode": "remix"},
+    )
     assert "ark.xiaohongshu.com/ark/authorization" in xhs.json()["data"]["authorize_url"]
 
-    ks = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "social", "platform": "kuaishou"})
+    ks = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "social", "platform": "kuaishou", "mode": "invent"},
+    )
     assert "open.kuaishou.com/oauth2/authorize" in ks.json()["data"]["authorize_url"]
 
 
 def test_wecom_paste_credentials_connects(client: TestClient):
     headers = register(client, "b2-wecom@example.com")
     client.app.state.settings.wecom_corp_id = "ww-demo"
-    opened = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "social", "platform": "wechat_mini"})
+    opened = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "social", "platform": "wechat_mini", "mode": "invent"},
+    )
     assert opened.json()["data"]["needs_credentials"] is True
     saved = client.post(
         "/api/v1/channel-accounts/login",
@@ -86,28 +115,50 @@ def test_wecom_paste_credentials_connects(client: TestClient):
         json={
             "channel": "social",
             "platform": "wechat_mini",
+            "mode": "invent",
             "credentials": {"corp_id": "ww1", "contact_secret": "sec", "follow_userid": "zhang"},
         },
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["data"]["status"] == "connected"
     assert saved.json()["data"]["has_token"] is True
+    assert saved.json()["data"]["mode"] == "invent"
 
 
-def test_agency_slot_connects_without_a_remote_login(client: TestClient):
+def test_agency_slot_requires_mode_then_connects(client: TestClient):
     headers = register(client, "b4-login@example.com")
-    saved = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "agency", "platform": "agent_3"})
+    denied = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "agency", "platform": "agent_3"})
+    assert denied.status_code == 400
+    assert denied.json()["error"]["code"] == "B4_MODE_REQUIRED"
+    saved = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "agency", "platform": "agent_3", "mode": "outreach"},
+    )
     assert saved.status_code == 200, saved.text
     assert saved.json()["data"]["status"] == "connected"
+    assert saved.json()["data"]["mode"] == "outreach"
     assert saved.json()["data"]["authorize_url"] == ""
 
 
-def test_enrichment_stays_logged_out_until_the_key_exists(client: TestClient):
+def test_enrichment_requires_mode_and_key(client: TestClient):
     headers = register(client, "b5-login@example.com")
-    saved = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "enrichment", "platform": "qichacha"})
+    denied = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "enrichment", "platform": "qichacha"})
+    assert denied.status_code == 400
+    assert denied.json()["error"]["code"] == "B5_MODE_REQUIRED"
+    saved = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "enrichment", "platform": "qichacha", "mode": "search"},
+    )
     assert saved.status_code == 200, saved.text
     assert saved.json()["data"]["status"] == "pending"
     assert saved.json()["data"]["missing"] == "QICHACHA_APP_KEY"
     client.app.state.settings.qichacha_app_key = "key"
-    opened = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "enrichment", "platform": "qichacha"})
+    opened = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "enrichment", "platform": "qichacha", "mode": "search"},
+    )
     assert opened.json()["data"]["status"] == "connected"
+    assert opened.json()["data"]["mode"] == "search"
