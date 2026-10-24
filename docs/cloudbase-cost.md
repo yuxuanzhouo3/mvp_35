@@ -17,8 +17,8 @@ mvp35 线上版本目标：
 
 | 服务 | 规格 | 安全目标 | 2026-10-22 状态 |
 | --- | --- | --- | --- |
-| `pickglobal-web` | 1 核 2GB，最大副本 2 | 最小副本 **0** | **已完成**：`pickglobal-web-112`，min=0，流量 100% |
-| `pickglobal-api` | 1 核 2GB，最大副本 2 | 最小副本 **0** | **待控制台**：`pickglobal-api-063` 仍 min=1；API 镜像热更新会 `deploy_failed` |
+| `pickglobal-web` | 1 核 2GB，最大副本 2 | 最小副本 **0** | **已完成**：`pickglobal-web-114`，min=0，流量 100% |
+| `pickglobal-api` | 1 核 2GB，最大副本 2 | 最小副本 **0** | **已完成**：`pickglobal-api-070`，min=0，流量 100% |
 
 `pickglobal.mornscience.top` 仍指向这两套云托管。站点已验证返回 200。最小副本为 0 时域名仍在；连续约半小时没访问才会缩到 0，下次打开可能冷启动几十秒。
 
@@ -73,3 +73,4 @@ python3 scripts/cloudbase_cost_check.py --scale-to-zero --write-log
 | 2026-10-22 | 初查 | 1 / 1（web-111） | 1 / 1（api-063） | 200 | 两套常驻，对应按天扣费 |
 | 2026-10-22 | 最小副本改 0 | 0 / 1（web-112） | 1 / 1（api-063） | 200 | web 已低成本；api 热更新失败，待控制台改 min=0；失败版本已删 |
 | 2026-10-22 | 复查 | 0 / 1 (pickglobal-web-112) | 1 / 1 (pickglobal-api-063) | 200 | 脚本检查 |
+| 2026-10-24 | 复查 | 0 / 1 (pickglobal-web-114) | 0 / 1 (pickglobal-api-070) | 200 | 脚本检查 |

@@ -48,7 +48,7 @@ Add the next day above the previous one. Keep older days. One paragraph: the com
 
 ### 24 October 2026
 
-Tip `2cbbb6a` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. CloudBase cost notes and `scripts/cloudbase_cost_check.py` track mvp35 CloudRun idle spend; `scripts/tcb-deploy.sh` and both `cloudbaserc.json` files keep min replicas at 0 and max at 2. Safe scale-to-zero only—no env destroy. Web is already min=0; api may still need a console fix after hot-update failures. Next: merge to `test` when you agree. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
+Tip `2cbbb6a` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. CloudBase cost notes and `scripts/cloudbase_cost_check.py` track mvp35 CloudRun idle spend; `scripts/tcb-deploy.sh` and both `cloudbaserc.json` files keep min replicas at 0 and max at 2. Safe scale-to-zero only—no env destroy. A 24 Oct check shows both web and api live versions at min=0 with the site still 200. Next: merge to `test` when you agree. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
 
 ### 22 October 2026
 
