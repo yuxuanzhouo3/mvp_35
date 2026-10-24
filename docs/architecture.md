@@ -9,6 +9,7 @@ mvp_35/
 ├── workflow.md                发布记录
 ├── docs/
 │   ├── architecture.md        本文件
+│   ├── cloudbase-cost.md      云开发费用检查与安全关停
 │   ├── pickglobal-placeholders.pdf
 │   ├── demo1/
 │   │   ├── pickglobal-user-guide.mp4            Eddy，上一版
