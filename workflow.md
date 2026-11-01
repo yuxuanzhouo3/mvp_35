@@ -46,6 +46,10 @@ Add a row when a merge lands. Newest row first.
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
 
+### 1 November 2026
+
+Tip `f1cfd5d` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. CloudBase now has a 0.3 CNY/day auto budget (3 × 0.1), idle cleanup every 10 minutes, and a daily cost log Action; CloudRun targets shrink to web 0.25C/0.5G and api 0.5C/1G with max replicas 1. Selection shelves add JD, Taobao, Amazon, and Walmart beside the earlier set. Login/register retries through cold starts. Next: merge to `test` when you agree. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
+
 ### 24 October 2026
 
 Tip `2cbbb6a` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. CloudBase cost notes and `scripts/cloudbase_cost_check.py` track mvp35 CloudRun idle spend; `scripts/tcb-deploy.sh` and both `cloudbaserc.json` files keep min replicas at 0 and max at 2. Safe scale-to-zero only—no env destroy. A 24 Oct check shows both web and api live versions at min=0 with the site still 200. Next: merge to `test` when you agree. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
