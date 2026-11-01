@@ -102,8 +102,12 @@ def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list
     jobs = (
         _alibaba,
         _pinduoduo,
+        _jd,
+        _taobao,
         _ebay,
         _aliexpress,
+        _amazon,
+        _walmart,
         _tiktok,
         _temu,
     )
@@ -164,8 +168,12 @@ def _planned(settings, *, called: bool) -> list[dict]:
 _PLATFORMS = (
     ("1688", "1688", "CN"),
     ("pinduoduo", "拼多多", "CN"),
+    ("jd", "京东", "CN"),
+    ("taobao", "淘宝", "CN"),
     ("ebay", "eBay", "US"),
     ("aliexpress", "速卖通", "US"),
+    ("amazon", "亚马逊", "US"),
+    ("walmart", "沃尔玛", "US"),
     ("tiktok", "TikTok Shop", "US"),
     ("temu", "Temu", "US"),
 )

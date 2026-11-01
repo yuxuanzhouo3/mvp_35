@@ -167,8 +167,12 @@ def test_selection_assist_ranks_catalog_source(client: TestClient):
     assert {row["id"] for row in ranked.json()["data"]["sources"]["platforms"]} == {
         "1688",
         "pinduoduo",
+        "jd",
+        "taobao",
         "ebay",
         "aliexpress",
+        "amazon",
+        "walmart",
         "tiktok",
         "temu",
     }

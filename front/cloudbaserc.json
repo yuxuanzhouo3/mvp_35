@@ -4,6 +4,8 @@
   "cloudrun": {
     "name": "pickglobal-web",
     "minNum": 0,
-    "maxNum": 2
+    "maxNum": 1,
+    "cpu": 0.25,
+    "mem": 0.5
   }
 }

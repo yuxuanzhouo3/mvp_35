@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Deploy CloudRun with MinNum=0 for both api and web (scale-to-zero when idle).
-# Platform idle reclaim is about 10 minutes with no traffic; next request cold-starts.
+# Target size: CpuSpecs=0.25 MemSpecs=0.5 (documented in cloudbaserc.json cpu/mem).
+# tcb cloudrun deploy has no --cpu/--mem flag (CLI 3.8.x); after deploy, shrink via
+# SubmitServerConfigChangeDiff / console if the new version lands at 1C/2G.
+# Platform idle reclaim is about 30 minutes with no domain traffic; next request cold-starts.
 # Usage:
 #   scripts/tcb-deploy.sh api
 #   scripts/tcb-deploy.sh web
@@ -51,6 +54,8 @@ tcb -y cloudrun deploy \
   --force \
   --wait \
   --min-num "$MIN_NUM" \
-  --max-num 2 \
+  --max-num 1 \
   --open-access-types PUBLIC
-echo "DEPLOYED $NAME min-num=$MIN_NUM max-num=2"
+# PUBLIC is required for pickglobal.mornscience.top HTTP gateway. Do not use OA/MINIAPP.
+# Target cpu/mem live in cloudbaserc / UpdateCloudRunServer; CLI cannot set them here.
+echo "DEPLOYED $NAME min-num=$MIN_NUM max-num=1 access=PUBLIC (target 0.25C/0.5G)"

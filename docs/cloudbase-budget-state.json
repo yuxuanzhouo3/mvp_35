@@ -1,0 +1,13 @@
+{
+  "day": "2026-11-01",
+  "auto_starts": 1,
+  "auto_spend_yuan": 0.1,
+  "cursor_starts": 1,
+  "closed": false,
+  "cursor_open_until": "2026-11-01T16:36:05.422139+08:00",
+  "was_warm": true,
+  "updated_at": "2026-11-01T14:56:05.422139+08:00",
+  "notes": [
+    "2026-11-01T14:56:05.422139+08:00 http-wake (cli token expired); counted as script-start #1"
+  ]
+}

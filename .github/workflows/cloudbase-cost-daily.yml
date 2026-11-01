@@ -1,0 +1,53 @@
+name: CloudBase daily cost log
+
+on:
+  schedule:
+    # Every day 09:05 UTC+8 (01:05 UTC).
+    - cron: '5 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cloudbase-cost-daily
+  cancel-in-progress: false
+
+jobs:
+  cost-log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: yzcmf
+
+      - name: Estimate spend and refresh docs
+        env:
+          TENCENTCLOUD_SECRETID: ${{ secrets.TENCENTCLOUD_SECRETID }}
+          TENCENTCLOUD_SECRETKEY: ${{ secrets.TENCENTCLOUD_SECRETKEY }}
+          TENCENTCLOUD_SESSIONTOKEN: ${{ secrets.TENCENTCLOUD_SESSIONTOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TENCENTCLOUD_SECRETID:-}" ] || [ -z "${TENCENTCLOUD_SECRETKEY:-}" ]; then
+            echo "Missing TENCENTCLOUD_SECRETID / TENCENTCLOUD_SECRETKEY repo secrets."
+            exit 1
+          fi
+          python3 scripts/cloudbase_cost_check.py --estimate-days --write-log --no-probe
+
+      - name: Commit cost doc if changed
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/cloudbase-cost.md
+          if git diff --staged --quiet; then
+            echo "No cost doc changes."
+            exit 0
+          fi
+          git commit -m "$(cat <<'EOF'
+          chore: refresh CloudBase daily cost log
+
+          EOF
+          )"
+          git push origin HEAD:yzcmf

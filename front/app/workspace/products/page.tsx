@@ -410,7 +410,7 @@ export default function ProductsPage() {
             </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{refresh?.premium ? '1688、拼多多、eBay、速卖通、TikTok Shop、Temu 货价每 15 分钟更新。' : '各平台货价每小时更新。支付专业版或企业版后改为每 15 分钟，并有 10 次随时刷新。'}</span>
+            <span>{refresh?.premium ? '国内供货与美国货架（京东/淘宝/eBay/亚马逊/沃尔玛等）货价每 15 分钟更新。' : '各平台货价每小时更新。支付专业版或企业版后改为每 15 分钟，并有 10 次随时刷新。'}</span>
             {refresh?.premium ? <span>还可随时刷新 {refresh.manual_left} 次。</span> : <a className="text-primary" href="/workspace/billing">去支付</a>}
             {refresh?.premium && shelfQuery && (
               <button

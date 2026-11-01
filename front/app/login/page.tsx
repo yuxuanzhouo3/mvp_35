@@ -101,7 +101,7 @@ function LoginForm() {
         )}
         <LegalConsent checked={accepted} onChange={setAccepted} />
         {error && <p className="mt-4 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-        <button className={authButton} disabled={pending || !accepted} type="submit">{pending ? '正在登录' : '登录'}</button>
+        <button className={authButton} disabled={pending || !accepted} type="submit">{pending ? '正在登录（首次可能要等服务启动）' : '登录'}</button>
       </form>
       {miniprogram && (
         <button

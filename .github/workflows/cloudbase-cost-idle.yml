@@ -1,0 +1,55 @@
+name: CloudBase idle cleanup
+
+on:
+  schedule:
+    # Every 10 minutes. Does not HTTP-probe the public site (that would keep pods warm).
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cloudbase-cost-idle
+  cancel-in-progress: true
+
+jobs:
+  enforce-idle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: yzcmf
+
+      - name: Budget guard + idle cleanup
+        env:
+          TENCENTCLOUD_SECRETID: ${{ secrets.TENCENTCLOUD_SECRETID }}
+          TENCENTCLOUD_SECRETKEY: ${{ secrets.TENCENTCLOUD_SECRETKEY }}
+          TENCENTCLOUD_SESSIONTOKEN: ${{ secrets.TENCENTCLOUD_SESSIONTOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TENCENTCLOUD_SECRETID:-}" ] || [ -z "${TENCENTCLOUD_SECRETKEY:-}" ]; then
+            echo "Missing TENCENTCLOUD_SECRETID / TENCENTCLOUD_SECRETKEY repo secrets."
+            exit 1
+          fi
+          # Auto: 3 starts x 0.1 CNY = 0.3 CNY/day. Excess closes PUBLIC (OA) until
+          # `python3 scripts/cloudbase_cost_check.py --cursor-start` or next Shanghai day.
+          python3 scripts/cloudbase_cost_check.py --enforce-idle 10 --no-probe
+
+      - name: Persist budget state
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/cloudbase-budget-state.json
+          if git diff --staged --quiet; then
+            echo "No budget state changes."
+            exit 0
+          fi
+          git commit -m "$(cat <<'EOF'
+          chore: update CloudBase daily budget state
+
+          EOF
+          )"
+          git push origin HEAD:yzcmf
