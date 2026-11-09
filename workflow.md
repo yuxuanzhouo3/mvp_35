@@ -46,6 +46,10 @@ Add a row when a merge lands. Newest row first.
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
 
+### 9 November 2026
+
+Tip `16e5c41` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. B1 ecommerce is pending launch (`B1_PENDING_LAUNCH`); B2 social seeding is the priority path with domestic and international platforms (WeChat Channels, Weibo, Bilibili, Zhihu, TikTok, Instagram, YouTube, X, Pinterest, and the earlier set). Shelf collection adds Xianyu, Tmall, Vipshop, Suning, Douyin shop, Best Buy, Etsy, and Google Shopping beside JD/Taobao/Amazon/Walmart. Seed-round BP lives under `docs/demo3`. Next: merge to `test` when you agree. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
+
 ### 1 November 2026
 
 Tip `f1cfd5d` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. CloudBase now has a 0.3 CNY/day auto budget (3 × 0.1), idle cleanup every 10 minutes, and a daily cost log Action; CloudRun targets shrink to web 0.25C/0.5G and api 0.5C/1G with max replicas 1. Selection shelves add JD, Taobao, Amazon, and Walmart beside the earlier set. Login/register retries through cold starts. Next: merge to `test` when you agree. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
