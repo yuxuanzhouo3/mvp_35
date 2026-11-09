@@ -52,14 +52,35 @@ function amount(price: string) {
   return Number.isFinite(value) ? value : 0
 }
 
+const PINNED = ['ebay', 'google_shopping', 'etsy']
+
+function sortSites(sites: PriceSite[]) {
+  const rank: Record<string, number> = { ok: 0, failed: 1, reauth: 2, skipped: 3 }
+  return [...sites].sort((left, right) => {
+    const pinLive = (site: PriceSite) => (PINNED.includes(site.id) && site.status === 'ok' ? 0 : 1)
+    const pin = (site: PriceSite) => {
+      const index = PINNED.indexOf(site.id)
+      return index === -1 ? 50 : index
+    }
+    return (
+      pinLive(left) - pinLive(right)
+      || (rank[left.status] ?? 9) - (rank[right.status] ?? 9)
+      || pin(left) - pin(right)
+      || left.id.localeCompare(right.id)
+    )
+  })
+}
+
 function SiteCard({ site, offerLimit }: { site: PriceSite; offerLimit: number }) {
   const offers = (site.offers || []).slice(0, offerLimit)
-  const [open, setOpen] = useState(false)
+  const pinned = PINNED.includes(site.id)
+  const [open, setOpen] = useState(pinned && offers.length > 0)
   const peak = Math.max(0, ...offers.map((offer) => amount(offer.price)))
   const tone = site.status === 'ok' ? 'bg-emerald-600' : site.status === 'failed' || site.status === 'reauth' ? 'bg-amber-500' : 'bg-slate-400'
   const collapsible = offers.length > 0
+  const lead = offers[0]
   return (
-    <article className="rounded-2xl border border-border bg-background p-3">
+    <article className={`rounded-2xl border bg-background p-3 ${pinned ? 'border-orange-300' : 'border-border'}`}>
       <div className="flex items-center justify-between gap-2">
         {collapsible ? (
           <button
@@ -69,7 +90,12 @@ function SiteCard({ site, offerLimit }: { site: PriceSite; offerLimit: number })
             onClick={() => setOpen((value) => !value)}
           >
             <h3 className="font-medium">{site.name}</h3>
-            <span className="text-[11px] text-muted-foreground">{open ? '收起' : `展开 ${offers.length} 条`}</span>
+            {lead && (
+              <span className="shrink-0 text-sm font-semibold text-foreground">
+                {lead.currency === 'USD' ? `$${lead.price}` : `¥${lead.price}`}
+              </span>
+            )}
+            <span className="text-[11px] text-muted-foreground">{open ? '收起' : `${offers.length} 条`}</span>
             {open ? <ChevronUp className="size-3.5 shrink-0 text-muted-foreground" /> : <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />}
           </button>
         ) : (
@@ -205,8 +231,9 @@ export function PriceCompareDialog({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
   const limit = Math.min(30, Math.max(1, offerLimit))
-  const supply = sites.filter((site) => site.region === 'CN')
-  const shelf = sites.filter((site) => site.region !== 'CN')
+  const ordered = sortSites(sites)
+  const supply = ordered.filter((site) => site.region === 'CN')
+  const shelf = ordered.filter((site) => site.region !== 'CN')
   const priced = sites.filter((site) => (site.offers || []).length > 0).length
   const offline = sites.filter((site) => site.status === 'skipped').map((site) => site.name)
   return createPortal(

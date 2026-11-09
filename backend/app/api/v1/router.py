@@ -16,6 +16,7 @@ from app.modules.events import emit
 from app.modules.selection import mark_acquired, present_report
 from app.services.common import (
     CHANNELS,
+    CHANNEL_LAUNCH,
     PLANS,
     apply_market_change,
     base_doc,
@@ -306,8 +307,18 @@ def create_router() -> APIRouter:
         )
 
     @router.get("/health/live")
-    def live():
-        return {"data": {"status": "live"}}
+    def live(request: Request):
+        settings = getattr(request.app.state, "settings", None)
+        return {
+            "data": {
+                "status": "live",
+                "shelf": {
+                    "ebay": bool(getattr(settings, "ebay_client_id", "") and getattr(settings, "ebay_client_secret", "")),
+                    "google_shopping": bool(getattr(settings, "serpapi_api_key", "")),
+                    "etsy": bool(getattr(settings, "etsy_api_keystring", "") and getattr(settings, "etsy_shared_secret", "")),
+                },
+            }
+        }
 
     @router.get("/health/ready")
     def ready(request: Request):
@@ -364,7 +375,7 @@ def create_router() -> APIRouter:
     @router.get("/channels")
     def channels(request: Request, authorization: str | None = Header(default=None)):
         ctx(request, authorization)
-        return respond(request, {"channels": CHANNELS, "providers": "mock"})
+        return respond(request, {"channels": CHANNELS, "launch": CHANNEL_LAUNCH, "priority": ["social"], "providers": "mock"})
 
     @router.get("/channel-accounts")
     def channel_accounts(request: Request, channel: str, authorization: str | None = Header(default=None)):

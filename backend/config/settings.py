@@ -3,11 +3,21 @@ from pathlib import Path
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+_ROOT = Path(__file__).resolve().parents[1]
+_ENV_FILES = tuple(
+    str(path)
+    for path in (
+        _ROOT / ".env",
+        _ROOT / "runtime.env",
+        Path("/app/.env"),
+        Path("/app/runtime.env"),
+    )
+    if path.is_file()
+)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=str(_ENV_FILE), extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILES or None, extra="ignore")
 
     auth_mode: str = "demo"
     storage_engine: str = "json"
@@ -75,6 +85,25 @@ class Settings(BaseSettings):
     taobao_app_key: str = ""
     taobao_app_secret: str = ""
     taobao_adzone_id: str = ""
+    # 闲鱼 / 闲鱼开放平台合作方 TOP App。无钥匙跳过；搜索 method 可改。
+    xianyu_app_key: str = ""
+    xianyu_app_secret: str = ""
+    xianyu_session: str = ""
+    xianyu_search_method: str = "alibaba.idle.isv.item.search"
+    # 唯品会开放平台 VOP / 联盟。无钥匙跳过。
+    vipshop_app_key: str = ""
+    vipshop_app_secret: str = ""
+    vipshop_access_token: str = ""
+    # 苏宁开放平台 / 联盟商品检索。无钥匙跳过。
+    suning_app_key: str = ""
+    suning_app_secret: str = ""
+    # 抖店 / 巨量百应选品（不是 B2 社交 DOUYIN_CLIENT_*）。无钥匙跳过。
+    douyin_shop_app_key: str = ""
+    douyin_shop_app_secret: str = ""
+    douyin_shop_access_token: str = ""
+    # 什么值得买开放平台：邮件入驻后才有钥匙；无钥匙跳过，不抓网页。
+    smzdm_app_key: str = ""
+    smzdm_app_secret: str = ""
     pdd_client_id: str = ""
     pdd_client_secret: str = ""
     pdd_pid: str = ""
@@ -85,6 +114,13 @@ class Settings(BaseSettings):
     amazon_partner_tag: str = ""
     walmart_publisher_id: str = ""
     walmart_consumer_id: str = ""
+    # Best Buy Developer → 邮箱激活即得免费 API Key。
+    bestbuy_api_key: str = ""
+    # Etsy Open API v3 → Your Apps 的 keystring + shared secret。
+    etsy_api_keystring: str = ""
+    etsy_shared_secret: str = ""
+    # SerpAPI → Google Shopping 中位数货架（免费档约 100 次/月）。
+    serpapi_api_key: str = ""
     ebay_client_id: str = ""
     ebay_client_secret: str = ""
     ebay_deletion_verification_token: str = ""
@@ -131,6 +167,23 @@ class Settings(BaseSettings):
     kuaishou_app_id: str = ""
     kuaishou_app_secret: str = ""
     kuaishou_access_token: str = ""
+    instagram_app_id: str = ""
+    instagram_app_secret: str = ""
+    wechat_channels_app_id: str = ""
+    weibo_app_key: str = ""
+    weibo_app_secret: str = ""
+    bilibili_client_id: str = ""
+    bilibili_client_secret: str = ""
+    zhihu_client_id: str = ""
+    zhihu_client_secret: str = ""
+    tiktok_client_key: str = ""
+    tiktok_client_secret: str = ""
+    youtube_client_id: str = ""
+    youtube_client_secret: str = ""
+    x_client_id: str = ""
+    x_client_secret: str = ""
+    pinterest_app_id: str = ""
+    pinterest_app_secret: str = ""
     alibaba_intl_app_key: str = ""
     alibaba_intl_app_secret: str = ""
     alibaba_intl_access_token: str = ""

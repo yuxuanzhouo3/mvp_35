@@ -108,7 +108,23 @@ CATALOG = [
 
 CHANNELS = {
     "ecommerce": ["amazon", "temu", "walmart", "taobao", "pinduoduo"],
-    "social": ["linkedin", "facebook", "wechat_mini", "douyin", "xiaohongshu", "kuaishou"],
+    "social": [
+        "wechat_mini",
+        "wechat_channels",
+        "douyin",
+        "xiaohongshu",
+        "kuaishou",
+        "weibo",
+        "bilibili",
+        "zhihu",
+        "tiktok",
+        "instagram",
+        "youtube",
+        "facebook",
+        "x",
+        "linkedin",
+        "pinterest",
+    ],
     "expo": ["online_expo", "alibaba_com", "canton_fair", "global_sources", "ciie"],
     "agency": [f"agent_{index}" for index in range(1, 13)],
     "enrichment": ["qichacha", "tianyancha", "qixin"],
@@ -116,6 +132,19 @@ CHANNELS = {
     "content_dh": ["content_factory", "digital_human_placeholder", "offline_qr"],
     "cross_border": ["cn_us", "cn_hk", "cn_au", "domestic"],
     "raas": ["site_success", "app_account"],
+}
+
+# ecommerce (B1) stays wired but not launched. social (B2) is the live seeding path.
+CHANNEL_LAUNCH = {
+    "ecommerce": "pending",
+    "social": "live",
+    "expo": "live",
+    "agency": "live",
+    "enrichment": "live",
+    "geo_seo": "live",
+    "content_dh": "live",
+    "cross_border": "live",
+    "raas": "live",
 }
 
 

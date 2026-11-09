@@ -109,6 +109,8 @@ def account_secrets(store, tenant_id: str, channel: str, platform: str) -> dict 
 
 def begin_login(store, settings, prof: dict, *, channel: str, platform: str, mode: str = "", credentials: dict | None = None) -> dict:
     _check_channel(channel)
+    if channel == "ecommerce":
+        raise AppError("B1_PENDING_LAUNCH", "电商获客待上线，请先走社交种草", 503, {"use": "social"})
     if platform not in CHANNELS[channel]:
         raise AppError("UNKNOWN_PLATFORM", "这一路没有这个平台", details={"platform": platform})
     chosen = require_mode(channel, mode)
@@ -337,10 +339,19 @@ def _authorize_url(settings, channel: str, platform: str, state: str) -> tuple[s
         ("ecommerce", "temu"): _temu_url,
         ("social", "linkedin"): _linkedin_url,
         ("social", "facebook"): _facebook_url,
+        ("social", "instagram"): _instagram_url,
         ("social", "wechat_mini"): _wecom_url,
+        ("social", "wechat_channels"): _wechat_channels_url,
         ("social", "douyin"): _douyin_url,
         ("social", "xiaohongshu"): _xhs_url,
         ("social", "kuaishou"): _kuaishou_url,
+        ("social", "weibo"): _weibo_url,
+        ("social", "bilibili"): _bilibili_url,
+        ("social", "zhihu"): _zhihu_url,
+        ("social", "tiktok"): _tiktok_url,
+        ("social", "youtube"): _youtube_url,
+        ("social", "x"): _x_url,
+        ("social", "pinterest"): _pinterest_url,
         ("expo", "alibaba_com"): _alibaba_intl_url,
     }
     builder = builders.get((channel, platform))
@@ -428,6 +439,71 @@ def _kuaishou_url(settings, redirect: str, state: str) -> tuple[str, str]:
     return f"https://open.kuaishou.com/oauth2/authorize?app_id={quote(app_id, safe='')}&redirect_uri={redirect}&response_type=code&scope=user_info&state={state}", ""
 
 
+def _instagram_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    app_id = getattr(settings, "instagram_app_id", "") or getattr(settings, "facebook_app_id", "") or ""
+    if not app_id:
+        return "", "INSTAGRAM_APP_ID"
+    return f"https://www.instagram.com/oauth/authorize?client_id={quote(app_id, safe='')}&redirect_uri={redirect}&scope=instagram_business_basic&response_type=code&state={state}", ""
+
+
+def _wechat_channels_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    del redirect, state
+    app_id = getattr(settings, "wechat_channels_app_id", "") or ""
+    if not app_id:
+        return "", "微信视频号暂无稳定公开卖家 OAuth，可先用企业微信或抖音"
+    return "", "请在视频号助手完成授权后联系运营开通"
+
+
+def _weibo_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    app_key = getattr(settings, "weibo_app_key", "") or ""
+    if not app_key:
+        return "", "WEIBO_APP_KEY"
+    return f"https://api.weibo.com/oauth2/authorize?client_id={quote(app_key, safe='')}&redirect_uri={redirect}&response_type=code&state={state}", ""
+
+
+def _bilibili_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    client_id = getattr(settings, "bilibili_client_id", "") or ""
+    if not client_id:
+        return "", "BILIBILI_CLIENT_ID"
+    return f"https://passport.bilibili.com/register/pc_oauth2.html?client_id={quote(client_id, safe='')}&return_url={redirect}&response_type=code&state={state}", ""
+
+
+def _zhihu_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    client_id = getattr(settings, "zhihu_client_id", "") or ""
+    if not client_id:
+        return "", "ZHIHU_CLIENT_ID"
+    return f"https://www.zhihu.com/oauth/authorize?client_id={quote(client_id, safe='')}&redirect_uri={redirect}&response_type=code&state={state}", ""
+
+
+def _tiktok_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    client_key = getattr(settings, "tiktok_client_key", "") or ""
+    if not client_key:
+        return "", "TIKTOK_CLIENT_KEY"
+    return f"https://www.tiktok.com/v2/auth/authorize/?client_key={quote(client_key, safe='')}&redirect_uri={redirect}&response_type=code&scope=user.info.basic&state={state}", ""
+
+
+def _youtube_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    client_id = getattr(settings, "youtube_client_id", "") or ""
+    if not client_id:
+        return "", "YOUTUBE_CLIENT_ID"
+    scope = quote("https://www.googleapis.com/auth/youtube.readonly", safe="")
+    return f"https://accounts.google.com/o/oauth2/v2/auth?client_id={quote(client_id, safe='')}&redirect_uri={redirect}&response_type=code&scope={scope}&access_type=offline&prompt=consent&state={state}", ""
+
+
+def _x_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    client_id = getattr(settings, "x_client_id", "") or ""
+    if not client_id:
+        return "", "X_CLIENT_ID"
+    return f"https://twitter.com/i/oauth2/authorize?response_type=code&client_id={quote(client_id, safe='')}&redirect_uri={redirect}&scope=tweet.read%20users.read%20offline.access&state={state}&code_challenge=pickglobal&code_challenge_method=plain", ""
+
+
+def _pinterest_url(settings, redirect: str, state: str) -> tuple[str, str]:
+    app_id = getattr(settings, "pinterest_app_id", "") or ""
+    if not app_id:
+        return "", "PINTEREST_APP_ID"
+    return f"https://www.pinterest.com/oauth/?client_id={quote(app_id, safe='')}&redirect_uri={redirect}&response_type=code&scope=user_accounts:read&state={state}", ""
+
+
 def _alibaba_intl_url(settings, redirect: str, state: str) -> tuple[str, str]:
     app_key = getattr(settings, "alibaba_intl_app_key", "") or ""
     if not app_key:
@@ -445,9 +521,17 @@ def _exchange_code(settings, platform: str, code: str) -> dict:
         "temu": _ex_temu,
         "linkedin": _ex_linkedin,
         "facebook": _ex_facebook,
+        "instagram": _ex_instagram,
         "douyin": _ex_douyin,
         "xiaohongshu": _ex_xhs,
         "kuaishou": _ex_kuaishou,
+        "weibo": _ex_weibo,
+        "bilibili": _ex_bilibili,
+        "zhihu": _ex_zhihu,
+        "tiktok": _ex_tiktok,
+        "youtube": _ex_youtube,
+        "x": _ex_x,
+        "pinterest": _ex_pinterest,
         "alibaba_com": _ex_alibaba_intl,
     }
     exchanger = exchangers.get(platform)
@@ -765,6 +849,152 @@ def _ex_kuaishou(settings, code: str, redirect: str) -> dict:
         "account_label": str((data or {}).get("open_id") or "kuaishou"),
         "token_meta": {"open_id": (data or {}).get("open_id")},
     }
+
+
+def _ex_instagram(settings, code: str, redirect: str) -> dict:
+    app_id = getattr(settings, "instagram_app_id", "") or getattr(settings, "facebook_app_id", "") or ""
+    secret = getattr(settings, "instagram_app_secret", "") or getattr(settings, "facebook_app_secret", "") or ""
+    if not (app_id and secret):
+        raise AppError("LOGIN_APP_MISSING", "缺少 INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET")
+    body = _form_post(
+        "https://api.instagram.com/oauth/access_token",
+        {"client_id": app_id, "client_secret": secret, "grant_type": "authorization_code", "redirect_uri": redirect, "code": code},
+    )
+    access = str(body.get("access_token") or "")
+    if not access:
+        raise ValueError("instagram token empty")
+    return {"access_token": access, "refresh_token": "", "account_label": str(body.get("user_id") or "instagram"), "token_meta": {"user_id": body.get("user_id")}}
+
+
+def _ex_weibo(settings, code: str, redirect: str) -> dict:
+    app_key = getattr(settings, "weibo_app_key", "") or ""
+    secret = getattr(settings, "weibo_app_secret", "") or ""
+    if not (app_key and secret):
+        raise AppError("LOGIN_APP_MISSING", "缺少 WEIBO_APP_KEY / WEIBO_APP_SECRET")
+    body = _form_post(
+        "https://api.weibo.com/oauth2/access_token",
+        {"client_id": app_key, "client_secret": secret, "grant_type": "authorization_code", "redirect_uri": redirect, "code": code},
+    )
+    access = str(body.get("access_token") or "")
+    if not access:
+        raise ValueError("weibo token empty")
+    return {"access_token": access, "refresh_token": "", "account_label": str(body.get("uid") or "weibo"), "token_meta": {"uid": body.get("uid")}}
+
+
+def _ex_bilibili(settings, code: str, redirect: str) -> dict:
+    client_id = getattr(settings, "bilibili_client_id", "") or ""
+    secret = getattr(settings, "bilibili_client_secret", "") or ""
+    if not (client_id and secret):
+        raise AppError("LOGIN_APP_MISSING", "缺少 BILIBILI_CLIENT_ID / BILIBILI_CLIENT_SECRET")
+    body = _form_post(
+        "https://api.bilibili.com/x/account-oauth2/v1/token",
+        {"client_id": client_id, "client_secret": secret, "grant_type": "authorization_code", "code": code},
+    )
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    access = str((data or {}).get("access_token") or "")
+    if not access:
+        raise ValueError("bilibili token empty")
+    return {"access_token": access, "refresh_token": str((data or {}).get("refresh_token") or ""), "account_label": "bilibili", "token_meta": {}}
+
+
+def _ex_zhihu(settings, code: str, redirect: str) -> dict:
+    client_id = getattr(settings, "zhihu_client_id", "") or ""
+    secret = getattr(settings, "zhihu_client_secret", "") or ""
+    if not (client_id and secret):
+        raise AppError("LOGIN_APP_MISSING", "缺少 ZHIHU_CLIENT_ID / ZHIHU_CLIENT_SECRET")
+    body = _form_post(
+        "https://www.zhihu.com/oauth/token",
+        {"client_id": client_id, "client_secret": secret, "grant_type": "authorization_code", "redirect_uri": redirect, "code": code},
+    )
+    access = str(body.get("access_token") or "")
+    if not access:
+        raise ValueError("zhihu token empty")
+    return {"access_token": access, "refresh_token": str(body.get("refresh_token") or ""), "account_label": "zhihu", "token_meta": {}}
+
+
+def _ex_tiktok(settings, code: str, redirect: str) -> dict:
+    client_key = getattr(settings, "tiktok_client_key", "") or ""
+    secret = getattr(settings, "tiktok_client_secret", "") or ""
+    if not (client_key and secret):
+        raise AppError("LOGIN_APP_MISSING", "缺少 TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET")
+    body = _form_post(
+        "https://open.tiktokapis.com/v2/oauth/token/",
+        {
+            "client_key": client_key,
+            "client_secret": secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect,
+        },
+    )
+    access = str(body.get("access_token") or "")
+    if not access:
+        raise ValueError("tiktok token empty")
+    return {"access_token": access, "refresh_token": str(body.get("refresh_token") or ""), "account_label": str(body.get("open_id") or "tiktok"), "token_meta": {"open_id": body.get("open_id")}}
+
+
+def _ex_youtube(settings, code: str, redirect: str) -> dict:
+    client_id = getattr(settings, "youtube_client_id", "") or ""
+    secret = getattr(settings, "youtube_client_secret", "") or ""
+    if not (client_id and secret):
+        raise AppError("LOGIN_APP_MISSING", "缺少 YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET")
+    body = _form_post(
+        "https://oauth2.googleapis.com/token",
+        {"client_id": client_id, "client_secret": secret, "code": code, "grant_type": "authorization_code", "redirect_uri": redirect},
+    )
+    access = str(body.get("access_token") or "")
+    if not access:
+        raise ValueError("youtube token empty")
+    return {"access_token": access, "refresh_token": str(body.get("refresh_token") or ""), "account_label": "youtube", "token_meta": {}}
+
+
+def _ex_x(settings, code: str, redirect: str) -> dict:
+    client_id = getattr(settings, "x_client_id", "") or ""
+    secret = getattr(settings, "x_client_secret", "") or ""
+    if not (client_id and secret):
+        raise AppError("LOGIN_APP_MISSING", "缺少 X_CLIENT_ID / X_CLIENT_SECRET")
+    import base64
+
+    basic = base64.b64encode(f"{client_id}:{secret}".encode()).decode()
+    response = httpx.post(
+        "https://api.twitter.com/2/oauth2/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect,
+            "code_verifier": "pickglobal",
+        },
+        headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"},
+        timeout=TIMEOUT,
+    )
+    response.raise_for_status()
+    body = response.json()
+    access = str((body or {}).get("access_token") or "")
+    if not access:
+        raise ValueError("x token empty")
+    return {"access_token": access, "refresh_token": str((body or {}).get("refresh_token") or ""), "account_label": "x", "token_meta": {}}
+
+
+def _ex_pinterest(settings, code: str, redirect: str) -> dict:
+    app_id = getattr(settings, "pinterest_app_id", "") or ""
+    secret = getattr(settings, "pinterest_app_secret", "") or ""
+    if not (app_id and secret):
+        raise AppError("LOGIN_APP_MISSING", "缺少 PINTEREST_APP_ID / PINTEREST_APP_SECRET")
+    import base64
+
+    basic = base64.b64encode(f"{app_id}:{secret}".encode()).decode()
+    response = httpx.post(
+        "https://api.pinterest.com/v5/oauth/token",
+        data={"grant_type": "authorization_code", "code": code, "redirect_uri": redirect},
+        headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"},
+        timeout=TIMEOUT,
+    )
+    response.raise_for_status()
+    body = response.json()
+    access = str((body or {}).get("access_token") or "")
+    if not access:
+        raise ValueError("pinterest token empty")
+    return {"access_token": access, "refresh_token": str((body or {}).get("refresh_token") or ""), "account_label": "pinterest", "token_meta": {}}
 
 
 def _ex_alibaba_intl(settings, code: str, redirect: str) -> dict:

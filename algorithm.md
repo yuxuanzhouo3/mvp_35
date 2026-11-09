@@ -380,7 +380,9 @@ B1 与 B2–B5 登录后做法不同。B1 围绕店铺订单。B2–B5 围绕「
 
 ## B1 电商
 
-`channel=ecommerce`。卖家先登录自己的店铺账号。登录时必须选定一种做法，记在 `channel_accounts.mode`。获客任务下一步再接，登录本身不拉订单、不发消息。
+`channel=ecommerce`。**当前状态：待上线。** 登录与发现在产品上暂停，错误码 `B1_PENDING_LAUNCH`。请先走 B2。店铺三模式与接口表保留，上线后再打开。
+
+卖家先登录自己的店铺账号。登录时必须选定一种做法，记在 `channel_accounts.mode`。获客任务下一步再接，登录本身不拉订单、不发消息。
 
 | mode | 卖家要的结果 |
 | --- | --- |
@@ -400,7 +402,7 @@ B1 与 B2–B5 登录后做法不同。B1 围绕店铺订单。B2–B5 围绕「
 
 完成标准：没钥匙时 `platform=amazon` 搜一次得到 5 条演示线索；再搜同一次，插入数 0、更新数 5。有钥匙时同一 `external_id` 同样只更新不双插。
 
-## B2 社交
+## B2 社交种草（优先开通）
 
 `channel=social`。登录时必须选定 mode。理念：登录后 AI 种草或复刻热点 → 引流到落地页表单 → 收中高意向，并拿到加微信、授权邮箱或授权手机之一。`POST /acquisition/social` 在开关打开前保持未开通；发现走 `POST /lead-searches`；种草稿走 `POST /content/seed-drafts`，批准后才可发布。
 
@@ -409,14 +411,30 @@ B1 与 B2–B5 登录后做法不同。B1 围绕店铺订单。B2–B5 围绕「
 | `invent` | AI 造热点 | 选品报告或关键词 → AI 种草稿 → 批准发布 → 落地页表单 → 中高意向 + 微信/邮箱/手机 |
 | `remix` | 复刻热点 | 用户提供可引用要点 → AI 改写成合规种草稿 → 同上漏斗 |
 
-| 平台 id | 平台 | 官方接口 | 用来取线索 | 归一化 |
-| --- | --- | --- | --- | --- |
-| `linkedin` | LinkedIn | Lead Gen Forms，`https://api.linkedin.com/rest` | 落地页/广告表单 | 表单响应 id；邮箱或手机 |
-| `facebook` | Facebook / Instagram | Graph API leadgen forms | 主页/落地页表单 | `leadgen_id`；微信字段若表单有则抄 |
-| `wechat_mini` | 微信小程序 / 企业微信 | 客户联系 `externalcontact` | 授权用户、加好友 | `external_userid`；微信为主 |
-| `douyin` | 抖音 | `https://open.douyin.com` 企业号线索 | 短视频引流后的留资 | 线索 id；手机/微信 |
-| `xiaohongshu` | 小红书 | 聚光等商业开放接口 | 投放/笔记落地表单 | 表单 id |
-| `kuaishou` | 快手 | `https://open.kuaishou.com` 企业号线索 | 作品引流留资 | 线索 id |
+国内种草：
+
+| 平台 id | 平台 | 官方接口 | 用来取线索 |
+| --- | --- | --- | --- |
+| `wechat_mini` | 企业微信 | 客户联系 `externalcontact` | 加好友、授权用户 |
+| `wechat_channels` | 微信视频号 | 视频号开放能力（OAuth 未稳定则停在说明） | 作品留资 |
+| `douyin` | 抖音 | `https://open.douyin.com` | 短视频/直播留资 |
+| `xiaohongshu` | 小红书 | 聚光等商业开放接口 | 笔记落地表单 |
+| `kuaishou` | 快手 | `https://open.kuaishou.com` | 作品留资 |
+| `weibo` | 微博 | `https://open.weibo.com` | 授权后本账号互动 |
+| `bilibili` | 哔哩哔哩 | `https://open.bilibili.com` | 授权后本账号留资 |
+| `zhihu` | 知乎 | 知乎开放平台 | 授权后本账号留资 |
+
+海外种草：
+
+| 平台 id | 平台 | 官方接口 | 用来取线索 |
+| --- | --- | --- | --- |
+| `tiktok` | TikTok | `https://developers.tiktok.com` | 授权后本账号互动 |
+| `instagram` | Instagram | Meta / Instagram API | 主页/落地页表单 |
+| `youtube` | YouTube | Google OAuth + YouTube Data API | 评论区引导后的表单 |
+| `facebook` | Facebook | Graph API leadgen forms | 主页线索表单 |
+| `x` | X | `https://developer.x.com` | 授权后本账号互动 |
+| `linkedin` | LinkedIn | Lead Gen Forms | 表单姓名/公司/邮箱 |
+| `pinterest` | Pinterest | `https://developers.pinterest.com` | 授权后本账号互动 |
 
 只接本账号表单与已授权客户。不要用搜索接口去扫陌生人的个人主页。无发布权限则种草停在草稿，仍可收已有表单意向。
 

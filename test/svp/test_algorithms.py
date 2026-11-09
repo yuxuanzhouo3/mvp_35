@@ -169,10 +169,18 @@ def test_selection_assist_ranks_catalog_source(client: TestClient):
         "pinduoduo",
         "jd",
         "taobao",
+        "tmall",
+        "xianyu",
+        "vipshop",
+        "suning",
+        "douyin_shop",
         "ebay",
         "aliexpress",
         "amazon",
         "walmart",
+        "bestbuy",
+        "etsy",
+        "google_shopping",
         "tiktok",
         "temu",
     }
@@ -499,6 +507,188 @@ def test_ebay_wrapper_uses_browse_plan(monkeypatch):
     assert float(rows[0]["usd"]) == 49.99
     assert calls[0]["q"].lower() == "iphone"
     assert "priceCurrency:USD" in calls[0]["filter"]
+    shelf.clear_goods_cache()
+
+
+def test_tmall_reuses_taobao_keys_and_sets_is_tmall(monkeypatch):
+    from algorithm import shelf
+
+    shelf.clear_goods_cache()
+    calls = []
+
+    def fake_post(url, *, data=None, content=None, headers=None, params=None):
+        calls.append({"url": url, "data": data})
+        return {
+            "tbk_dg_material_optional_response": {
+                "result_list": {
+                    "map_data": [
+                        {
+                            "title": "天猫杯",
+                            "item_id": "88",
+                            "zk_final_price": "19.90",
+                            "shop_title": "旗舰店",
+                            "item_url": "https://detail.tmall.com/item.htm?id=88",
+                        }
+                    ]
+                }
+            }
+        }
+
+    monkeypatch.setattr(shelf, "_post", fake_post)
+    settings = type("S", (), {"taobao_app_key": "k", "taobao_app_secret": "s", "taobao_adzone_id": "1"})()
+    rows, status = shelf._tmall("杯", settings)
+    assert status["id"] == "tmall"
+    assert status["status"] == "ok"
+    assert calls[0]["data"]["is_tmall"] == "true"
+    assert rows[0]["platform"] == "tmall"
+    assert rows[0]["cost_cny"] == "19.90"
+    shelf.clear_goods_cache()
+
+
+def test_vipshop_suning_douyin_shop_skip_without_keys():
+    from algorithm import shelf
+
+    empty = object()
+    assert shelf._vipshop("杯", empty)[1]["status"] == "skipped"
+    assert shelf._suning("杯", empty)[1]["status"] == "skipped"
+    assert shelf._douyin_shop("杯", empty)[1]["status"] == "skipped"
+
+
+def test_vipshop_hits_official_vop(monkeypatch):
+    from algorithm import shelf
+
+    calls = []
+
+    def fake_post(url, *, data=None, content=None, headers=None, params=None):
+        calls.append({"url": url, "params": params, "content": content})
+        return {
+            "result": {
+                "goodsInfoList": [
+                    {
+                        "goodsId": "9",
+                        "goodsName": "唯品外套",
+                        "vipPrice": "99.00",
+                        "destUrl": "https://www.vip.com/d/9",
+                        "storeInfo": {"storeName": "唯品自营"},
+                    }
+                ]
+            }
+        }
+
+    monkeypatch.setattr(shelf, "_post", fake_post)
+    settings = type("S", (), {"vipshop_app_key": "k", "vipshop_app_secret": "s", "vipshop_access_token": ""})()
+    rows, status = shelf._vipshop("外套", settings)
+    assert status["id"] == "vipshop"
+    assert status["status"] == "ok"
+    assert calls[0]["url"] == "https://vop.vipapis.com"
+    assert calls[0]["params"]["service"] == "com.vip.adp.api.open.service.UnionGoodsService"
+    assert rows[0]["supplier"] == "唯品自营"
+    assert rows[0]["cost_cny"] == "99.00"
+
+
+def test_suning_hits_open_suning(monkeypatch):
+    from algorithm import shelf
+
+    calls = []
+
+    def fake_post(url, *, data=None, content=None, headers=None, params=None):
+        calls.append({"url": url, "headers": headers, "content": content})
+        return {
+            "sn_responseContent": {
+                "sn_body": {
+                    "querySearchcommodity": {
+                        "commodityList": [
+                            {
+                                "commodityName": "苏宁杯",
+                                "commodityCode": "12",
+                                "snPrice": "15.50",
+                                "supplierName": "苏宁自营",
+                                "commodityUrl": "https://product.suning.com/12.html",
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+
+    monkeypatch.setattr(shelf, "_post", fake_post)
+    settings = type("S", (), {"suning_app_key": "k", "suning_app_secret": "s"})()
+    rows, status = shelf._suning("杯", settings)
+    assert status["id"] == "suning"
+    assert calls[0]["url"] == "https://open.suning.com/api/http/sopRequest"
+    assert calls[0]["headers"]["appMethod"] == "suning.netalliance.searchcommodity.query"
+    assert rows[0]["cost_cny"] == "15.50"
+
+
+def test_douyin_shop_hits_jinritemai(monkeypatch):
+    from algorithm import shelf
+
+    calls = []
+
+    def fake_post(url, *, data=None, content=None, headers=None, params=None):
+        calls.append({"url": url, "params": params})
+        return {
+            "code": 10000,
+            "data": {
+                "products": [
+                    {
+                        "product_id": "77",
+                        "title": "抖店杯",
+                        "price": 1990,
+                        "shop_name": "抖品牌店",
+                        "detail_url": "https://haohuo.jinritemai.com/77",
+                    }
+                ]
+            },
+        }
+
+    monkeypatch.setattr(shelf, "_post", fake_post)
+    settings = type(
+        "S",
+        (),
+        {"douyin_shop_app_key": "k", "douyin_shop_app_secret": "s", "douyin_shop_access_token": "tok"},
+    )()
+    rows, status = shelf._douyin_shop("杯", settings)
+    assert status["id"] == "douyin_shop"
+    assert calls[0]["url"] == "https://openapi-fxg.jinritemai.com/buyin/kolMaterialsProductsSearch"
+    assert calls[0]["params"]["method"] == "buyin.kolMaterialsProductsSearch"
+    assert rows[0]["cost_cny"] == "19.90"
+    assert rows[0]["supplier"] == "抖品牌店"
+
+
+def test_etsy_wrapper_uses_browse_plan(monkeypatch):
+    from decimal import Decimal
+
+    from algorithm import shelf
+
+    shelf.clear_goods_cache()
+    calls = []
+
+    def fake_get(url, *, params=None, headers=None, timeout=None):
+        calls.append({"url": url, "params": params, "headers": headers})
+        return {
+            "results": [
+                {
+                    "listing_id": 881,
+                    "title": "Handmade mug",
+                    "price": {"amount": 2499, "divisor": 100, "currency_code": "USD"},
+                    "shop": {"shop_name": "ClayShop"},
+                    "url": "https://www.etsy.com/listing/881",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(shelf, "_get", fake_get)
+    settings = type("S", (), {"etsy_api_keystring": "key-from-portal"})()
+    rows, status = shelf._etsy("美国站 100 美元以内的二手 iPhone", settings)
+    assert status["id"] == "etsy"
+    assert status["status"] == "ok"
+    assert status["count"] == 1
+    assert rows[0]["usd"] == Decimal("24.99")
+    assert rows[0]["supplier"] == "ClayShop"
+    assert calls[0]["headers"]["x-api-key"] == "key-from-portal"
+    assert calls[0]["params"]["keywords"].lower() == "iphone"
+    assert calls[0]["params"]["max_price"] == "100"
     shelf.clear_goods_cache()
 
 

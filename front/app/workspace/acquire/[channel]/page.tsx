@@ -151,18 +151,21 @@ function ChannelDesk() {
       <section className="panel-frame rounded-2xl bg-card p-3 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-y-contain md:rounded-3xl md:p-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {view === 'discover' && (
           <div>
-            {loginChannels.has(channel.id) && <ChannelLogin channel={channel.id} platforms={channel.platforms} />}
+            {channel.launch === 'pending' ? (
+              <p className="mb-3 rounded-xl border border-dashed border-orange-300 bg-orange-50 px-3 py-2 text-xs text-orange-900">B1 电商待上线，店铺登录与订单获客暂未开放。请先走 B2 社交种草。</p>
+            ) : null}
+            {loginChannels.has(channel.id) && channel.launch !== 'pending' && <ChannelLogin channel={channel.id} platforms={channel.platforms} />}
             <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold">发现线索</h2>
-                <p className="text-xs text-muted-foreground">{loginChannels.has(channel.id) ? (channel.id === 'ecommerce' ? '先选做法并登录店铺；未登录可用演示线索。' : '先选做法并登录；种草/入驻/代理/检索后收中高意向（微信或邮箱或手机）。') : '这一路不需要店铺登录。'}</p>
+                <p className="text-xs text-muted-foreground">{channel.launch === 'pending' ? '这一路待上线，发现已暂停。' : loginChannels.has(channel.id) ? '先选做法并登录；种草/入驻/代理/检索后收中高意向（微信或邮箱或手机）。' : '这一路不需要店铺登录。'}</p>
               </div>
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
               <select className="h-9 w-full rounded-lg border-0 bg-muted px-3 text-sm outline-none" value={platform} aria-label="平台" onChange={(event) => setPlatform(event.target.value)}>
                 {channel.platforms.map((item) => <option key={item}>{item}</option>)}
               </select>
-              <button type="button" disabled={busy} className="h-9 rounded-lg bg-primary text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => {
+              <button type="button" disabled={busy || channel.launch === 'pending'} className="h-9 rounded-lg bg-primary text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => {
                 void run(async () => {
                   const created = await api<{ job_id: string }>('/lead-searches', {
                     method: 'POST',

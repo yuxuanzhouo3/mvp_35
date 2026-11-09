@@ -1,35 +1,23 @@
 from fastapi.testclient import TestClient
 
 from app.modules.channel_login import _state
+from app.services.common import CHANNELS, CHANNEL_LAUNCH
 from test.support import register
 
 
-def test_b1_login_requires_a_mode_and_opens_the_seller_page(client: TestClient):
+def test_b1_login_is_pending_launch(client: TestClient):
     headers = register(client, "b1-login@example.com")
-    missing = client.post("/api/v1/channel-accounts/login", headers=headers, json={"channel": "ecommerce", "platform": "amazon"})
-    assert missing.status_code == 400
-    assert missing.json()["error"]["code"] == "B1_MODE_REQUIRED"
-
     pending = client.post(
         "/api/v1/channel-accounts/login",
         headers=headers,
         json={"channel": "ecommerce", "platform": "amazon", "mode": "half"},
     )
-    assert pending.status_code == 200, pending.text
-    assert pending.json()["data"]["status"] == "pending"
-    assert pending.json()["data"]["missing"] == "AMAZON_SP_APPLICATION_ID"
-
-    client.app.state.settings.amazon_sp_application_id = "amzn1.sp.solution.test"
-    opened = client.post(
-        "/api/v1/channel-accounts/login",
-        headers=headers,
-        json={"channel": "ecommerce", "platform": "amazon", "mode": "full"},
-    )
-    assert opened.status_code == 200, opened.text
-    body = opened.json()["data"]
-    assert body["mode"] == "full"
-    assert "sellercentral.amazon.com/apps/authorize/consent" in body["authorize_url"]
-    assert "amzn1.sp.solution.test" in body["authorize_url"]
+    assert pending.status_code == 503, pending.text
+    assert pending.json()["error"]["code"] == "B1_PENDING_LAUNCH"
+    catalog = client.get("/api/v1/channels", headers=headers)
+    assert catalog.json()["data"]["launch"]["ecommerce"] == "pending"
+    assert catalog.json()["data"]["priority"] == ["social"]
+    assert CHANNEL_LAUNCH["ecommerce"] == "pending"
 
 
 def test_b2_login_requires_invent_or_remix(client: TestClient):
@@ -49,41 +37,61 @@ def test_b2_login_requires_invent_or_remix(client: TestClient):
     assert "open.douyin.com" in opened.json()["data"]["authorize_url"]
 
 
+def test_b2_covers_cn_and_intl_seeding_platforms(client: TestClient):
+    headers = register(client, "b2-expand@example.com")
+    assert "weibo" in CHANNELS["social"]
+    assert "tiktok" in CHANNELS["social"]
+    assert "youtube" in CHANNELS["social"]
+    client.app.state.settings.weibo_app_key = "wb-key"
+    client.app.state.settings.tiktok_client_key = "tt-key"
+    client.app.state.settings.youtube_client_id = "yt-id"
+    weibo = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "social", "platform": "weibo", "mode": "invent"},
+    )
+    assert "api.weibo.com/oauth2/authorize" in weibo.json()["data"]["authorize_url"]
+    tiktok = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "social", "platform": "tiktok", "mode": "remix"},
+    )
+    assert "tiktok.com/v2/auth/authorize" in tiktok.json()["data"]["authorize_url"]
+    youtube = client.post(
+        "/api/v1/channel-accounts/login",
+        headers=headers,
+        json={"channel": "social", "platform": "youtube", "mode": "invent"},
+    )
+    assert "accounts.google.com/o/oauth2" in youtube.json()["data"]["authorize_url"]
+
+
 def test_seller_callback_exchanges_code_and_stores_tenant_token(client: TestClient, monkeypatch):
     headers = register(client, "b1-callback@example.com")
     me = client.get("/api/v1/me", headers=headers)
     tenant_id = me.json()["data"]["tenant"]["id"]
-    state = _state(client.app.state.settings, tenant_id, "ecommerce", "taobao", "analyze")
+    state = _state(client.app.state.settings, tenant_id, "social", "xiaohongshu", "invent")
 
     def fake_exchange(settings, platform, code):
-        assert platform == "taobao"
+        assert platform == "xiaohongshu"
         assert code == "auth-code"
-        return {"access_token": "sess-1", "refresh_token": "ref-1", "account_label": "店铺甲", "token_meta": {}}
+        return {"access_token": "sess-1", "refresh_token": "ref-1", "account_label": "笔记号", "token_meta": {}}
 
     monkeypatch.setattr("app.modules.channel_login._exchange_code", fake_exchange)
     saved = client.post("/api/v1/channel-accounts/callback", headers=headers, json={"state": state, "code": "auth-code"})
     assert saved.status_code == 200, saved.text
     assert saved.json()["data"]["status"] == "connected"
-    assert saved.json()["data"]["mode"] == "analyze"
+    assert saved.json()["data"]["mode"] == "invent"
     assert saved.json()["data"]["has_token"] is True
-    listed = client.get("/api/v1/channel-accounts?channel=ecommerce", headers=headers)
+    listed = client.get("/api/v1/channel-accounts?channel=social", headers=headers)
     item = listed.json()["data"]["items"][0]
-    assert item["platform"] == "taobao"
+    assert item["platform"] == "xiaohongshu"
     assert "access_token" not in item
 
 
-def test_temu_and_xhs_and_kuaishou_login_urls(client: TestClient):
-    headers = register(client, "b1-social-urls@example.com")
-    client.app.state.settings.temu_app_key = "temu-key"
+def test_xhs_and_kuaishou_login_urls(client: TestClient):
+    headers = register(client, "b2-social-urls@example.com")
     client.app.state.settings.xhs_app_id = "xhs-app"
     client.app.state.settings.kuaishou_app_id = "ks-app"
-
-    temu = client.post(
-        "/api/v1/channel-accounts/login",
-        headers=headers,
-        json={"channel": "ecommerce", "platform": "temu", "mode": "half"},
-    )
-    assert "seller.temu.com/open-platform/client-manage/authorization" in temu.json()["data"]["authorize_url"]
 
     xhs = client.post(
         "/api/v1/channel-accounts/login",

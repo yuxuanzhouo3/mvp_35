@@ -34,6 +34,8 @@ if [[ "$TARGET" == "api" ]]; then
     "$SRC/" "$STAGE/"
   cp -f "$HOME/.config/.cloudbase/auth.json" "$STAGE/cloudbase-auth.json"
   chmod 600 "$STAGE/cloudbase-auth.json"
+  # tcb packaging often drops files named .env; runtime.env is loaded by Settings.
+  cp -f "$STAGE/.env" "$STAGE/runtime.env"
 else
   NAME=pickglobal-web
   MIN_NUM=0
@@ -48,14 +50,19 @@ else
 fi
 
 cd "$STAGE"
-tcb -y cloudrun deploy \
-  -e "$ENV_ID" \
-  -s "$NAME" \
-  --force \
-  --wait \
-  --min-num "$MIN_NUM" \
-  --max-num 1 \
+DEPLOY_ARGS=(
+  -y cloudrun deploy
+  -e "$ENV_ID"
+  -s "$NAME"
+  --force
+  --wait
+  --min-num "$MIN_NUM"
+  --max-num 1
   --open-access-types PUBLIC
+)
+# tcb cloudrun deploy (CLI 3.8.5) has no --env-params / --envParams.
+# Settings reads runtime.env copied above.
+tcb "${DEPLOY_ARGS[@]}"
 # PUBLIC is required for pickglobal.mornscience.top HTTP gateway. Do not use OA/MINIAPP.
 # Target cpu/mem live in cloudbaserc / UpdateCloudRunServer; CLI cannot set them here.
 echo "DEPLOYED $NAME min-num=$MIN_NUM max-num=1 access=PUBLIC (target 0.25C/0.5G)"

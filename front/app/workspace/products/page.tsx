@@ -405,12 +405,19 @@ export default function ProductsPage() {
           <div className="mt-1 text-sm text-muted-foreground">按{TRADE_ROUTES[route].label}比价。利润率<TermHint id="margin" />达到 15% 且风险<TermHint id="risk" />不是高的商品优先<TermHint id="pick" />。排序选「搜索时间」时，刚返回的商品在上面。免费保留海外利润最高的 5 条，专业版 10 条，企业版 30 条。</div>
           {platforms.length > 0 && (
             <div className="mt-2 text-xs leading-5 text-muted-foreground">
-              {platforms.map((item) => `${item.name}${item.status === 'ok' ? ` ${item.count}` : item.status === 'failed' ? ' 失败' : item.status === 'reauth' ? ' 需重新授权' : ' 当前版本未上线'}`).join(' · ')}
+              {[...platforms]
+                .sort((left, right) => {
+                  const pin = (id: string, status: string) => (['ebay', 'google_shopping', 'etsy'].includes(id) && status === 'ok' ? 0 : 1)
+                  const rank = (status: string) => (status === 'ok' ? 0 : status === 'failed' || status === 'reauth' ? 1 : 2)
+                  return pin(left.id, left.status) - pin(right.id, right.status) || rank(left.status) - rank(right.status)
+                })
+                .map((item) => `${item.name}${item.status === 'ok' ? ` ${item.count}` : item.status === 'failed' ? ' 失败' : item.status === 'reauth' ? ' 需重新授权' : ' 当前版本未上线'}`)
+                .join(' · ')}
               {' · '}来源 {provider === 'live' ? '实时' : '本地演示'}<TermHint id="provider" />
             </div>
           )}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{refresh?.premium ? '国内供货与美国货架（京东/淘宝/eBay/亚马逊/沃尔玛等）货价每 15 分钟更新。' : '各平台货价每小时更新。支付专业版或企业版后改为每 15 分钟，并有 10 次随时刷新。'}</span>
+            <span>{refresh?.premium ? '国内供货与美国货架（闲鱼/京东/淘宝/eBay/Best Buy/Etsy/亚马逊等）货价每 15 分钟更新。' : '各平台货价每小时更新。支付专业版或企业版后改为每 15 分钟，并有 10 次随时刷新。'}</span>
             {refresh?.premium ? <span>还可随时刷新 {refresh.manual_left} 次。</span> : <a className="text-primary" href="/workspace/billing">去支付</a>}
             {refresh?.premium && shelfQuery && (
               <button
@@ -466,10 +473,14 @@ export default function ProductsPage() {
               render={(item) => (
                 <article className="rounded-xl border border-border p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <h3 className="font-medium">{item.name}</h3>
-                      <div className="mt-1 text-xs text-muted-foreground">{item.platform || item.supplier} · <span className="inline-flex items-center">SKU {item.sku}<TermHint id="sku" /></span> · ¥{item.cost_cny} · ${item.target_price_usd}{item.price_basis === 'us_shelf' ? ' 美国货架' : item.price_basis === 'floor_reference' ? ' 利润线' : ''}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{item.platform || item.supplier} · <span className="inline-flex items-center">SKU {item.sku}<TermHint id="sku" /></span>{item.price_basis === 'us_shelf' ? ' · 美国货架' : item.price_basis === 'floor_reference' ? ' · 利润线' : ''}</div>
                       {item.selection && <div className="mt-1 text-xs text-muted-foreground">{item.selection.pick ? '优先' : '暂缓'}<TermHint id="pick" /> · 机会分 {item.selection.score}<TermHint id="score" /> · 利润率 {item.selection.net_margin}<TermHint id="margin" /> · 风险 {item.selection.risk_level}<TermHint id="risk" />{item.searched_at ? ` · ${item.searched_at.slice(5, 16).replace('T', ' ')}` : ''}</div>}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-lg font-semibold leading-none">${item.target_price_usd}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">进价 ¥{item.cost_cny}</p>
                     </div>
                     <button type="button" disabled={busy} className="h-9 rounded-lg border border-border px-3 text-sm" onClick={() => {
                       void run(async () => {

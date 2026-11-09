@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { PlatformMark } from '@/components/brand-marks'
 import { api } from '@/lib/api'
 import { tintForPlatform } from '@/lib/brand-tints'
+import { socialGroups } from '@/app/workspace/acquire/channels'
 
 const names: Record<string, string> = {
   amazon: '亚马逊',
@@ -13,10 +14,19 @@ const names: Record<string, string> = {
   pinduoduo: '拼多多',
   linkedin: 'LinkedIn',
   facebook: 'Facebook',
-  wechat_mini: '微信',
+  instagram: 'Instagram',
+  wechat_mini: '企业微信',
+  wechat_channels: '视频号',
   douyin: '抖音',
   xiaohongshu: '小红书',
   kuaishou: '快手',
+  weibo: '微博',
+  bilibili: '哔哩哔哩',
+  zhihu: '知乎',
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
+  x: 'X',
+  pinterest: 'Pinterest',
   alibaba_com: '国际站',
   canton_fair: '广交会',
   global_sources: '环球资源',
@@ -188,34 +198,39 @@ export function ChannelLogin({ channel, platforms }: { channel: string; platform
           ))}
         </div>
       )}
-      <div className="mt-2 grid grid-cols-1 gap-1.5 min-[360px]:grid-cols-2 sm:grid-cols-3">
-        {visible.map((platform) => {
-          const account = row(platform)
-          const connected = account?.status === 'connected'
-          const tint = tintForPlatform(platform)
-          const hint = modeHintName(account)
-          return (
-            <div key={`${mode}-${platform}`} className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 ${tint.card}`}>
-              <PlatformMark platform={platform} className="size-7" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium leading-tight">{names[platform] || platform}</p>
-                <p className="truncate text-[10px] leading-tight text-muted-foreground">
-                  {connected ? (account?.has_token ? '已登录·可获客' : '已连接') : '未登录'}
-                  {hint ? ` · ${hint}` : ''}
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={busy === platform || !mode}
-                className={`h-7 shrink-0 rounded-md px-2 text-[11px] font-medium text-white disabled:opacity-50 ${tint.button}`}
-                onClick={() => void login(platform)}
-              >
-                {connected ? '重登' : '登录'}
-              </button>
-            </div>
-          )
-        })}
-      </div>
+      {(channel === 'social' ? socialGroups : [{ id: 'all', name: '', platforms: visible }]).map((group) => (
+        <div key={group.id} className="mt-2">
+          {group.name ? <p className="mb-1 text-[10px] font-medium text-muted-foreground">{group.name}</p> : null}
+          <div className="grid grid-cols-1 gap-1.5 min-[360px]:grid-cols-2 sm:grid-cols-3">
+            {group.platforms.filter((platform) => visible.includes(platform)).map((platform) => {
+              const account = row(platform)
+              const connected = account?.status === 'connected'
+              const tint = tintForPlatform(platform)
+              const hint = modeHintName(account)
+              return (
+                <div key={`${mode}-${platform}`} className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 ${tint.card}`}>
+                  <PlatformMark platform={platform} className="size-7" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium leading-tight">{names[platform] || platform}</p>
+                    <p className="truncate text-[10px] leading-tight text-muted-foreground">
+                      {connected ? (account?.has_token ? '已登录·可获客' : '已连接') : '未登录'}
+                      {hint ? ` · ${hint}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy === platform || !mode}
+                    className={`h-7 shrink-0 rounded-md px-2 text-[11px] font-medium text-white disabled:opacity-50 ${tint.button}`}
+                    onClick={() => void login(platform)}
+                  >
+                    {connected ? '重登' : '登录'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
       {pasteFor && (
         <div className="mt-2 space-y-1.5 rounded-lg border border-border bg-muted/30 p-2">
           <p className="text-xs font-medium">{names[pasteFor] || pasteFor} · 粘贴密钥登录</p>

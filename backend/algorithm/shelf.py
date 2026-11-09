@@ -9,9 +9,11 @@ back, otherwise the existing 15% cost-plus floor.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
+import os
 import re
 import time
 import uuid
@@ -64,6 +66,24 @@ def clear_goods_cache() -> None:
     _EBAY_TOKEN.update(key="", token="", until=0.0)
 
 
+def _keys_stamp(settings) -> str:
+    names = (
+        "ebay_client_id",
+        "serpapi_api_key",
+        "bestbuy_api_key",
+        "etsy_api_keystring",
+        "amazon_access_key",
+        "walmart_publisher_id",
+        "taobao_app_key",
+        "jd_app_key",
+        "alibaba_app_key",
+        "vipshop_app_key",
+        "suning_app_key",
+        "douyin_shop_app_key",
+    )
+    return "".join("1" if (getattr(settings, name, "") or os.environ.get(name.upper(), "")) else "0" for name in names)
+
+
 def goods_age(query: str, target_market: str = "US") -> float | None:
     hit = _GOODS_CACHE.get(f"{target_market}:{query.strip().lower()}")
     if not hit:
@@ -73,7 +93,7 @@ def goods_age(query: str, target_market: str = "US") -> float | None:
 
 def cached_collect(query: str, settings, target_market: str = "US", *, interval: int = 3600, force: bool = False):
     needle = query.strip().lower()
-    key = f"{target_market}:{needle}"
+    key = f"{target_market}:{needle}:{_keys_stamp(settings)}"
     now = time.time()
     hit = _GOODS_CACHE.get(key)
     if hit and needle and not force and now - hit["at"] < interval:
@@ -97,17 +117,25 @@ def remember_shelf(items: list[dict]) -> None:
 
 def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list[dict], list[dict]]:
     needle = query.strip()
-    if not needle or target_market == "CN":
+    if not needle:
         return [], _planned(settings, called=False)
     jobs = (
+        _ebay,
+        _google_shopping,
+        _etsy,
         _alibaba,
         _pinduoduo,
         _jd,
         _taobao,
-        _ebay,
+        _tmall,
+        _xianyu,
+        _vipshop,
+        _suning,
+        _douyin_shop,
         _aliexpress,
         _amazon,
         _walmart,
+        _bestbuy,
         _tiktok,
         _temu,
     )
@@ -128,7 +156,7 @@ def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list
                 us_rows.extend(rows)
                 us_prices.extend(row["usd"] for row in rows if row.get("usd"))
         fx = fx_future.result() or "7.20"
-    statuses.sort(key=lambda row: row["id"])
+    statuses = _sort_platforms(statuses)
     if not domestic:
         return _us_shelf_items(us_rows, fx, target_market), statuses
     median = _median(us_prices)
@@ -166,17 +194,39 @@ def _planned(settings, *, called: bool) -> list[dict]:
 
 
 _PLATFORMS = (
+    ("ebay", "eBay", "US"),
+    ("google_shopping", "Google 购物", "US"),
+    ("etsy", "Etsy", "US"),
     ("1688", "1688", "CN"),
     ("pinduoduo", "拼多多", "CN"),
     ("jd", "京东", "CN"),
     ("taobao", "淘宝", "CN"),
-    ("ebay", "eBay", "US"),
+    ("tmall", "天猫", "CN"),
+    ("xianyu", "闲鱼", "CN"),
+    ("vipshop", "唯品会", "CN"),
+    ("suning", "苏宁", "CN"),
+    ("douyin_shop", "抖店", "CN"),
     ("aliexpress", "速卖通", "US"),
     ("amazon", "亚马逊", "US"),
     ("walmart", "沃尔玛", "US"),
+    ("bestbuy", "Best Buy", "US"),
     ("tiktok", "TikTok Shop", "US"),
     ("temu", "Temu", "US"),
 )
+_PINNED = ("ebay", "google_shopping", "etsy")
+
+
+def _sort_platforms(statuses: list[dict]) -> list[dict]:
+    """Live eBay / Google Shopping / Etsy first, then other ok, then failed, then skipped."""
+    rank = {"ok": 0, "failed": 1, "reauth": 2, "skipped": 3}
+
+    def key(row: dict) -> tuple:
+        pinned = row.get("id") in _PINNED
+        live_pin = 0 if pinned and row.get("status") == "ok" else 1
+        pin = _PINNED.index(row["id"]) if pinned else 50
+        return (live_pin, rank.get(row.get("status") or "", 9), pin, str(row.get("id") or ""))
+
+    return sorted(statuses, key=key)
 
 
 def _median(prices: list[Decimal]) -> Decimal | None:
@@ -224,9 +274,9 @@ def _fail(platform: str, name: str, region: str) -> tuple[list, dict]:
     return [], _status(platform, name, region, "failed", 0)
 
 
-def _post(url: str, *, data: dict | None = None, content: bytes | None = None, headers: dict | None = None) -> dict | None:
+def _post(url: str, *, data: dict | None = None, content: bytes | None = None, headers: dict | None = None, params: dict | None = None) -> dict | None:
     try:
-        response = httpx.post(url, data=data, content=content, headers=headers, timeout=TIMEOUT, follow_redirects=True)
+        response = httpx.post(url, params=params, data=data, content=content, headers=headers, timeout=TIMEOUT, follow_redirects=True)
         response.raise_for_status()
         body = response.json()
     except (httpx.HTTPError, ValueError):
@@ -234,9 +284,9 @@ def _post(url: str, *, data: dict | None = None, content: bytes | None = None, h
     return body if isinstance(body, dict) else None
 
 
-def _get(url: str, *, params: dict | None = None, headers: dict | None = None) -> dict | None:
+def _get(url: str, *, params: dict | None = None, headers: dict | None = None, timeout: float | None = None) -> dict | None:
     try:
-        response = httpx.get(url, params=params, headers=headers, timeout=TIMEOUT, follow_redirects=True)
+        response = httpx.get(url, params=params, headers=headers, timeout=timeout or TIMEOUT, follow_redirects=True)
         response.raise_for_status()
         body = response.json()
     except (httpx.HTTPError, ValueError):
@@ -513,6 +563,339 @@ def _tmall(query: str, settings) -> tuple[list, dict]:
     return _taobao_call(query, settings, tmall=True)
 
 
+def _vipshop_sign(secret: str, params: dict) -> str:
+    raw = "".join(f"{key}{params[key]}" for key in sorted(params) if key != "sign")
+    return hmac.new(secret.encode(), raw.encode(), hashlib.md5).hexdigest().upper()
+
+
+def _vipshop_goods(body: dict | None) -> list:
+    if not isinstance(body, dict):
+        return []
+    stack: list = [body]
+    seen: set[int] = set()
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, list):
+            if node and all(isinstance(item, dict) for item in node[:3]):
+                sample = {str(key).lower() for key in node[0]}
+                if sample & {"goodsid", "goods_id", "goodsid"} or sample & {"goodsname", "goods_name"}:
+                    return [item for item in node if isinstance(item, dict)]
+            stack.extend(item for item in node if isinstance(item, (dict, list)))
+            continue
+        if isinstance(node, dict):
+            for key in ("goodsInfoList", "goodsList", "goods_info_list", "list"):
+                value = node.get(key)
+                if isinstance(value, list) and value and isinstance(value[0], dict):
+                    return [item for item in value if isinstance(item, dict)]
+            stack.extend(value for value in node.values() if isinstance(value, (dict, list)))
+    return []
+
+
+def _vipshop(query: str, settings) -> tuple[list, dict]:
+    app_key = getattr(settings, "vipshop_app_key", "") or ""
+    secret = getattr(settings, "vipshop_app_secret", "") or ""
+    token = getattr(settings, "vipshop_access_token", "") or ""
+    if not (app_key and secret):
+        return _skip("vipshop", "唯品会", "CN")
+    params = {
+        "service": "com.vip.adp.api.open.service.UnionGoodsService",
+        "method": "query",
+        "version": "1.0.0",
+        "timestamp": str(int(time.time())),
+        "format": "json",
+        "appKey": app_key,
+    }
+    if token:
+        params["accessToken"] = token
+    params["sign"] = _vipshop_sign(secret, params)
+    payload = json.dumps(
+        {
+            "keyword": query,
+            "page": 1,
+            "pageSize": 8,
+            "requestId": uuid.uuid4().hex,
+            "openId": "default_open_id",
+            "realCall": True,
+        },
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    body = _post(
+        "https://vop.vipapis.com",
+        params=params,
+        content=payload.encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    goods = _vipshop_goods(body)
+    if body is None:
+        return _fail("vipshop", "唯品会", "CN")
+    rows = []
+    for product in goods:
+        title = str(product.get("goodsName") or product.get("goods_name") or product.get("name") or "")
+        external = str(product.get("goodsId") or product.get("goods_id") or product.get("id") or "")
+        cost = _amount(product.get("vipPrice") or product.get("vip_price") or product.get("price"))
+        if not title or not external or cost is None:
+            continue
+        store = product.get("storeInfo") or product.get("store_info") or {}
+        shop = store.get("storeName") or store.get("store_name") if isinstance(store, dict) else ""
+        rows.append(
+            _domestic(
+                "vipshop",
+                external,
+                title,
+                cost,
+                str(shop or product.get("brandName") or "唯品会"),
+                str(product.get("destUrl") or product.get("dest_url") or product.get("url") or ""),
+                str(product.get("categoryName") or product.get("cat1stName") or ""),
+            )
+        )
+    return rows[:8], _status("vipshop", "唯品会", "CN", "ok", len(rows[:8]))
+
+
+def _suning_sign(secret: str, method: str, timestamp: str, app_key: str, version: str, payload: str) -> str:
+    digest = base64.b64encode(payload.encode()).decode()
+    raw = f"{secret}{method}{timestamp}{app_key}{version}{digest}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def _suning_goods(body: dict | None) -> list:
+    if not isinstance(body, dict):
+        return []
+    inner = ((body.get("sn_responseContent") or {}).get("sn_body") or {})
+    for node in inner.values() if isinstance(inner, dict) else []:
+        if not isinstance(node, dict):
+            continue
+        goods = node.get("commodityList") or node.get("commodity") or node.get("commoditys")
+        if isinstance(goods, list):
+            return [item for item in goods if isinstance(item, dict)]
+        if isinstance(goods, dict):
+            return [goods]
+    return []
+
+
+def _suning(query: str, settings) -> tuple[list, dict]:
+    app_key = getattr(settings, "suning_app_key", "") or ""
+    secret = getattr(settings, "suning_app_secret", "") or ""
+    if not (app_key and secret):
+        return _skip("suning", "苏宁", "CN")
+    method = "suning.netalliance.searchcommodity.query"
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    version = "v1.2"
+    payload = json.dumps(
+        {"sn_request": {"sn_body": {"querySearchcommodity": {"keyword": query, "pageIndex": "1", "size": "8"}}}},
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    headers = {
+        "Content-Type": "application/json",
+        "appMethod": method,
+        "appRequestTime": timestamp,
+        "format": "json",
+        "appKey": app_key,
+        "versionNo": version,
+        "signInfo": _suning_sign(secret, method, timestamp, app_key, version, payload),
+    }
+    body = _post("https://open.suning.com/api/http/sopRequest", content=payload.encode(), headers=headers)
+    if body is None:
+        return _fail("suning", "苏宁", "CN")
+    rows = []
+    for product in _suning_goods(body):
+        title = str(product.get("commodityName") or product.get("commodityname") or product.get("name") or "")
+        external = str(product.get("commodityCode") or product.get("commoditycode") or product.get("cmmdtyCode") or "")
+        cost = _amount(product.get("snPrice") or product.get("price") or product.get("salePrice"))
+        if not title or not external or cost is None:
+            continue
+        rows.append(
+            _domestic(
+                "suning",
+                external,
+                title,
+                cost,
+                str(product.get("supplierName") or product.get("vendorName") or product.get("shopName") or "苏宁"),
+                str(product.get("commodityUrl") or product.get("productUrl") or product.get("url") or ""),
+                str(product.get("firstSaleCategoryName") or ""),
+            )
+        )
+    return rows[:8], _status("suning", "苏宁", "CN", "ok", len(rows[:8]))
+
+
+def _jinritemai_sign(secret: str, params: dict) -> str:
+    pieces = "".join(f"{key}{params[key]}" for key in sorted(params) if key not in {"sign", "access_token"})
+    raw = f"{secret}{pieces}{secret}"
+    return hmac.new(secret.encode(), raw.encode(), hashlib.sha256).hexdigest()
+
+
+def _douyin_shop_price(product: dict) -> Decimal | None:
+    raw = product.get("coupon_price") or product.get("price") or product.get("product_price")
+    amount = _amount(raw)
+    if amount is None:
+        return None
+    if isinstance(raw, int) or (isinstance(raw, str) and raw.isdigit()):
+        return amount / Decimal("100")
+    return amount
+
+
+def _douyin_shop(query: str, settings) -> tuple[list, dict]:
+    app_key = getattr(settings, "douyin_shop_app_key", "") or ""
+    secret = getattr(settings, "douyin_shop_app_secret", "") or ""
+    token = getattr(settings, "douyin_shop_access_token", "") or ""
+    if not (app_key and secret and token):
+        return _skip("douyin_shop", "抖店", "CN")
+    biz = json.dumps({"page": 1, "page_size": 8, "title": query}, separators=(",", ":"), ensure_ascii=False)
+    params = {
+        "method": "buyin.kolMaterialsProductsSearch",
+        "app_key": app_key,
+        "access_token": token,
+        "param_json": biz,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "v": "2",
+        "sign_method": "hmac-sha256",
+    }
+    params["sign"] = _jinritemai_sign(secret, params)
+    body = _post("https://openapi-fxg.jinritemai.com/buyin/kolMaterialsProductsSearch", params=params)
+    if body is None or (body.get("code") not in (None, 0, "0", 10000, "10000") and "data" not in body):
+        return _fail("douyin_shop", "抖店", "CN")
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    products = data.get("products") or data.get("product_list") or []
+    if not isinstance(products, list):
+        return _fail("douyin_shop", "抖店", "CN")
+    rows = []
+    for product in products:
+        if not isinstance(product, dict):
+            continue
+        title = str(product.get("title") or product.get("product_name") or product.get("name") or "")
+        external = str(product.get("product_id") or product.get("id") or "")
+        cost = _douyin_shop_price(product)
+        if not title or not external or cost is None:
+            continue
+        rows.append(
+            _domestic(
+                "douyin_shop",
+                external,
+                title,
+                cost,
+                str(product.get("shop_name") or "抖店"),
+                str(product.get("detail_url") or product.get("url") or ""),
+            )
+        )
+    return rows[:8], _status("douyin_shop", "抖店", "CN", "ok", len(rows[:8]))
+
+
+def _xianyu(query: str, settings) -> tuple[list, dict]:
+    """闲鱼：TOP 合作方搜索。公开自助申请常被拒；无钥匙跳过。"""
+    app_key = getattr(settings, "xianyu_app_key", "") or ""
+    secret = getattr(settings, "xianyu_app_secret", "") or ""
+    session = getattr(settings, "xianyu_session", "") or ""
+    method = (getattr(settings, "xianyu_search_method", "") or "alibaba.idle.isv.item.search").strip()
+    if not (app_key and secret):
+        return _skip("xianyu", "闲鱼", "CN")
+    params = {
+        "method": method,
+        "app_key": app_key,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "format": "json",
+        "v": "2.0",
+        "sign_method": "md5",
+        "q": query,
+        "keyword": query,
+        "title": query,
+        "page_size": "8",
+        "page_no": "1",
+    }
+    if session:
+        params["session"] = session
+    params["sign"] = _md5_sign(secret, params)
+    body = _post("https://eco.taobao.com/router/rest", data=params)
+    if body is None or body.get("error_response"):
+        return _fail("xianyu", "闲鱼", "CN")
+    rows = []
+    for product in _xianyu_items(body):
+        title = str(
+            product.get("title")
+            or product.get("item_title")
+            or product.get("itemTitle")
+            or product.get("name")
+            or ""
+        )
+        external = str(
+            product.get("item_id")
+            or product.get("itemId")
+            or product.get("idle_item_id")
+            or product.get("id")
+            or ""
+        )
+        cost = _amount(
+            product.get("price")
+            or product.get("reserve_price")
+            or product.get("sold_price")
+            or product.get("item_price")
+        )
+        if cost is None:
+            fen = _amount(product.get("price_fen") or product.get("priceInCent"))
+            if fen is not None:
+                cost = fen / Decimal("100")
+        if not title or not external or cost is None:
+            continue
+        seller = str(
+            product.get("seller_nick")
+            or product.get("user_nick")
+            or product.get("nick")
+            or product.get("seller")
+            or "闲鱼"
+        )
+        url = str(product.get("item_url") or product.get("url") or product.get("detail_url") or "")
+        if not url:
+            url = f"https://www.goofish.com/item?id={external}"
+        rows.append(_domestic("xianyu", external, title, cost, seller, url))
+    return rows[:8], _status("xianyu", "闲鱼", "CN", "ok", len(rows[:8]))
+
+
+def _xianyu_items(body: dict) -> list:
+    """Walk TOP response for the first list of product-like dicts."""
+    stack = [body]
+    seen: set[int] = set()
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, list):
+            if node and all(isinstance(item, dict) for item in node[:3]):
+                sample = node[0]
+                keys = {str(key).lower() for key in sample}
+                if keys & {"title", "item_title", "itemtitle", "name"} and keys & {
+                    "price",
+                    "reserve_price",
+                    "sold_price",
+                    "item_price",
+                    "price_fen",
+                    "priceincent",
+                    "item_id",
+                    "itemid",
+                    "id",
+                }:
+                    return [item for item in node if isinstance(item, dict)]
+            for item in node:
+                if isinstance(item, (dict, list)):
+                    stack.append(item)
+            continue
+        if isinstance(node, dict):
+            for value in node.values():
+                if isinstance(value, (dict, list)):
+                    stack.append(value)
+                elif isinstance(value, str) and value[:1] in "{[":
+                    try:
+                        parsed = json.loads(value)
+                    except ValueError:
+                        continue
+                    if isinstance(parsed, (dict, list)):
+                        stack.append(parsed)
+    return []
+
+
 def _pinduoduo(query: str, settings) -> tuple[list, dict]:
     client_id = getattr(settings, "pdd_client_id", "") or ""
     secret = getattr(settings, "pdd_client_secret", "") or ""
@@ -721,6 +1104,126 @@ def _walmart(query: str, settings) -> tuple[list, dict]:
     return rows[:8], _status("walmart", "沃尔玛", "US", "ok", len(rows[:8]))
 
 
+def _bestbuy(query: str, settings) -> tuple[list, dict]:
+    """Best Buy Products API：邮箱自助拿 Key，易批。"""
+    api_key = getattr(settings, "bestbuy_api_key", "") or ""
+    if not api_key:
+        return _skip("bestbuy", "Best Buy", "US")
+    plan = ebay_search_plan(query)
+    tokens = [token for token in re.findall(r"[A-Za-z0-9+\-]{2,}", plan["q"]) if token.lower() not in _STOP][:6]
+    if not tokens:
+        tokens = [plan["q"][:40].strip() or query[:40].strip() or "phone"]
+    search = "&".join(f"search={token}" for token in tokens)
+    body = _get(
+        f"https://api.bestbuy.com/v1/products({search})",
+        params={
+            "format": "json",
+            "show": "sku,name,salePrice,url,manufacturer",
+            "pageSize": "8",
+            "apiKey": api_key,
+        },
+    )
+    if body is None:
+        return _fail("bestbuy", "Best Buy", "US")
+    rows = []
+    for product in body.get("products") or []:
+        if not isinstance(product, dict):
+            continue
+        title = str(product.get("name") or "")
+        external = str(product.get("sku") or "")
+        price = _amount(product.get("salePrice"))
+        if not title or not external or price is None:
+            continue
+        brand = str(product.get("manufacturer") or "Best Buy")
+        rows.append(_us("bestbuy", external, title, price, brand, str(product.get("url") or "")))
+    return rows[:8], _status("bestbuy", "Best Buy", "US", "ok", len(rows[:8]))
+
+
+def _etsy_price(product: dict) -> Decimal | None:
+    price_info = product.get("price")
+    if isinstance(price_info, dict):
+        amount = _amount(price_info.get("amount"))
+        divisor = _amount(price_info.get("divisor")) or Decimal("100")
+        currency = str(price_info.get("currency_code") or "USD").upper()
+        if amount is None or divisor <= 0 or currency != "USD":
+            return None
+        return amount / divisor
+    return _amount(price_info)
+
+
+def _etsy(query: str, settings) -> tuple[list, dict]:
+    """Etsy Open API v3：listings/active。官方要求 x-api-key 为 keystring:shared_secret。"""
+    keystring = (getattr(settings, "etsy_api_keystring", "") or os.environ.get("ETSY_API_KEYSTRING") or "").strip()
+    shared = (getattr(settings, "etsy_shared_secret", "") or os.environ.get("ETSY_SHARED_SECRET") or "").strip()
+    if not keystring:
+        return _skip("etsy", "Etsy", "US")
+    plan = ebay_search_plan(query)
+    params = {
+        "keywords": plan["q"][:80] or query[:80],
+        "limit": "25",
+        "sort_on": "score",
+    }
+    if plan.get("max_price"):
+        params["min_price"] = "1"
+        params["max_price"] = str(max(1, int(plan["max_price"])))
+    header = f"{keystring}:{shared}" if shared else keystring
+    body = _get(
+        "https://api.etsy.com/v3/application/listings/active",
+        params=params,
+        headers={"x-api-key": header, "Accept": "application/json"},
+        timeout=12,
+    )
+    if body is None:
+        return _fail("etsy", "Etsy", "US")
+    rows = []
+    for product in body.get("results") or []:
+        if not isinstance(product, dict):
+            continue
+        title = str(product.get("title") or "")
+        external = str(product.get("listing_id") or "")
+        price = _etsy_price(product)
+        if not title or not external or price is None:
+            continue
+        shop = str((product.get("shop") or {}).get("shop_name") or product.get("shop_id") or "Etsy")
+        url = str(product.get("url") or f"https://www.etsy.com/listing/{external}")
+        rows.append(_us("etsy", external, title, price, str(shop), url))
+    return rows[:25], _status("etsy", "Etsy", "US", "ok", len(rows[:25]))
+
+
+def _google_shopping(query: str, settings) -> tuple[list, dict]:
+    """SerpAPI Google Shopping：注册拿 Key 即用，免费档约 250 次/月。"""
+    api_key = (getattr(settings, "serpapi_api_key", "") or os.environ.get("SERPAPI_API_KEY") or "").strip()
+    if not api_key:
+        return _skip("google_shopping", "Google 购物", "US")
+    plan = ebay_search_plan(query)
+    body = _get(
+        "https://serpapi.com/search.json",
+        params={
+            "engine": "google_shopping",
+            "q": plan["q"][:120] or query[:120],
+            "gl": "us",
+            "hl": "en",
+            "api_key": api_key,
+        },
+        timeout=15,
+    )
+    if body is None or body.get("error"):
+        return _fail("google_shopping", "Google 购物", "US")
+    rows = []
+    for product in body.get("shopping_results") or []:
+        if not isinstance(product, dict):
+            continue
+        title = str(product.get("title") or "")
+        external = str(product.get("product_id") or product.get("position") or "")
+        price = _amount(product.get("extracted_price"))
+        if not title or not external or price is None:
+            continue
+        source = str(product.get("source") or "Google Shopping")
+        url = str(product.get("product_link") or product.get("link") or "")
+        rows.append(_us("google_shopping", external, title, price, source, url))
+    return rows[:8], _status("google_shopping", "Google 购物", "US", "ok", len(rows[:8]))
+
+
 def ebay_search_plan(query: str) -> dict:
     """Turn a Chinese/English need into Browse API q + filter.
 
@@ -808,8 +1311,8 @@ def _ebay_rows(body: dict | None) -> list:
 
 
 def _ebay(query: str, settings) -> tuple[list, dict]:
-    client_id = getattr(settings, "ebay_client_id", "") or ""
-    secret = getattr(settings, "ebay_client_secret", "") or ""
+    client_id = (getattr(settings, "ebay_client_id", "") or os.environ.get("EBAY_CLIENT_ID") or "").strip()
+    secret = (getattr(settings, "ebay_client_secret", "") or os.environ.get("EBAY_CLIENT_SECRET") or "").strip()
     if not (client_id and secret):
         return _skip("ebay", "eBay", "US")
     token = _ebay_token(client_id, secret)

@@ -31,18 +31,23 @@ function AcquireHome() {
         <div className="min-w-0">
           <span className="eyebrow">路径 B · 九路获客</span>
           <h1 className="mt-1 text-base font-semibold tracking-tight md:mt-1.5 md:text-2xl lg:text-[1.75rem]">线索、触达、成交与召回</h1>
-          <p className="mt-1 max-w-3xl text-[11px] leading-4 text-muted-foreground md:mt-1.5 md:text-sm md:leading-5">点开一路。九路进同一线索池。</p>
+          <p className="mt-1 max-w-3xl text-[11px] leading-4 text-muted-foreground md:mt-1.5 md:text-sm md:leading-5">优先做 B2 社交种草。B1 电商待上线。九路进同一线索池。</p>
         </div>
       </div>
       <div className="grid grid-cols-3 gap-1.5 sm:gap-3 md:min-h-0 md:flex-1 md:grid-cols-3 md:grid-rows-3 md:gap-3">
         {channels.map((item) => {
           const tint = tintForChannel(item.id)
+          const pending = item.launch === 'pending'
           return (
             <Link
               key={item.id}
               href={`/workspace/acquire/${item.id}`}
-              className={`flex flex-col items-center justify-center rounded-2xl border px-1.5 py-2 text-center transition hover:-translate-y-0.5 md:min-h-0 md:items-start md:justify-start md:rounded-2xl md:px-4 md:py-3.5 md:text-left ${tint.card}`}
+              className={`relative flex flex-col items-center justify-center rounded-2xl border px-1.5 py-2 text-center transition hover:-translate-y-0.5 md:min-h-0 md:items-start md:justify-start md:rounded-2xl md:px-4 md:py-3.5 md:text-left ${pending ? 'border-dashed border-orange-300 bg-orange-50/60 opacity-80' : item.priority ? `${tint.card} ring-2 ring-sky-400/50` : tint.card}`}
             >
+              <div className="absolute right-1.5 top-1.5 flex gap-1 md:right-2 md:top-2">
+                {item.priority ? <span className="rounded-full bg-sky-600 px-1.5 py-0.5 text-[9px] font-medium text-white md:text-[10px]">优先</span> : null}
+                {pending ? <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] font-medium text-white md:text-[10px]">待上线</span> : null}
+              </div>
               <div className="flex flex-col items-center md:w-full md:flex-row md:items-center md:gap-2.5">
                 <ChannelMark id={item.id} className={`mb-1 size-7 md:mb-0 md:size-9 ${tint.code}`} />
                 <span className={`text-[10px] font-semibold md:text-xs ${tint.code}`}>{item.code}</span>
