@@ -46,6 +46,10 @@ Add a row when a merge lands. Newest row first.
 
 Add the next day above the previous one. Keep older days. One paragraph: the commit, where it landed, what is true, and what is next.
 
+### 13 November 2026
+
+Tip `9ff5f06` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. AgentArchitect / AgentHarness / AgentEnvaluate document the six agents (chatbot, selection, content factory, reachout, recall, lead discovery). Shelf fan-out only starts keyed platforms and cuts off under ~0.85s; stale cache returns first. Default trade route is China → US on bootstrap and the route bar. Team BP joins `docs/demo3`. Next: merge to `test` when you agree. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
+
 ### 9 November 2026
 
 Tip `16e5c41` is on `origin/yzcmf` only. `test` stays `1.9` ([#15](https://github.com/yuxuanzhouo3/mvp_35/pull/15), `4b1a6bc`, tip `d936f75`). `pro` stays `1.2`. B1 ecommerce is pending launch (`B1_PENDING_LAUNCH`); B2 social seeding is the priority path with domestic and international platforms (WeChat Channels, Weibo, Bilibili, Zhihu, TikTok, Instagram, YouTube, X, Pinterest, and the earlier set). Shelf collection adds Xianyu, Tmall, Vipshop, Suning, Douyin shop, Best Buy, Etsy, and Google Shopping beside JD/Taobao/Amazon/Walmart. Seed-round BP lives under `docs/demo3`. Next: merge to `test` when you agree. Weekly pull request [#12](https://github.com/yuxuanzhouo3/mvp_35/pull/12) stays open from `test` to `pro`, titled `1.3`. Live SES stays unwired.
