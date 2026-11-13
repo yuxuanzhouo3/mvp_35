@@ -3,19 +3,19 @@
 from app.core.errors import AppError
 
 ROUTES = {
-    "domestic": {
-        "origin_country": "CN",
-        "target_market": "CN",
-        "route": "CN-CN",
-        "tax_regime": "domestic",
-        "market_pack": "domestic",
-    },
     "cn_us": {
         "origin_country": "CN",
         "target_market": "US",
         "route": "CN-US",
         "tax_regime": "cn_us",
         "market_pack": "cn_us",
+    },
+    "domestic": {
+        "origin_country": "CN",
+        "target_market": "CN",
+        "route": "CN-CN",
+        "tax_regime": "domestic",
+        "market_pack": "domestic",
     },
     "cn_hk": {
         "origin_country": "CN",

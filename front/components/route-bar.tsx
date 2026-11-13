@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { DEFAULT_ROUTE, TRADE_ROUTES, isRouteId, placeName, readTradeRoute, writeTradeRoute, type RouteId } from '@/lib/trade-route'
 
@@ -8,17 +8,19 @@ export function RouteBar() {
   const [route, setRoute] = useState<RouteId>(DEFAULT_ROUTE)
 
   useEffect(() => {
-    setRoute(readTradeRoute())
-    api<{ user?: { trade_route?: string } }>('/users/me')
+    const local = readTradeRoute()
+    setRoute(local)
+    // Server sync is fire-and-forget so the bar paints with 中国→美国 immediately.
+    void api<{ user?: { trade_route?: string }; tenant?: { trade_route?: string } }>('/users/me')
       .then((me) => {
-        const saved = me.user?.trade_route
+        const saved = me.tenant?.trade_route || me.user?.trade_route
         if (!isRouteId(saved) || saved === readTradeRoute()) return
         writeTradeRoute(saved)
-        setRoute(saved)
+        startTransition(() => setRoute(saved))
       })
       .catch(() => undefined)
     function sync() {
-      setRoute(readTradeRoute())
+      startTransition(() => setRoute(readTradeRoute()))
     }
     window.addEventListener('pickglobal-route', sync)
     return () => window.removeEventListener('pickglobal-route', sync)

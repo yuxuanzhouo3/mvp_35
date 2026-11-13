@@ -17,7 +17,7 @@ import os
 import re
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -31,8 +31,10 @@ _SHELF: dict[str, dict] = {}
 _GOODS_CACHE: dict[str, dict] = {}
 _ALIBABA_SESSION = {"access_token": "", "refresh_token": "", "access_until": 0.0, "refresh_until": 0.0}
 _ALIBABA_DENY: dict[str, float] = {}
-TIMEOUT = 3
-EBAY_TIMEOUT = 10
+# Hard budget for the whole shelf fan-out. Slow platforms are cut off, not waited out.
+SHELF_DEADLINE = 0.85
+TIMEOUT = 0.65
+EBAY_TIMEOUT = 0.65
 _EBAY_TOKEN: dict[str, object] = {"key": "", "token": "", "until": 0.0}
 _CJK = re.compile(r"[\u4e00-\u9fff]")
 _PRICE_CN = re.compile(
@@ -84,8 +86,11 @@ def _keys_stamp(settings) -> str:
     return "".join("1" if (getattr(settings, name, "") or os.environ.get(name.upper(), "")) else "0" for name in names)
 
 
-def goods_age(query: str, target_market: str = "US") -> float | None:
-    hit = _GOODS_CACHE.get(f"{target_market}:{query.strip().lower()}")
+def goods_age(query: str, target_market: str = "US", settings=None) -> float | None:
+    stamp = _keys_stamp(settings) if settings is not None else ""
+    hit = _GOODS_CACHE.get(f"{target_market}:{query.strip().lower()}:{stamp}") or _GOODS_CACHE.get(
+        f"{target_market}:{query.strip().lower()}"
+    )
     if not hit:
         return None
     return time.time() - hit["at"]
@@ -98,8 +103,11 @@ def cached_collect(query: str, settings, target_market: str = "US", *, interval:
     hit = _GOODS_CACHE.get(key)
     if hit and needle and not force and now - hit["at"] < interval:
         return hit["items"], hit["statuses"], {"fresh": False, "at": hit["at"]}
+    # Stale cache: answer in <1s, then a later refresh can refill.
+    if hit and needle and not force:
+        return hit["items"], hit["statuses"], {"fresh": False, "at": hit["at"]}
     items, statuses = collect_goods(query, settings, target_market)
-    if items:
+    if items or any(row.get("status") == "ok" for row in statuses):
         _GOODS_CACHE[key] = {"at": now, "items": items, "statuses": statuses}
         return items, statuses, {"fresh": True, "at": now}
     return items, statuses, {"fresh": True, "at": None}
@@ -115,48 +123,104 @@ def remember_shelf(items: list[dict]) -> None:
             _SHELF[item["id"]] = item
 
 
+def _env_set(settings, *names: str) -> bool:
+    for name in names:
+        if (getattr(settings, name, "") or os.environ.get(name.upper(), "") or "").strip():
+            return True
+    return False
+
+
+def _live_jobs(settings) -> list[tuple[object, str, str, str]]:
+    """Only start workers that have credentials; empty keys stay skipped."""
+    jobs: list[tuple[object, str, str, str]] = []
+    if _env_set(settings, "ebay_client_id") and _env_set(settings, "ebay_client_secret"):
+        jobs.append((_ebay, "ebay", "eBay", "US"))
+    if _env_set(settings, "serpapi_api_key"):
+        jobs.append((_google_shopping, "google_shopping", "Google 购物", "US"))
+    if _env_set(settings, "etsy_api_keystring"):
+        jobs.append((_etsy, "etsy", "Etsy", "US"))
+    if _env_set(settings, "alibaba_app_key") and _env_set(settings, "alibaba_app_secret"):
+        jobs.append((_alibaba, "1688", "1688", "CN"))
+    if _env_set(settings, "pdd_client_id") and _env_set(settings, "pdd_client_secret") and _env_set(settings, "pdd_pid"):
+        jobs.append((_pinduoduo, "pinduoduo", "拼多多", "CN"))
+    if _env_set(settings, "jd_app_key") and _env_set(settings, "jd_app_secret"):
+        jobs.append((_jd, "jd", "京东", "CN"))
+    if _env_set(settings, "taobao_app_key") and _env_set(settings, "taobao_app_secret") and _env_set(settings, "taobao_adzone_id"):
+        jobs.append((_taobao, "taobao", "淘宝", "CN"))
+        jobs.append((_tmall, "tmall", "天猫", "CN"))
+    if _env_set(settings, "xianyu_app_key") and _env_set(settings, "xianyu_app_secret"):
+        jobs.append((_xianyu, "xianyu", "闲鱼", "CN"))
+    if _env_set(settings, "vipshop_app_key") and _env_set(settings, "vipshop_app_secret"):
+        jobs.append((_vipshop, "vipshop", "唯品会", "CN"))
+    if _env_set(settings, "suning_app_key") and _env_set(settings, "suning_app_secret"):
+        jobs.append((_suning, "suning", "苏宁", "CN"))
+    if _env_set(settings, "douyin_shop_app_key") and _env_set(settings, "douyin_shop_app_secret"):
+        jobs.append((_douyin_shop, "douyin_shop", "抖店", "CN"))
+    if _env_set(settings, "aliexpress_app_key") and _env_set(settings, "aliexpress_app_secret") and _env_set(
+        settings, "aliexpress_tracking_id"
+    ):
+        jobs.append((_aliexpress, "aliexpress", "速卖通", "US"))
+    if _env_set(settings, "amazon_access_key") and _env_set(settings, "amazon_secret_key") and _env_set(
+        settings, "amazon_partner_tag"
+    ):
+        jobs.append((_amazon, "amazon", "亚马逊", "US"))
+    if _env_set(settings, "walmart_publisher_id") and _env_set(settings, "walmart_consumer_id"):
+        jobs.append((_walmart, "walmart", "沃尔玛", "US"))
+    if _env_set(settings, "bestbuy_api_key"):
+        jobs.append((_bestbuy, "bestbuy", "Best Buy", "US"))
+    if _env_set(settings, "tiktok_shop_app_key") and _env_set(settings, "tiktok_shop_app_secret"):
+        jobs.append((_tiktok, "tiktok", "TikTok Shop", "US"))
+    if _env_set(settings, "temu_app_key") and _env_set(settings, "temu_app_secret") and _env_set(settings, "temu_access_token"):
+        jobs.append((_temu, "temu", "Temu", "US"))
+    return jobs
+
+
 def collect_goods(query: str, settings, target_market: str = "US") -> tuple[list[dict], list[dict]]:
     needle = query.strip()
     if not needle:
         return [], _planned(settings, called=False)
-    jobs = (
-        _ebay,
-        _google_shopping,
-        _etsy,
-        _alibaba,
-        _pinduoduo,
-        _jd,
-        _taobao,
-        _tmall,
-        _xianyu,
-        _vipshop,
-        _suning,
-        _douyin_shop,
-        _aliexpress,
-        _amazon,
-        _walmart,
-        _bestbuy,
-        _tiktok,
-        _temu,
-    )
+    by_id = {row["id"]: row for row in _planned(settings, called=False)}
+    jobs = _live_jobs(settings)
     domestic: list[dict] = []
     us_rows: list[dict] = []
     us_prices: list[Decimal] = []
-    statuses: list[dict] = []
     fx_url = getattr(settings, "fx_api_url", "") or ""
-    with ThreadPoolExecutor(max_workers=len(jobs) + 1) as pool:
+    deadline = time.monotonic() + SHELF_DEADLINE
+    workers = max(2, len(jobs) + 1)
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
         fx_future = pool.submit(fetch_usd_cny, fx_url)
-        futures = [pool.submit(job, needle, settings) for job in jobs]
-        for future in as_completed(futures):
-            rows, status = future.result()
-            statuses.append(_attach_offers(rows, status))
-            if status["region"] == "CN":
-                domestic.extend(rows)
-            else:
-                us_rows.extend(rows)
-                us_prices.extend(row["usd"] for row in rows if row.get("usd"))
-        fx = fx_future.result() or "7.20"
-    statuses = _sort_platforms(statuses)
+        futures = {pool.submit(job, needle, settings): (platform, name, region) for job, platform, name, region in jobs}
+        pending = set(futures)
+        while pending:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            done, pending = wait(pending, timeout=remaining, return_when=FIRST_COMPLETED)
+            for future in done:
+                platform, name, region = futures[future]
+                try:
+                    rows, status = future.result()
+                except Exception:
+                    rows, status = [], _status(platform, name, region, "failed", 0)
+                by_id[status["id"]] = _attach_offers(rows, status)
+                if status["region"] == "CN":
+                    domestic.extend(rows)
+                else:
+                    us_rows.extend(rows)
+                    us_prices.extend(row["usd"] for row in rows if row.get("usd"))
+        for future in pending:
+            platform, name, region = futures[future]
+            future.cancel()
+            by_id[platform] = _status(platform, name, region, "failed", 0)
+        try:
+            fx_wait = max(0.01, deadline - time.monotonic())
+            fx = fx_future.result(timeout=fx_wait) or "7.20"
+        except Exception:
+            fx = "7.20"
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    statuses = _sort_platforms(list(by_id.values()))
     if not domestic:
         return _us_shelf_items(us_rows, fx, target_market), statuses
     median = _median(us_prices)
@@ -1171,7 +1235,7 @@ def _etsy(query: str, settings) -> tuple[list, dict]:
         "https://api.etsy.com/v3/application/listings/active",
         params=params,
         headers={"x-api-key": header, "Accept": "application/json"},
-        timeout=12,
+        timeout=TIMEOUT,
     )
     if body is None:
         return _fail("etsy", "Etsy", "US")
@@ -1205,7 +1269,7 @@ def _google_shopping(query: str, settings) -> tuple[list, dict]:
             "hl": "en",
             "api_key": api_key,
         },
-        timeout=15,
+        timeout=TIMEOUT,
     )
     if body is None or body.get("error"):
         return _fail("google_shopping", "Google 购物", "US")

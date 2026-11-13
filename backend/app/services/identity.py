@@ -104,6 +104,7 @@ def bootstrap(
             plan=plan["id"],
             status="active",
             region=None,
+            trade_route="cn_us",
         ),
     )
     store.insert(
@@ -163,9 +164,14 @@ def profile(store: DocumentStore, user: dict) -> dict:
             "username": user.get("username"),
             "status": user.get("status") or "active",
             "role": user.get("role") or (member["role"] if member else "viewer"),
-            "trade_route": (tenant or {}).get("trade_route") or None,
+            "trade_route": (tenant or {}).get("trade_route") or "cn_us",
         },
-        "tenant": {"id": tenant["id"], "name": tenant["name"], "plan_id": tenant["plan_id"], "trade_route": (tenant or {}).get("trade_route") or None},
+        "tenant": {
+            "id": tenant["id"],
+            "name": tenant["name"],
+            "plan_id": tenant["plan_id"],
+            "trade_route": (tenant or {}).get("trade_route") or "cn_us",
+        },
         "role": member["role"] if member else "viewer",
         "permissions": permissions_for(member["role"] if member else "viewer"),
         "entitlement": entitlement,

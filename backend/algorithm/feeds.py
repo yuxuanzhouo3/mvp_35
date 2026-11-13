@@ -31,7 +31,7 @@ def _get(url: str, *, params: dict | None = None, headers: dict | None = None) -
     if not url:
         return None
     try:
-        response = httpx.get(url, params=params, headers=headers, timeout=3, follow_redirects=True)
+        response = httpx.get(url, params=params, headers=headers, timeout=0.5, follow_redirects=True)
         response.raise_for_status()
         body = response.json()
     except (httpx.HTTPError, ValueError):

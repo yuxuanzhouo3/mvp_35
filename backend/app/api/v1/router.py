@@ -492,7 +492,7 @@ def create_router() -> APIRouter:
         info = _shelf_info(store, prof["tenant"]["id"])
         from algorithm.shelf import goods_age
 
-        age = goods_age(q, market)
+        age = goods_age(q, market, settings)
         due = age is None or age >= info["interval_seconds"]
         if not due and not (info["premium"] and info["manual_left"] > 0):
             raise AppError(

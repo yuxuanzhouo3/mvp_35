@@ -22,7 +22,9 @@ mvp_35/
 │   │   └── frames/                              官网到看板，不含后台
 │   └── demo3/
 │       ├── pickglobal-user-guide-yunjian.mp4    云健，当前产品：守则勾选、路线条、1688、八率五时效卡片
-│       ├── pickglobal-seed-bp.md|.pdf|.pptx     种子轮 BP；PPTX 演讲版含备注
+│       ├── pickglobal-seed-bp.md|.pdf|.pptx     种子轮产品 BP；PPTX 演讲版含备注
+│       ├── pickglobal-team-bp.md|.pdf          团队建设文字/PDF
+│       ├── pickglobal-team-speech.pptx         团队易讲 11 页（含备注）
 │       └── frames/                              官网到看板，不含后台
 ├── front/                     Next.js 16 · :3000 · pickglobal-web
 │   ├── app/
